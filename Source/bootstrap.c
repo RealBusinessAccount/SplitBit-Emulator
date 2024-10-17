@@ -25,7 +25,7 @@ uint32_t readLength(FILE *file) {
 }
 
 uint32_t readHeader(FILE *file, const char *expectedHeader) {
-    uint8_t header[HEADER_LENGTH];
+    char header[HEADER_LENGTH];
     for (int i = 0; i < HEADER_LENGTH; i++) {
         int byte = fgetc(file);
         if (byte == EOF) {

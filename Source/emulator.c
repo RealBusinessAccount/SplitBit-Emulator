@@ -47,15 +47,17 @@ int main (int argc, char *argv[]) {
     }
     CPURegisters cpu;
     initializeCPU(&cpu, Program, Data);
+    if(debugEnable) {
+        printRegisters(&cpu, Program, Data);
+    }
     while (!(cpu.Status & 0x80)) {
+        executeOperation(cpu.Program[cpu.ProgramCounter], &cpu);
+        cpu.ProgramCounter++;
+        cycleCount++;
         if (debugEnable) {
             getchar();
             printRegisters(&cpu, Program, Data);
         }
-
-        executeOperation(cpu.Program[cpu.ProgramCounter], &cpu);
-        cpu.ProgramCounter++;
-        cycleCount++;
     }
     printf("Execution halted after %u cycles.\n", cycleCount);
 }

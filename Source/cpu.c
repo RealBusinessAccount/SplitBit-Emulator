@@ -5,7 +5,6 @@
 
 #include "cpu.h"
 #include "io.h"
-#include <stdio.h>
 
 void initializeCPU(CPURegisters *cpu, uint8_t *programMemory, uint8_t *dataMemory) {
     cpu->A = 0;
@@ -247,6 +246,15 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             // STB - Store B into Data.
             cpu->Data[cpu->DataPointer] = cpu->B;
         break;
+        case 0x47:
+            // SETD - Set the Data Pointer.
+            cpu->ProgramCounter++;
+            uint16_t Address;
+            Address = (uint16_t)cpu->Program[cpu->ProgramCounter] << 8; // Cast the 8 bits to a 16 bit value and shift them to the high byte.
+            cpu->ProgramCounter++;
+            Address |= (uint16_t)cpu->Program[cpu->ProgramCounter];
+            cpu-> DataPointer = Address;
+        break;
         //
         // Dx - Output Operations:
         //
@@ -300,6 +308,11 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
         default:
             // Unknown Instruction.
             return 1;
+    }
+    if (cpu->DataPointer >= cpu->StackPointer) {
+        // A Stack Collision was detected.
+        cpu->Status |= 0x82; // Set Stack Collision Flag and Halt . (Bits 7 and 1 of the Status Register);
+        return 2;
     }
     return 0;
 }
