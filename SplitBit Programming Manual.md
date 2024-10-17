@@ -89,8 +89,8 @@ E3 | IND | Writes the value of an Input to Data Memory at the location reference
 ### Special Operations: 2 Instructions
 Hex Code | Mnemonic | Description
 -- | -- | --
-F0 | HALT | Stops CPU Execution.
-FF | NOP | Perform no Operation, increment the Program Counter.
+F0 | NOP | Perform no Operation, increment the Program Counter.
+FF | HALT | Stops CPU Execution.
 
 ## Input and Output In the Emulator:
 
