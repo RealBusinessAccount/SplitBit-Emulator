@@ -23,7 +23,7 @@ make
 ```
 3) Run the emulator:
 ```
-./SplitBit hello.bin
+./SplitBit Programs/hello.bin
 ```
 
 ### Usage:
