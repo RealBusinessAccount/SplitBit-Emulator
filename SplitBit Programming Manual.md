@@ -70,6 +70,7 @@ Hex Code | Mnemonic | Description
 44 | STQ | Stores Q into the byte referenced by the Data Pointer in Data Mmoery.
 45 | STA | Stores A into the byte referenced by the Data Pointer in Data Memory.
 46 | STB | Stores B into the byte referenced by the Data Pointer in Data Memory.
+47 | SETD | Loads the next two bytes of Program Memory into the Data Pointer.
 
 
 ### Output Operations: 3 Instructions
