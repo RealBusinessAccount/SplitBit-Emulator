@@ -82,9 +82,9 @@ D2 | OUTB | Writes the value of B to an Output specified by the next byte of Pro
 ### Input Operations: 3 Instructions
 Hex Code | Mnemonic | Description
 -- | -- | --
-E1 | RDA | Writes the value of an Input to A. The input port is specified the next byte of Program Memory.
-E2 | RDB | Writes the value of an Input to B. The input port is specified the next byte of Program Memory.
-E3 | RDD | Writes the value of an Input to Data Memory at the location referenced by the Data Pointer. The input port is specified by the next byte of Program Memory.
+E1 | INA | Writes the value of an Input to A. The input port is specified the next byte of Program Memory.
+E2 | INB | Writes the value of an Input to B. The input port is specified the next byte of Program Memory.
+E3 | IND | Writes the value of an Input to Data Memory at the location referenced by the Data Pointer. The input port is specified by the next byte of Program Memory.
 
 ### Special Operations: 2 Instructions
 Hex Code | Mnemonic | Description
