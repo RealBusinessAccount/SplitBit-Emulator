@@ -1,7 +1,7 @@
 # SplitBit Emulator
 
 ## Overview:
-SplitBit is a custom CPU designed for hobbyist projects and experimentation. The SplitBit Emulator is an emulator a C implementation of its bespoke instruction set architecture. It allows users to load and run binary programs created for the SplitBit CPU interactively from the command line.
+SplitBit is a custom CPU designed for hobbyist projects and experimentation. The SplitBit Emulator is a C implementation of its bespoke instruction set architecture. It allows users to load and run binary programs created for the SplitBit CPU interactively from the command line.
 
 ### Features:
 - 8-bit Harvard Architecture: The system memory is separated into two 64k banks, one for the Program Memory and another for the Data Memory.
