@@ -150,12 +150,14 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             cpu->B = cpu->Data[cpu->DataPointer];
         break;
         case 0x28:
-            // INCD - Add 1 to the Data Pointer.
-            cpu->DataPointer++;
+            // INIA - Initialize A Immediately from Program Memory.
+            cpu->ProgramCounter++;
+            cpu->A = cpu->Data[cpu->ProgramCounter];
         break;
         case 0x29:
-            // DECD - Subtract 1 from the Data Pointer.
-            cpu->DataPointer--;
+            // INIB - Initialize A Immediately from Program Memory.
+            cpu->ProgramCounter++;
+            cpu->B = cpu->Data[cpu->ProgramCounter];
         break;
         //
         // 3x - Stack Operations:
@@ -193,19 +195,21 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
         break;
         case 0x35:
             // POPA - Pop Data to A.
-            cpu->A = cpu->Data[cpu->StackPointer];
             cpu->StackPointer++;
+            cpu->A = cpu->Data[cpu->StackPointer];
+
         break;
         case 0x36:
             // POPB - Pop Data to B.
-            cpu->B = cpu->Data[cpu->StackPointer];
             cpu->StackPointer++;
+            cpu->B = cpu->Data[cpu->StackPointer];
         break;
         case 0x37:
             // POPP - Pop Data to the Program Counter
             cpu->ProgramCounter = (uint16_t)cpu->Data[cpu->StackPointer] << 8;
             cpu->StackPointer++;
             cpu->ProgramCounter = cpu->ProgramCounter | (uint16_t)cpu->Data[cpu->StackPointer];
+            cpu->ProgramCounter += 3; // Because it needs to skip over the subsequent branch instruction on return.
             cpu->StackPointer++;
         break;
         case 0x38:

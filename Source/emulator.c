@@ -57,6 +57,7 @@ int main (int argc, char *argv[]) {
         if (debugEnable) {
             getchar();
             printRegisters(&cpu, Program, Data);
+            printf("Cycle: %u\n", cycleCount);
         }
     }
     printf("Execution halted after %u cycles.\n", cycleCount);

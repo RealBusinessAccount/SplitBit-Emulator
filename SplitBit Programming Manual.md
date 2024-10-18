@@ -46,6 +46,10 @@ Hex Code | Mnemonic | Description
 | 23       | INCB     | Adds 1 to B.        |
 | 24       | DECA     | Subtracts 1 from A. |
 | 25       | DECB     | Subtracts 1 from B. |
+| 26       | LDA	  | Loads Data to A via the Data Pointer. |
+| 27	   | LDB      | Loads Data to B via the Data Pointer.
+| 28	   | INIA     | Loads the next byte of Program Memory to A. |
+| 29       | INIB     | Loads the next byte of Program Memory to B. |
 
 ### Stack Operations: 9 Instructions
 Hex Code | Mnemonic | Description
