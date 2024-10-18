@@ -37,7 +37,7 @@ Hex Code | Mnemonic | Description
 12 | BRA | Branch on A. If A is zero, loads the immediate next two bytes of Program Memory into the Program Counter.
 13 | BRB | Branch on B. If B is zero, loads the immediate next two bytes of Program Memory into the Program Counter.
 
-### Register Operations: 6 Instructions
+### Register Operations: 10 Instructions
 | Hex Code | Mnemonic | Description         |
 | -------- | -------- | ------------------- |
 | 20       | RSTA     | Resets A to 0.      |
@@ -64,7 +64,7 @@ Hex Code | Mnemonic | Description
 37 | POPP | Restores the Program Counter from the top two bytes in the stack, increments the Stack Pointer by two.
 38 | POPD | Restores the Program Counter from the top two bytes in the stack, increments the Stack Pointer by two.
 
-### Data Operations: 7 Instructions
+### Data Operations: 8 Instructions
 Hex Code | Mnemonic | Description
 -- | -- | --
 40 | INCD | Increments the Data Pointer.
