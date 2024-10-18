@@ -206,18 +206,18 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
         break;
         case 0x37:
             // POPP - Pop Data to the Program Counter
+            cpu->StackPointer++;
             cpu->ProgramCounter = (uint16_t)cpu->Data[cpu->StackPointer] << 8;
             cpu->StackPointer++;
             cpu->ProgramCounter = cpu->ProgramCounter | (uint16_t)cpu->Data[cpu->StackPointer];
             cpu->ProgramCounter += 3; // Because it needs to skip over the subsequent branch instruction on return.
-            cpu->StackPointer++;
         break;
         case 0x38:
             // POPD - Pop Data to the Data Pointer
+            cpu->StackPointer++;
             cpu->DataPointer = (uint16_t)cpu->Data[cpu->StackPointer] << 8;
             cpu->StackPointer++;
             cpu->DataPointer |= (uint16_t)cpu->Data[cpu->StackPointer];
-            cpu->StackPointer++;
         break;
         //
         // 4x - Data Operations:
