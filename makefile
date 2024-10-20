@@ -11,7 +11,7 @@ SRC_DIR = Source
 OBJ_DIR = Object
 
 # Source files
-SRCS = emulator.c io.c utility.c cpu.c bootstrap.c
+SRCS = emulator.c io.c utility.c assembly.c cpu.c bootstrap.c
 OBJS = $(SRCS:%.c=$(OBJ_DIR)/%.o)
 
 # Output binary name
