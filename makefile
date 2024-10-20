@@ -31,7 +31,8 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 
 # Clean up object and binary files
 clean:
-	rm -rf $(OBJ_DIR) $(BIN_DIR)
+	rm -rf $(OBJ_DIR)
+	rm $(TARGET)
 
 # Phony targets
 .PHONY: all clean
