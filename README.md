@@ -45,7 +45,7 @@ make
 ./Assembler [assembly file]
 ```
 #### Notes:
-- The assembled binaries are saved with the same name as the assembly source file they're assembled from, with a .bin extension, in the same directory that you call it from.
+- The assembled binaries are saved with the same name as the assembly source file they're assembled from, with a .bin extension, in the same directory that you call the assembler from.
 
 ### Additional Info:
 For more information on the custom ISA and programming for SplitBit, see the Programming Manual and Assembler Manual.
