@@ -1,4 +1,4 @@
-# SplitBit Emulator Makefile
+# SplitBit Emulator and Assembler Makefile
 # Anachronaut
 # 10/16/2024
 
@@ -7,32 +7,46 @@ CC = gcc
 CFLAGS = -Wall
 
 # Directories
-SRC_DIR = Source
+SRC_DIR_EMU = Source/Emulator
+SRC_DIR_ASM = Source/Assembler
 OBJ_DIR = Object
 
 # Source files
-SRCS = emulator.c io.c utility.c assembly.c cpu.c bootstrap.c
-OBJS = $(SRCS:%.c=$(OBJ_DIR)/%.o)
+EMU_SRCS = emulator.c io.c utility.c cpu.c bootstrap.c assembly.c
+ASM_SRCS = Assembler.c assembly.c firstPass.c Assm-util.c secondPass.c
 
-# Output binary name
-TARGET = SplitBit
+EMU_OBJS = $(EMU_SRCS:%.c=$(OBJ_DIR)/%.o)
+ASM_OBJS = $(ASM_SRCS:%.c=$(OBJ_DIR)/%.o)
 
-# Default target
-all: $(TARGET)
+# Output binary names
+EMU_TARGET = SplitBit
+ASM_TARGET = Assembler
 
-# Create binary by linking object files
-$(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS)
+# Default target: build both emulator and assembler
+all: $(EMU_TARGET) $(ASM_TARGET)
 
-# Compile source files to object files
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
+# Emulator binary
+$(EMU_TARGET): $(EMU_OBJS)
+	$(CC) $(CFLAGS) -o $(EMU_TARGET) $(EMU_OBJS)
+
+# Assembler binary
+$(ASM_TARGET): $(ASM_OBJS)
+	$(CC) $(CFLAGS) -o $(ASM_TARGET) $(ASM_OBJS)
+
+# Compile emulator source files to object files
+$(OBJ_DIR)/%.o: $(SRC_DIR_EMU)/%.c
+	mkdir -p $(OBJ_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile assembler source files to object files
+$(OBJ_DIR)/%.o: $(SRC_DIR_ASM)/%.c
 	mkdir -p $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Clean up object and binary files
 clean:
 	rm -rf $(OBJ_DIR)
-	rm $(TARGET)
+	rm -f $(EMU_TARGET) $(ASM_TARGET)
 
 # Phony targets
 .PHONY: all clean
