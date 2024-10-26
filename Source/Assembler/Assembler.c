@@ -71,14 +71,11 @@ void assemblerCleanup(intermediateElement *intermediateArray, int arraySize, cha
     }
     // Free the intermediateArray itself.
     free(intermediateArray);
-
     // Free the list of included files.
     freeIncludeList();
-
     // Free the list of labels.
     freeLabelList();
-
-    // Free the output file name
+    // Free the output file name.
     free(outputFileName);
 }
 
