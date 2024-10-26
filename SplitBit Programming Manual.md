@@ -103,38 +103,26 @@ The current implementation has Input 0 and Output 0 hooked to stdout and stdin r
 
 ### Example Program: Hello World
 ```
-; Hello World for SplitBit CPU
-; First, we define the string in Data Memory.
-Data:
-0000 0x48 ; 'H'
-0001 0x65 ; 'e'
-0002 0x6C ; 'l'
-0003 0x6C ; 'l'
-0004 0x6F ; 'o'
-0005 0x2C ; ','
-0006 0x20 ; ' '
-0007 0x57 ; 'W'
-0008 0x6F ; 'o'
-0009 0x72 ; 'r'
-000A 0x6C ; 'l'
-000B 0x64 ; 'd'
-000C 0x32 ; '!'
-000D 0x0A ; This is a linefeed, it's equivalent to putting '\n' in a string in C.
-000E 0x00 ; Zero terminates the string.
+; This is a basic hello world program for the SplitBit CPU.
+; We'll create a loop that outputs each byte of our string to Output 0, the text console.
 
-; Next, we'll create a loop that outputs each byte of our string to Output 0, the text console.
-Program:
-0000 LDA    0x42    ; Load the first byte of the string into A.
-0001 BRA    0x12    ; If A is zero, branch out of the loop.
-0002 0x00   0x00    ; The high byte of the branch.
-0003 0x0A   0x0A    ; The low byte of the branch.
-0004 OUTA   0xD1    ; Output the value in A.
-0005 0x01   0x00    ; The Output Port to use.
-0006 INCD   0x40    ; Increment the Data Pointer to the next byte of the string.
-0007 BRI    0x10    ; Branch immediately to the start of the loop.
-0008 0x00   0x00    ; The high byte of the branch address.
-0009 0x00   0x00    ; The low byte of the branch address.
-000A HALT   0xFF    ; The end of the program.
+#Program
+
+Start:
+  LDA         ; Load a byte of the string into A.
+  BRA End     ; If A is zero, branch out of the loop.
+  OUTA 0x00   ; Output the value in A to Port 0, the text console.
+  INCD        ; Increment the Data Pointer to the next byte of the string.
+  BRI Start   ; Branch immediately to the start of the loop.
+
+End:
+  INIA 0x0A   ; We'll load a linefeed into A and output it to make it look nice.
+  OUTA 0x00   ; Output it to the text console.
+  HALT        ; Terminate the program.
+
+#Data
+
+"Hello, World!"
 ```
 
 ### Structure of a SplitBit Binary File:
@@ -143,5 +131,5 @@ The Program and Data values are both stored in a single file for loading into th
 Here's an example hex dump of the hello world program stored in the proper format:
 
 ```
-50 52 47 00 0A 42 12 00 0A D1 00 40 10 00 00 FF 44 41 54 00 0E 48 65 6C 6C 6F 2C 20 57 6F 72 6C 64 21 0A 00
+50 52 47 00 0F 26 12 00 0A D1 00 40 10 00 00 28 0A D1 00 FF 44 41 54 00 0E 48 65 6C 6C 6F 2C 20 57 6F 72 6C 64 21 00
 ```
