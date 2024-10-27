@@ -112,9 +112,9 @@ void populateOutputBuffers(intermediateElement *intermediateArray, int arraySize
                     Program[(*programCount)++] = intermediateArray[i].byteValue;
 
                     // Check if it's a branch instruction.
-                    if ((intermediateArray[i].byteValue & 0xF0) == 0x10) {
+                    if (((intermediateArray[i].byteValue & 0xF0) == 0x10) && (intermediateArray[i].byteValue != 0x15)){
                         if (intermediateArray[i + 1].type != LABEL) {
-                            fprintf(stderr, "Error: Branch without label.\n");
+                            fprintf(stderr, RED "Error: Branch without label.\n" RESET);
                             printf("File: %s at line %d.\n", intermediateArray[i].fileName, intermediateArray[i].lineNumber);
                             exit(1);
                         }

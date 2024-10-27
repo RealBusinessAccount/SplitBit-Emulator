@@ -114,6 +114,24 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
                 cpu->ProgramCounter+=2;
             }
         break;
+        case 0x14:
+            // CALL - Push the Program Counter to the Stack, and perform an immediate branch.
+            // Order, low byte, high byte
+            cpu->Data[cpu->StackPointer] = cpu->ProgramCounter & 0xFF;
+            cpu->StackPointer--;
+            cpu->Data[cpu->StackPointer] = (cpu->ProgramCounter >> 8) & 0xFF;
+            cpu->StackPointer--;
+            genericBranch(cpu);
+        break;
+        case 0x15:
+            // RET - Return from subroutine, restore the Program Counter from the Stack.
+            // POPP - Pop Data to the Program Counter
+            cpu->StackPointer++;
+            cpu->ProgramCounter = (uint16_t)cpu->Data[cpu->StackPointer] << 8;
+            cpu->StackPointer++;
+            cpu->ProgramCounter = cpu->ProgramCounter | (uint16_t)cpu->Data[cpu->StackPointer];
+            cpu->ProgramCounter += 2; // Because it needs to skip over the address when it returns.
+        break;
         //
         // 2x - Register Operations:
         //
@@ -177,15 +195,8 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             cpu->Data[cpu->StackPointer] = cpu->B;
             cpu->StackPointer--;
         break;
-        case 0x33:
-            // PSHP - Push the Program Counter to the Stack.
-            // Order, low byte, high byte
-            cpu->Data[cpu->StackPointer] = cpu->ProgramCounter & 0xFF;
-            cpu->StackPointer--;
-            cpu->Data[cpu->StackPointer] = (cpu->ProgramCounter >> 8) & 0xFF;
-            cpu->StackPointer--;
         break;
-        case 0x34:
+        case 0x33:
             // PSHD - Push the Data Pointer to the Stack.
             // Order, low byte, high byte
             cpu->Data[cpu->StackPointer] = cpu->DataPointer & 0xFF;
@@ -193,26 +204,18 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             cpu->Data[cpu->StackPointer] = (cpu->DataPointer >> 8) & 0xFF;
             cpu->StackPointer--;
         break;
-        case 0x35:
+        case 0x34:
             // POPA - Pop Data to A.
             cpu->StackPointer++;
             cpu->A = cpu->Data[cpu->StackPointer];
 
         break;
-        case 0x36:
+        case 0x35:
             // POPB - Pop Data to B.
             cpu->StackPointer++;
             cpu->B = cpu->Data[cpu->StackPointer];
         break;
-        case 0x37:
-            // POPP - Pop Data to the Program Counter
-            cpu->StackPointer++;
-            cpu->ProgramCounter = (uint16_t)cpu->Data[cpu->StackPointer] << 8;
-            cpu->StackPointer++;
-            cpu->ProgramCounter = cpu->ProgramCounter | (uint16_t)cpu->Data[cpu->StackPointer];
-            cpu->ProgramCounter += 3; // Because it needs to skip over the subsequent branch instruction on return.
-        break;
-        case 0x38:
+        case 0x36:
             // POPD - Pop Data to the Data Pointer
             cpu->StackPointer++;
             cpu->DataPointer = (uint16_t)cpu->Data[cpu->StackPointer] << 8;
