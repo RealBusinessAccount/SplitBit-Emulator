@@ -31,7 +31,6 @@ saveRegisters:          ; Subroutine for storing the registers.
   STA                   ; Store A.
   INCD                  ; Move to the next address.
   STB                   ; Store B.
-  INCD                  ; Move to the next address.
   POPD                  ; Restore the Data Pointer.
   RET                   ; Return to the caller.
 
