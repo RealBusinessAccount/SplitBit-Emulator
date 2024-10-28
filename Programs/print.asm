@@ -9,12 +9,12 @@
 
 printString:
   CALL saveRegisters    ; Store the registers so we can  restore them later.
-printLoop:
-  LDA                   ; Move the first character of the string into A.
-  BRA Return            ; If A is NULL, the string is finished, so return.
-  OUTA 0x00             ; Output the character.
-  INCD                  ; Increment Data Pointer to the next character.
-  BRI printLoop         ; Branch to the beginning of the loop.
+  printLoop:
+    LDA                   ; Move the first character of the string into A.
+    BRA Return            ; If A is NULL, the string is finished, so return.
+    OUTA 0x00             ; Output the character.
+    INCD                  ; Increment Data Pointer to the next character.
+    BRI printLoop         ; Branch to the beginning of the loop.
 
 lineFeed:
   CALL saveRegisters    ; Save the registers so they can be restored.
