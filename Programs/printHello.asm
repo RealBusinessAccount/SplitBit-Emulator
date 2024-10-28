@@ -12,7 +12,7 @@
     SETD myString       ; Set the Data Pointer to the string we want to print.
     CALL printString    ; Call the subroutine.
     CALL lineFeed       ; Call the linefeed subroutine.
-HALT                    ; Stop the CPU.
+    HALT                ; Stop the CPU.
 
 #Data
 
