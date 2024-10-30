@@ -2,7 +2,7 @@
 
 SplitBit assembly syntax is similar to many other assembler syntaxes. Whitepsace at the start or end of a line is disregarded by the assembler and may be used to make programs more readable to the programmer. The Instruction Mnemonics are listed in the SplitBit Programming Manual, and the assembler is not case sensitve in regard to the mnemonics.
 
-A semicolon, ';', denotes the start of a comment, anything beyond it on a line is disregarded by the assembler.
+A colon, ';', denotes the start of a comment, anything beyond it on a line is disregarded by the assembler.
 
 Special Keywords are denoted with hash marks, '#'. The Keywords are #Include, #Program, and #Data.
 
