@@ -29,6 +29,7 @@ Instruction instruction_set[] = {
     {0x13, "BRB"},
     {0x14, "CALL"},
     {0x15, "RET"},
+    {0x16, "BRC"},
     // Register Operations:
     {0x20, "RSTA"},
     {0x21, "RSTB"},
@@ -40,6 +41,7 @@ Instruction instruction_set[] = {
     {0x27, "LDB"},
     {0x28, "INIA"},
     {0x29, "INIB"},
+    {0x2F, "CCF"},
     // Stack Operations:
     {0x30, "PSHQ"},
     {0x31, "PSHA"},

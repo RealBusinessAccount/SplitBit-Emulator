@@ -16,11 +16,11 @@ The assembler will accept:
 Labels may be a string of up to 32 alphanumeric characters that must end with a semicolon, ':'.
 
 ```
-ProgramStart:
+programStart:
 
-LoopStart:
+loopStart:
 
-ErrorHandler01:
+errorHandler01:
 ```
 
 
@@ -36,25 +36,28 @@ SplitBit programs may have a Data Segment. You may define the start of the data 
 ## An Example SplitBit Assembly Program:
 
 ```
-; This is a basic hello world program for the SplitBit CPU.
-; We'll create a loop that outputs each byte of our string to Output 0, the text console.
+; This is a slightly more advanced hello world program that demonstrates some SplitBit programming conventions.
 
 #Program
 
-Start:
-  LDA         ; Load a byte of the string into A.
-  BRA End     ; If A is zero, branch out of the loop.
-  OUTA 0x00   ; Output the value in A to Port 0, the text console.
-  INCD        ; Increment the Data Pointer to the next byte of the string.
-  BRI Start   ; Branch immediately to the start of the loop.
+start:              ; By uninforced convention, Program Labels start with a lowercase letter.
+  SETD HelloString  ; Set the Data Pointer to the address of the string.
+  CALL printString  ; Call the string printing subroutine.
+  HALT              ; End the program.
 
-End:
-  INIA 0x0A   ; We'll load a linefeed into A and output it to make it look nice.
-  OUTA 0x00   ; Output it to the text console.
-  HALT        ; Terminate the program.
+; This is a reusable subroutine that could be includedd in other programs.
+printString:        ; Expects Data Pointer to be set to the beginning of the string to be printed.
+  LDA               ; Move the first character of the string into A.
+  BRA printDone     ; If A is NULL, the string is finished, so return.
+  OUTA 0x00         ; Output the character.
+  INCD              ; Increment Data Pointer to the next character.
+  BRI printString   ; Branch to the beginning of the loop.
+ printDone:
+  RET               ; Return to the caller.
 
 #Data
 
+HelloString:  ; By uninforced convention, Data Labels start with a capital letter.
 "Hello, World!"
 ```
 

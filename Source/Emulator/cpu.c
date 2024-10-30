@@ -121,16 +121,55 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             cpu->StackPointer--;
             cpu->Data[cpu->StackPointer] = (cpu->ProgramCounter >> 8) & 0xFF;
             cpu->StackPointer--;
+            // Push the Data Pointer to the Stack.
+            // Order, low byte, high byte
+            cpu->Data[cpu->StackPointer] = cpu->DataPointer & 0xFF;
+            cpu->StackPointer--;
+            cpu->Data[cpu->StackPointer] = (cpu->DataPointer >> 8) & 0xFF;
+            cpu->StackPointer--;
+            // Push Q to the Stack.
+            cpu->Data[cpu->StackPointer] = cpu->Q;
+            cpu->StackPointer--;
+            // Push B to the Stack.
+            cpu->Data[cpu->StackPointer] = cpu->B;
+            cpu->StackPointer--;
+            // Push A to the Stack.
+            cpu->Data[cpu->StackPointer] = cpu->A;
+            cpu->StackPointer--;
+            // Perform a Generic Branch to the Address.
             genericBranch(cpu);
         break;
         case 0x15:
-            // RET - Return from subroutine, restore the Program Counter from the Stack.
-            // POPP - Pop Data to the Program Counter
+            // RET - Return from subroutine, restore the registers and set the Program Counter to the Return Address.
+            // Pop A from the Stack.
+            cpu->StackPointer++;
+            cpu->A = cpu->Data[cpu->StackPointer];
+            // Pop B from the Stack.
+            cpu->StackPointer++;
+            cpu->B = cpu->Data[cpu->StackPointer];
+            // Pop Q from the Stack.
+            cpu->StackPointer++;
+            cpu->Q = cpu->Data[cpu->StackPointer];
+            // Pop the Data Pointer from the Stack.
+            cpu->StackPointer++;
+            cpu->DataPointer = (uint16_t)cpu->Data[cpu->StackPointer] << 8;
+            cpu->StackPointer++;
+            cpu->DataPointer |= (uint16_t)cpu->Data[cpu->StackPointer];
+            // Pop the Return Address from the Stack.
             cpu->StackPointer++;
             cpu->ProgramCounter = (uint16_t)cpu->Data[cpu->StackPointer] << 8;
             cpu->StackPointer++;
             cpu->ProgramCounter = cpu->ProgramCounter | (uint16_t)cpu->Data[cpu->StackPointer];
-            cpu->ProgramCounter += 2; // Because it needs to skip over the address when it returns.
+            // Add 2 to the Program Counter to skip over the address when it returns.
+            cpu->ProgramCounter += 2;
+        break;
+        case 0x16:
+            // BRC - Do an immediate branch is the Carry Flag is set.
+            if (cpu->Status & 0x01) {
+                genericBranch(cpu);
+            } else {
+                cpu->ProgramCounter+=2;
+            }
         break;
         //
         // 2x - Register Operations:
@@ -177,6 +216,10 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             cpu->ProgramCounter++;
             cpu->B = cpu->Program[cpu->ProgramCounter];
         break;
+        case 0x2F:
+            // CCF - Clear the Carry Flag.
+            cpu->Status &= ~0x01;
+        break;
         //
         // 3x - Stack Operations:
         //
@@ -195,9 +238,8 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             cpu->Data[cpu->StackPointer] = cpu->B;
             cpu->StackPointer--;
         break;
-        break;
         case 0x33:
-            // PSHD - Push the Data Pointer to the Stack.
+            // PSHD - Push the Data Pointer Address to the Stack.
             // Order, low byte, high byte
             cpu->Data[cpu->StackPointer] = cpu->DataPointer & 0xFF;
             cpu->StackPointer--;
@@ -205,18 +247,18 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             cpu->StackPointer--;
         break;
         case 0x34:
-            // POPA - Pop Data to A.
+            // POPA - Pop A from the Stack.
             cpu->StackPointer++;
             cpu->A = cpu->Data[cpu->StackPointer];
 
         break;
         case 0x35:
-            // POPB - Pop Data to B.
+            // POPB - Pop B from the Stack.
             cpu->StackPointer++;
             cpu->B = cpu->Data[cpu->StackPointer];
         break;
         case 0x36:
-            // POPD - Pop Data to the Data Pointer
+            // POPD - Pop Data Address from the Stack.
             cpu->StackPointer++;
             cpu->DataPointer = (uint16_t)cpu->Data[cpu->StackPointer] << 8;
             cpu->StackPointer++;
