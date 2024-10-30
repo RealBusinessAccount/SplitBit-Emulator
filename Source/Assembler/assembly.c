@@ -22,6 +22,8 @@ Instruction instruction_set[] = {
     {0x06, "XOR"},
     {0x07, "NOTA"},
     {0x08, "NOTB"},
+    {0x09, "SHL"},
+    {0x0A, "SHR"},
     // Branch Operations:
     {0x10, "BRI"},
     {0x11, "BRQ"},

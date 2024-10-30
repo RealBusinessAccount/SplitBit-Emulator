@@ -6,6 +6,8 @@
 #include "cpu.h"
 #include "io.h"
 
+uint16_t shiftRegister;
+
 void initializeCPU(CPURegisters *cpu, uint8_t *programMemory, uint8_t *dataMemory) {
     cpu->A = 0;
     cpu->B = 0;
@@ -79,6 +81,20 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
         case 0x08:
             // NOTB - not B -> Q
             cpu->Q = ~cpu->B;
+        break;
+        case 0x09:
+            // SHL - Shift AB left.
+            shiftRegister = ((uint16_t)cpu->A << 8) | cpu->B;
+            shiftRegister = (shiftRegister << 1) | (shiftRegister >> 15);
+            cpu->A = shiftRegister >> 8;
+            cpu->B = shiftRegister & 0xFF;
+        break;
+        case 0x0A:
+            // SHR - Shift AB right.
+            shiftRegister = ((uint16_t)cpu->A << 8) | cpu->B;
+            shiftRegister = (shiftRegister >> 1) | (shiftRegister << 15);
+            cpu->A = shiftRegister >> 8;
+            cpu->B = shiftRegister & 0xFF;
         break;
         //
         // 1x - Branch Operations:

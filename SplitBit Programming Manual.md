@@ -16,7 +16,7 @@ It has six registers:
 
 ## List of Instructions:
 
-### Arithmetic and Logic Operations: 9 Instructions
+### Arithmetic and Logic Operations: 11 Instructions
 Hex Code | Mnemonic | Description
 -- | -- | --
 00 | ADD |  Adds A, B, and the Carry Flag, the result is stored in Q.
@@ -28,6 +28,8 @@ Hex Code | Mnemonic | Description
 06 | XOR | Bitwise xor of A and B, the result is stored in Q.
 07 | NOTA | Bitwise inversion of A, the result is stored in Q.
 08 | NOTB | Bitwise inversion of B, the result is stored in Q.
+09 | SHL | A and B form a circular shift register. Rotate this register left.
+0A | SHR | A and B form a circular shift register. Rotate this register right.
 
 ### Branch Operations: 7 Instructions
 Hex Code | Mnemonic | Description
