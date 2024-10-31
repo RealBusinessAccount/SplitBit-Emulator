@@ -45,7 +45,7 @@ start:              ; By uninforced convention, Program Labels start with a lowe
   CALL printString  ; Call the string printing subroutine.
   HALT              ; End the program.
 
-; This is a reusable subroutine that could be includedd in other programs.
+; This is a reusable subroutine that could be included in other programs.
 printString:        ; Expects Data Pointer to be set to the beginning of the string to be printed.
   LDA               ; Move the first character of the string into A.
   BRA printDone     ; If A is NULL, the string is finished, so return.
