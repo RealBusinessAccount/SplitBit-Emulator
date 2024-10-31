@@ -31,6 +31,31 @@ void genericBranch(CPURegisters *cpu){
     cpu->ProgramCounter = DestinationAddress-1;
 }
 
+void genericCall(CPURegisters *cpu){
+    // Order, low byte, high byte
+            cpu->Data[cpu->StackPointer] = cpu->ProgramCounter & 0xFF;
+            cpu->StackPointer--;
+            cpu->Data[cpu->StackPointer] = (cpu->ProgramCounter >> 8) & 0xFF;
+            cpu->StackPointer--;
+            // Push the Data Pointer to the Stack.
+            // Order, low byte, high byte
+            cpu->Data[cpu->StackPointer] = cpu->DataPointer & 0xFF;
+            cpu->StackPointer--;
+            cpu->Data[cpu->StackPointer] = (cpu->DataPointer >> 8) & 0xFF;
+            cpu->StackPointer--;
+            // Push Q to the Stack.
+            cpu->Data[cpu->StackPointer] = cpu->Q;
+            cpu->StackPointer--;
+            // Push B to the Stack.
+            cpu->Data[cpu->StackPointer] = cpu->B;
+            cpu->StackPointer--;
+            // Push A to the Stack.
+            cpu->Data[cpu->StackPointer] = cpu->A;
+            cpu->StackPointer--;
+            // Perform a Generic Branch to the Address.
+            genericBranch(cpu);
+}
+
 uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
     switch(Instruction) {
         // 0x - Arithmetic and Logic Operations.
@@ -131,31 +156,41 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             }
         break;
         case 0x14:
-            // CALL - Push the Program Counter to the Stack, and perform an immediate branch.
-            // Order, low byte, high byte
-            cpu->Data[cpu->StackPointer] = cpu->ProgramCounter & 0xFF;
-            cpu->StackPointer--;
-            cpu->Data[cpu->StackPointer] = (cpu->ProgramCounter >> 8) & 0xFF;
-            cpu->StackPointer--;
-            // Push the Data Pointer to the Stack.
-            // Order, low byte, high byte
-            cpu->Data[cpu->StackPointer] = cpu->DataPointer & 0xFF;
-            cpu->StackPointer--;
-            cpu->Data[cpu->StackPointer] = (cpu->DataPointer >> 8) & 0xFF;
-            cpu->StackPointer--;
-            // Push Q to the Stack.
-            cpu->Data[cpu->StackPointer] = cpu->Q;
-            cpu->StackPointer--;
-            // Push B to the Stack.
-            cpu->Data[cpu->StackPointer] = cpu->B;
-            cpu->StackPointer--;
-            // Push A to the Stack.
-            cpu->Data[cpu->StackPointer] = cpu->A;
-            cpu->StackPointer--;
-            // Perform a Generic Branch to the Address.
-            genericBranch(cpu);
+            // BRC - Do an immediate branch if the Carry Flag is set.
+            if (cpu->Status & 0x01) {
+                genericBranch(cpu);
+            } else {
+                cpu->ProgramCounter+=2;
+            }
         break;
-        case 0x15:
+        case 0x17:
+            // CALL - Push the Program Counter to the Stack, and perform an immediate branch.
+            genericCall(cpu);
+        break;
+        case 0x18:
+            // CALLA
+            if (cpu->A == 0) {
+                genericCall(cpu);
+            }
+        break;
+        case 0x19:
+            // CALLB
+            if (cpu->B == 0) {
+                genericCall(cpu);
+            }
+        break;
+        case 0x1A:
+            // CALLQ
+            if (cpu->Q == 0) {
+                genericCall(cpu);
+            }
+        case 0x1B:
+            // CALLCF
+            if (cpu->Status & 0x01) {
+                genericCall(cpu);
+            }
+        break;
+        case 0x1F:
             // RET - Return from subroutine, restore the registers and set the Program Counter to the Return Address.
             // Pop A from the Stack.
             cpu->StackPointer++;
@@ -178,14 +213,6 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             cpu->ProgramCounter = cpu->ProgramCounter | (uint16_t)cpu->Data[cpu->StackPointer];
             // Add 2 to the Program Counter to skip over the address when it returns.
             cpu->ProgramCounter += 2;
-        break;
-        case 0x16:
-            // BRC - Do an immediate branch is the Carry Flag is set.
-            if (cpu->Status & 0x01) {
-                genericBranch(cpu);
-            } else {
-                cpu->ProgramCounter+=2;
-            }
         break;
         //
         // 2x - Register Operations:

@@ -9,7 +9,7 @@ It has six registers:
  - The Program Counter is a 16 bit pointer into the Program Memory. It points to the current operation the CPU is executing. It initializes at address 0x0000.
  - The Data Pointer is a 16 bit pointer into the Data Memory. It points to the current byte of data that the CPU can read or write to, and can be set arbitrarily by the programmer to any value in the Data Memory. It initializes at location 0x0000.
  - The Stack Pointer is a 16 bit pointer into the Data Memory. It points to the current element of the stack, and is only ever modified by the use of the push and pop instructions. It initializes at location 0xFFFF.
- - The Status register is an 8 bit register whose various bits are used as flags. Only three of these flags are used in the current implementation. 
+ - The Status register is an 8 bit register whose various bits are used as flags. Only three of these flags are used in the current implementation.
 	 - Bit 0 is the Carry/Borrow Flag. Any arithmetic operation either sets or clears it depending on whether or not the result causes Q to overflow/underflow. It is a 1 if a carry/underflow occurred, and a 0 otherwise.
 	 - Bit 1 is the Stack Collision Flag. It is set if the Data Pointer's value ever meets or exceeds the Stack Pointer's value. This condition also sets the Halt Flag.
 	 - Bit 7 is the Halt Flag. It is set by the HALT instruction, or if there is a stack collision.
@@ -38,9 +38,14 @@ Hex Code | Mnemonic | Description
 11 | BRQ | Branch on Q. If Q is zero, loads the immediate next two bytes of Program Memory into the Program Counter.
 12 | BRA | Branch on A. If A is zero, loads the immediate next two bytes of Program Memory into the Program Counter.
 13 | BRB | Branch on B. If B is zero, loads the immediate next two bytes of Program Memory into the Program Counter.
-14 | CALL | Stores all the registers to the Stack, A, B, Q, the Data Pointer, and the Program Counter, then performs an immediate branch.
-15 | RET  | Restores all registers from the Stack, then immediately branches to the Return Address by setting the Program Counter to the next instruction after the last CALL.
-16 | BRC  | Branch if Carry is set.
+14 | BRC  | Branch if Carry is set.
+17 | CALL | Call subroutine. Stores all the registers to the Stack, A, B, Q, the Data Pointer, and the Program Counter, then performs an immediate branch.
+18 | CALLA | Conditional Call on A. Calls subroutine if A is zero.
+19 | CALLB | Conditional Call on B. Calls subroutine if B is zero.
+1A | CALLQ | Conditional Call on Q. Calls subroutine if Q is zero.
+1B | CALLCF | Conditional Call on Carry. Calls subroutine if the Carry Flag is set.
+1F | RET  | Restores all registers from the Stack, then immediately branches to the Return Address by setting the Program Counter to the next instruction after the last CALL.
+
 
 ### Register Operations: 11 Instructions
 | Hex Code | Mnemonic | Description         |

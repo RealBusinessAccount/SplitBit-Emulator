@@ -51,6 +51,6 @@ void printRegisters(CPURegisters *cpu, uint8_t *Program, uint8_t *Data) {
     printf("A: 0x%02X\tB: 0x%02X\tQ: 0x%02X\tStatus: 0b%08b\n", cpu->A, cpu->B, cpu->Q, cpu->Status);
     printf("Program Counter: 0x%04X     Current Instruction: 0x%02X (%s)\n", cpu->ProgramCounter, Program[cpu->ProgramCounter],getMnemonic(Program[cpu->ProgramCounter]));
     printf("   Data Pointer: 0x%04X      Current Data Value: 0x%02X\n", cpu->DataPointer, Data[cpu->DataPointer]);
-    printf("  Stack Pointer: 0x%04X           Current Value: (0x%02X) (0x%02X)\n", Data[cpu->StackPointer], Data[cpu->StackPointer+1], Data[cpu->StackPointer+2]);
+    printf("  Stack Pointer: 0x%04X           Current Value: (0x%02X) (0x%02X)\n", cpu->StackPointer, Data[cpu->StackPointer+1], Data[cpu->StackPointer+2]);
 }
 
