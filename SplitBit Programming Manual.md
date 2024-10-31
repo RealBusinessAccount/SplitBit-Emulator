@@ -31,7 +31,7 @@ Hex Code | Mnemonic | Description
 09 | SHL | A and B form a circular shift register. Rotate this register left.
 0A | SHR | A and B form a circular shift register. Rotate this register right.
 
-### Branch Operations: 7 Instructions
+### Branch Operations: 11 Instructions
 Hex Code | Mnemonic | Description
 -- | -- | --
 10 | BRI | Branch Immediately. Loads the immediate next two bytes of Program Memory into the Program Counter, first the most significant byte, then the least.
