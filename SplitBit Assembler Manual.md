@@ -8,9 +8,9 @@ Special Keywords are denoted with hash marks, '#'. The Keywords are #Include, #P
 
 Literal values may be defined in a few ways. Numerical values must be within the range of a single 8 bit integer.
 The assembler will accept:
-    - Hexadecimal values prefaced with 0x, eg. 0x00, 0x7F.
-    - Decimal values prefaced with 0d, eg. 0d0, 0d120, 0d255.
-    - Strings enclosed in double qoutes, eg. "a", "Hello, World!", "It is dark, you are likely to be eaten by a grue."
+- Hexadecimal values prefaced with 0x, eg. 0x00, 0x7F.
+- Decimal values prefaced with 0d, eg. 0d0, 0d120, 0d255.
+- Strings enclosed in double qoutes, eg. "a", "Hello, World!", "It is dark, you are likely to be eaten by a grue."
 
 
 Labels may be a string of up to 32 alphanumeric characters that must end with a colon, ':'.
