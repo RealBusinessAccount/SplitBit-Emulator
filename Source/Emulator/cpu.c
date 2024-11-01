@@ -372,21 +372,17 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
         // Ex - Input Operations:
         //
         case 0xE0:
-            // CIN - Read Input Select to A.
-            // cpu->A = InputSelect;
-        break;
-        case 0xE1:
-            // RDA - Read an Input to A.
+            // INA - Read an Input to A.
             cpu->ProgramCounter++;
             cpu->A = InputHandler(cpu->Program[cpu->ProgramCounter]);
         break;
-        case 0xE2:
-            // RDB - Read an Input to B.
+        case 0xE1:
+            // INB - Read an Input to B.
             cpu->ProgramCounter++;
             cpu->B = InputHandler(cpu->Program[cpu->ProgramCounter]);
         break;
-        case 0xE3:
-            // RDD - Read an Input to Data Memory.
+        case 0xE2:
+            // IND - Read an Input to Data Memory.
             cpu->ProgramCounter++;
             cpu->Data[cpu->DataPointer] = InputHandler(cpu->Program[cpu->ProgramCounter]);
         break;
