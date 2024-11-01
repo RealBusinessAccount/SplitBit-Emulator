@@ -12,8 +12,13 @@ lineFeed:
   OUTA 0x00                 ; Output it.
   RET                       ; Return to the caller.
 
-; Expects A to contain the number of spaces to print.
 blankSpace:
+  INIB 0x20                 ; Set B to the ASCII value for space.
+  OUTB 0x00                 ; Print it.
+  RET
+
+; Expects A to contain the number of spaces to print.
+blankSpaces:
   INIB 0x20                 ; Set B to the ASCII value for space.
   OUTB 0x00                 ; Print it.
   BRA printDone             ; If A is zero, we're done.
@@ -21,13 +26,13 @@ blankSpace:
   BRI blankSpace            ; Branch back to the loop again.
 
 printString:                ; Expects Data Pointer to be set to the beginning of the string to be printed.
-    LDA                     ; Move the first character of the string into A.
-    BRA printDone           ; If A is NULL, the string is finished, so return.
-    OUTA 0x00               ; Output the character.
-    INCD                    ; Increment Data Pointer to the next character.
-    BRI printString         ; Branch to the beginning of the loop.
-    printDone:
-    RET                     ; Return to the caller.
+  LDA                       ; Move the first character of the string into A.
+  BRA printDone             ; If A is NULL, the string is finished, so return.
+  OUTA 0x00                 ; Output the character.
+  INCD                      ; Increment Data Pointer to the next character.
+  BRI printString           ; Branch to the beginning of the loop.
+ printDone:
+  RET                     ; Return to the caller.
 
 ; Expects A to contain the value to be printed in decimal form.
 printByteDecimal:

@@ -16,22 +16,20 @@ It has six registers:
 
 ## List of Instructions:
 
-### Arithmetic and Logic Operations: 11 Instructions
+### Arithmetic and Logic Operations: 9 Instructions
 Hex Code | Mnemonic | Description
 -- | -- | --
 00 | ADD |  Adds A, B, and the Carry Flag, the result is stored in Q.
 01 | SUB | Subtracts B and the Carry Flag from A, the result is stored in Q.
 02 | AND | Bitwise and of A and B, the result is stored in Q.
 03 | OR | Bitwise or of A and B, the result is stored in Q.
-04 | NOR | Bitwise nor of A and B, the result is stored in Q.
-05 | NAND | Bitwise nand of A and B, the result is stored in Q.
-06 | XOR | Bitwise xor of A and B, the result is stored in Q.
-07 | NOTA | Bitwise inversion of A, the result is stored in Q.
-08 | NOTB | Bitwise inversion of B, the result is stored in Q.
-09 | SHL | A and B form a circular shift register. Rotate this register left.
-0A | SHR | A and B form a circular shift register. Rotate this register right.
+04 | XOR | Bitwise xor of A and B, the result is stored in Q.
+05 | NOTA | Bitwise inversion of A, the result is stored in Q.
+06 | NOTB | Bitwise inversion of B, the result is stored in Q.
+07 | SHL | A and B form a circular shift register. Rotate this register left.
+08 | SHR | A and B form a circular shift register. Rotate this register right.
 
-### Branch Operations: 11 Instructions
+### Branch and Subroutine Operations: 7 Instructions
 Hex Code | Mnemonic | Description
 -- | -- | --
 10 | BRI | Branch Immediately. Loads the immediate next two bytes of Program Memory into the Program Counter, first the most significant byte, then the least.
@@ -40,10 +38,6 @@ Hex Code | Mnemonic | Description
 13 | BRB | Branch on B. If B is zero, loads the immediate next two bytes of Program Memory into the Program Counter.
 14 | BRC  | Branch if Carry is set.
 17 | CALL | Call subroutine. Stores all the registers to the Stack, A, B, Q, the Data Pointer, and the Program Counter, then performs an immediate branch.
-18 | CALLA | Conditional Call on A. Calls subroutine if A is zero.
-19 | CALLB | Conditional Call on B. Calls subroutine if B is zero.
-1A | CALLQ | Conditional Call on Q. Calls subroutine if Q is zero.
-1B | CALLCF | Conditional Call on Carry. Calls subroutine if the Carry Flag is set.
 1F | RET  | Restores all registers from the Stack, then immediately branches to the Return Address by setting the Program Counter to the next instruction after the last CALL.
 
 
@@ -73,17 +67,19 @@ Hex Code | Mnemonic | Description
 35 | POPB | Reads the location referenced by the Stack Pointer from Data Memory into B then increments the Stack Pointer.
 36 | POPD | Restores the Program Counter from the top two bytes in the stack, increments the Stack Pointer by two.
 
-### Data Operations: 8 Instructions
+### Data Operations: 10 Instructions
 Hex Code | Mnemonic | Description
 -- | -- | --
 40 | INCD | Increments the Data Pointer.
 41 | DECD | Decrements the Data Pointer.
 42 | LDA | Loads the byte referenced from Data Memory by the Data Pointer into A.
 43 | LDB | Loads the byte referenced from Data Memory by the Data Pointer into B.
-44 | STQ | Stores Q into the byte referenced by the Data Pointer in Data Mmoery.
+44 | STQ | Stores Q into the byte referenced by the Data Pointer in Data Memory.
 45 | STA | Stores A into the byte referenced by the Data Pointer in Data Memory.
 46 | STB | Stores B into the byte referenced by the Data Pointer in Data Memory.
 47 | SETD | Loads the next two bytes of Program Memory into the Data Pointer.
+48 | DPUP | Offset Data Pointer up by the value of the immediate next byte of Program Memory.
+49 | DPDN | Offset Data Pointer down by the value of the immediate next byte of Program Memory.
 
 
 ### Output Operations: 3 Instructions

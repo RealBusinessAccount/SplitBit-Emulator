@@ -33,27 +33,27 @@ void genericBranch(CPURegisters *cpu){
 
 void genericCall(CPURegisters *cpu){
     // Order, low byte, high byte
-            cpu->Data[cpu->StackPointer] = cpu->ProgramCounter & 0xFF;
-            cpu->StackPointer--;
-            cpu->Data[cpu->StackPointer] = (cpu->ProgramCounter >> 8) & 0xFF;
-            cpu->StackPointer--;
-            // Push the Data Pointer to the Stack.
-            // Order, low byte, high byte
-            cpu->Data[cpu->StackPointer] = cpu->DataPointer & 0xFF;
-            cpu->StackPointer--;
-            cpu->Data[cpu->StackPointer] = (cpu->DataPointer >> 8) & 0xFF;
-            cpu->StackPointer--;
-            // Push Q to the Stack.
-            cpu->Data[cpu->StackPointer] = cpu->Q;
-            cpu->StackPointer--;
-            // Push B to the Stack.
-            cpu->Data[cpu->StackPointer] = cpu->B;
-            cpu->StackPointer--;
-            // Push A to the Stack.
-            cpu->Data[cpu->StackPointer] = cpu->A;
-            cpu->StackPointer--;
-            // Perform a Generic Branch to the Address.
-            genericBranch(cpu);
+    cpu->Data[cpu->StackPointer] = cpu->ProgramCounter & 0xFF;
+    cpu->StackPointer--;
+    cpu->Data[cpu->StackPointer] = (cpu->ProgramCounter >> 8) & 0xFF;
+    cpu->StackPointer--;
+    // Push the Data Pointer to the Stack.
+    // Order, low byte, high byte
+    cpu->Data[cpu->StackPointer] = cpu->DataPointer & 0xFF;
+    cpu->StackPointer--;
+    cpu->Data[cpu->StackPointer] = (cpu->DataPointer >> 8) & 0xFF;
+    cpu->StackPointer--;
+    // Push Q to the Stack.
+    cpu->Data[cpu->StackPointer] = cpu->Q;
+    cpu->StackPointer--;
+    // Push B to the Stack.
+    cpu->Data[cpu->StackPointer] = cpu->B;
+    cpu->StackPointer--;
+    // Push A to the Stack.
+    cpu->Data[cpu->StackPointer] = cpu->A;
+    cpu->StackPointer--;
+    // Perform a Generic Branch to the Address.
+    genericBranch(cpu);
 }
 
 uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
@@ -88,33 +88,25 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             cpu->Q = cpu->A|cpu->B;
         break;
         case 0x04:
-            // NAND - A nand B -> Q
-            cpu->Q = ~(cpu->A&cpu->B);
-        break;
-        case 0x05:
-            // NOR - A nor B -> Q
-            cpu->Q = ~(cpu->A|cpu->B);
-        break;
-        case 0x06:
             // XOR - A xor B -> Q
             cpu->Q = cpu->A^cpu->B;
         break;
-        case 0x07:
+        case 0x05:
             // NOTA - not A -> Q
             cpu->Q = ~cpu->A;
         break;
-        case 0x08:
+        case 0x06:
             // NOTB - not B -> Q
             cpu->Q = ~cpu->B;
         break;
-        case 0x09:
+        case 0x07:
             // SHL - Shift AB left.
             shiftRegister = ((uint16_t)cpu->A << 8) | cpu->B;
             shiftRegister = (shiftRegister << 1) | (shiftRegister >> 15);
             cpu->A = shiftRegister >> 8;
             cpu->B = shiftRegister & 0xFF;
         break;
-        case 0x0A:
+        case 0x08:
             // SHR - Shift AB right.
             shiftRegister = ((uint16_t)cpu->A << 8) | cpu->B;
             shiftRegister = (shiftRegister >> 1) | (shiftRegister << 15);
@@ -167,29 +159,29 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             // CALL - Push the Program Counter to the Stack, and perform an immediate branch.
             genericCall(cpu);
         break;
-        case 0x18:
-            // CALLA
-            if (cpu->A == 0) {
-                genericCall(cpu);
-            }
-        break;
-        case 0x19:
-            // CALLB
-            if (cpu->B == 0) {
-                genericCall(cpu);
-            }
-        break;
-        case 0x1A:
-            // CALLQ
-            if (cpu->Q == 0) {
-                genericCall(cpu);
-            }
-        case 0x1B:
-            // CALLCF
-            if (cpu->Status & 0x01) {
-                genericCall(cpu);
-            }
-        break;
+        // case 0x18:
+        //     // CALLA
+        //     if (cpu->A == 0) {
+        //         genericCall(cpu);
+        //     }
+        // break;
+        // case 0x19:
+        //     // CALLB
+        //     if (cpu->B == 0) {
+        //         genericCall(cpu);
+        //     }
+        // break;
+        // case 0x1A:
+        //     // CALLQ
+        //     if (cpu->Q == 0) {
+        //         genericCall(cpu);
+        //     }
+        // case 0x1B:
+        //     // CALLCF
+        //     if (cpu->Status & 0x01) {
+        //         genericCall(cpu);
+        //     }
+        // break;
         case 0x1F:
             // RET - Return from subroutine, restore the registers and set the Program Counter to the Return Address.
             // Pop A from the Stack.
@@ -213,6 +205,7 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             cpu->ProgramCounter = cpu->ProgramCounter | (uint16_t)cpu->Data[cpu->StackPointer];
             // Add 2 to the Program Counter to skip over the address when it returns.
             cpu->ProgramCounter += 2;
+
         break;
         //
         // 2x - Register Operations:
@@ -346,6 +339,16 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             cpu->ProgramCounter++;
             Address |= (uint16_t)cpu->Program[cpu->ProgramCounter];
             cpu-> DataPointer = Address;
+        break;
+        case 0x48:
+            // DPUP - Offset the Data Pointer up by the value of the next byte of Program Memory.
+            cpu->ProgramCounter++;
+            cpu->DataPointer += cpu->Program[cpu->ProgramCounter];
+        break;
+        case 0x49:
+            // DPDN - Offset the Data Pointer down by the value of the next byte of Program Memory.
+            cpu->ProgramCounter++;
+            cpu->DataPointer -= cpu->Program[cpu->ProgramCounter];
         break;
         //
         // Dx - Output Operations:
