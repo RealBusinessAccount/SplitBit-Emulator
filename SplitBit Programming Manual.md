@@ -62,10 +62,10 @@ Hex Code | Mnemonic | Description
 30 | PSHQ | Stores Q into Data Memory at the location referenced by the Stack Pointer then decrements the Stack Pointer.
 31 | PSHA | Stores A into Data Memory at the location referenced by the Stack Pointer then decrements the Stack Pointer.
 32 | PSHB | Stores B into Data Memory at the location referenced by the Stack Pointer then decrements the Stack Pointer.
-33 | PSHD | Stores the Data Pointer to the next two bytes in the stack, decrements the Stack Pointer by two.
+33 | PSHD | Stores the Data Pointer to the stack, with the low byte on top. Increments the Stack Pointer by two.
 34 | POPA | Reads the location referenced by the Stack Pointer from Data Memory into A then increments the Stack Pointer.
 35 | POPB | Reads the location referenced by the Stack Pointer from Data Memory into B then increments the Stack Pointer.
-36 | POPD | Restores the Program Counter from the top two bytes in the stack, increments the Stack Pointer by two.
+36 | POPD | Restores the Program Counter from the stack, increments the Stack Pointer by two.
 
 ### Data Operations: 10 Instructions
 Hex Code | Mnemonic | Description
@@ -89,12 +89,11 @@ D0 | OUTQ | Writes the value of Q to an Output specified by the next byte of Pro
 D1 | OUTA | Writes the value of A to an Output specified by the next byte of Program Memory.
 D2 | OUTB | Writes the value of B to an Output specified by the next byte of Program Memory.
 
-### Input Operations: 3 Instructions
+### Input Operations: 2 Instructions
 Hex Code | Mnemonic | Description
 -- | -- | --
 E0 | INA | Writes the value of an Input to A. The input port is specified the next byte of Program Memory.
 E1 | INB | Writes the value of an Input to B. The input port is specified the next byte of Program Memory.
-E2 | IND | Writes the value of an Input to Data Memory at the location referenced by the Data Pointer. The input port is specified by the next byte of Program Memory.
 
 ### Special Operations: 2 Instructions
 Hex Code | Mnemonic | Description

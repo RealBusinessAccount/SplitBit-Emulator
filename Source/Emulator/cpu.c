@@ -276,10 +276,11 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
         break;
         case 0x33:
             // PSHD - Push the Data Pointer Address to the Stack.
-            // Order, low byte, high byte
-            cpu->Data[cpu->StackPointer] = cpu->DataPointer & 0xFF;
-            cpu->StackPointer--;
+            // Order, high byte, low byte
+            // This ordering makes it easier to add offsets with register math.
             cpu->Data[cpu->StackPointer] = (cpu->DataPointer >> 8) & 0xFF;
+            cpu->StackPointer--;
+            cpu->Data[cpu->StackPointer] = cpu->DataPointer & 0xFF;
             cpu->StackPointer--;
         break;
         case 0x34:
@@ -296,9 +297,9 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
         case 0x36:
             // POPD - Pop Data Address from the Stack.
             cpu->StackPointer++;
-            cpu->DataPointer = (uint16_t)cpu->Data[cpu->StackPointer] << 8;
+            cpu->DataPointer = (uint16_t)cpu->Data[cpu->StackPointer];
             cpu->StackPointer++;
-            cpu->DataPointer |= (uint16_t)cpu->Data[cpu->StackPointer];
+            cpu->DataPointer |= (uint16_t)cpu->Data[cpu->StackPointer] << 8;
         break;
         //
         // 4x - Data Operations:
@@ -380,11 +381,6 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             // INB - Read an Input to B.
             cpu->ProgramCounter++;
             cpu->B = InputHandler(cpu->Program[cpu->ProgramCounter]);
-        break;
-        case 0xE2:
-            // IND - Read an Input to Data Memory.
-            cpu->ProgramCounter++;
-            cpu->Data[cpu->DataPointer] = InputHandler(cpu->Program[cpu->ProgramCounter]);
         break;
         //
         // Fx - Special Operations:

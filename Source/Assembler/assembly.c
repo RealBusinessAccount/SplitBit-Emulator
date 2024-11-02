@@ -68,7 +68,6 @@ Instruction instruction_set[] = {
     // Input Operations:
     {0xE0, "INA"},
     {0xE1, "INB"},
-    {0xE2, "IND"},
     // Special Operations:
     {0xF0, "NOP"},
     {0xFF, "HALT"}
