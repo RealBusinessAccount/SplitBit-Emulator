@@ -3,8 +3,9 @@
 # 10/16/2024
 
 # Compiler and flags
-CC = gcc
-CFLAGS = -Wall
+CC ?= gcc
+CFLAGS ?= -Wall -Os
+PREFIX ?= /usr/local
 
 # Directories
 SRC_DIR_EMU = Source/Emulator
@@ -48,5 +49,10 @@ clean:
 	rm -rf $(OBJ_DIR)
 	rm -f $(EMU_TARGET) $(ASM_TARGET)
 
+# Install compiled binaries
+install: $(EMU_TARGET) $(ASM_TARGET)
+	mkdir -p "$(PREFIX)/bin"
+	install -m 755 $^ "$(PREFIX)/bin/"
+
 # Phony targets
-.PHONY: all clean
+.PHONY: all clean install
