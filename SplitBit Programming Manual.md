@@ -41,7 +41,7 @@ Hex Code | Mnemonic | Description
 1F | RET  | Restores all registers from the Stack, then immediately branches to the Return Address by setting the Program Counter to the next instruction after the last CALL.
 
 
-### Register Operations: 11 Instructions
+### Register Operations: 9 Instructions
 | Hex Code | Mnemonic | Description         |
 | -------- | -------- | ------------------- |
 | 20       | RSTA     | Resets A to 0.      |
@@ -50,11 +50,9 @@ Hex Code | Mnemonic | Description
 | 23       | INCB     | Adds 1 to B.        |
 | 24       | DECA     | Subtracts 1 from A. |
 | 25       | DECB     | Subtracts 1 from B. |
-| 26       | LDA	  | Loads Data to A via the Data Pointer. |
-| 27	   | LDB      | Loads Data to B via the Data Pointer.
-| 28	   | INIA     | Loads the next byte of Program Memory to A. |
-| 29       | INIB     | Loads the next byte of Program Memory to B. |
-| 2F	   | CCF      | Clears the Carry Flag. |
+| 26	   | INIA     | Loads the next byte of Program Memory to A. |
+| 27       | INIB     | Loads the next byte of Program Memory to B. |
+| 28	   | CCF      | Clears the Carry Flag. |
 
 ### Stack Operations: 7 Instructions
 Hex Code | Mnemonic | Description
@@ -65,7 +63,7 @@ Hex Code | Mnemonic | Description
 33 | PSHD | Stores the Data Pointer to the stack, with the low byte on top. Increments the Stack Pointer by two.
 34 | POPA | Reads the location referenced by the Stack Pointer from Data Memory into A then increments the Stack Pointer.
 35 | POPB | Reads the location referenced by the Stack Pointer from Data Memory into B then increments the Stack Pointer.
-36 | POPD | Restores the Program Counter from the stack, increments the Stack Pointer by two.
+36 | POPD | Restores the Data Pointer from the stack, increments the Stack Pointer by two.
 
 ### Data Operations: 10 Instructions
 Hex Code | Mnemonic | Description
