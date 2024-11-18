@@ -235,24 +235,16 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             cpu->B--;
         break;
         case 0x26:
-            // LDA - Load the byte referenced by the Data Pointer to A.
-            cpu->A = cpu->Data[cpu->DataPointer];
-        break;
-        case 0x27:
-            // LDB - Load the byte referenced by the Data Pointer to B.
-            cpu->B = cpu->Data[cpu->DataPointer];
-        break;
-        case 0x28:
             // INIA - Initialize A Immediately from Program Memory.
             cpu->ProgramCounter++;
             cpu->A = cpu->Program[cpu->ProgramCounter];
         break;
-        case 0x29:
+        case 0x27:
             // INIB - Initialize A Immediately from Program Memory.
             cpu->ProgramCounter++;
             cpu->B = cpu->Program[cpu->ProgramCounter];
         break;
-        case 0x2F:
+        case 0x28:
             // CCF - Clear the Carry Flag.
             cpu->Status &= ~0x01;
         break;
