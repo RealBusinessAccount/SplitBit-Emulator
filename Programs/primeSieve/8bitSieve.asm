@@ -8,8 +8,8 @@ start:
   ; Search the list until we find a prime.
   SETD DataTop
   CCF ; Clear the carry flag. In later cycles, the carry flag will be set at the end of the next loop. We'll want it cleared.
-  INIA 0x00
-  INIB 0x00
+  RSTA
+  RSTB
  findPrimeLoop:
   LDB ; Load an element into B.
   BRB foundPrime ; If it's zero, it's a prime.

@@ -32,7 +32,7 @@ printString:                ; Expects Data Pointer to be set to the beginning of
   INCD                      ; Increment Data Pointer to the next character.
   BRI printString           ; Branch to the beginning of the loop.
  printDone:
-  RET                     ; Return to the caller.
+  RET                       ; Return to the caller.
 
 ; Expects A to contain the value to be printed in decimal form.
 printByteDecimal:
@@ -131,6 +131,8 @@ DecimalValue:
   0x00        ; The ones place.
   0x00        ; The tens place.
   0x00        ; The hundreds place.
+
+; For convenience, I'll pad this out so programs using this library store their data in a fresh page of memory.
 
 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
