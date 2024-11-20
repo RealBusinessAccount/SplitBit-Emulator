@@ -8,7 +8,7 @@ printDigitTest:
   SUB
   CCF
   BRQ printDigitTestend
-  CALL lineFeed
+  CALL blankSpace
   BRI printDigitTestLoop
  printDigitTestend:
   CALL lineFeed

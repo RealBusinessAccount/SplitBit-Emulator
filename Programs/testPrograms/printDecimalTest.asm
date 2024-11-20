@@ -3,17 +3,15 @@
 #Program
 
 printByteDecimalTest:
-  INIB 0xFF                 ; Load 255 into B.
+  INIB 0xFF   ; Load 255 into B.
  printDecimalTestloop:
-  SUB
-  CCF                       ; Clear the Carry Flag.
-  CALL printByteDecimal         ; Print the value.
-  INCA                      ; Increment it.
-  PSHA
-  INIA 0x00
+ ; Print A and a blank space.
+  CALL printByteDecimal
   CALL blankSpace
-  POPA
-  BRQ printDecimalTestend                   ; If Q is zero, we're done.
+  INCA    ; Increment A.
+  DECB    ; Decrement B.
+  ; If B underflows, we're done.
+  BRC printDecimalTestend
   BRI printDecimalTestloop  ; Branch back to the start of the loop.
  printDecimalTestend:
   CALL lineFeed

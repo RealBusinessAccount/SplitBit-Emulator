@@ -1,21 +1,25 @@
 ; A test for the new math subroutines.
 
 #Include ../Libraries/print.asm
-#Include ../Libraries/math.asm
+#Include ../Libraries/int8.asm
+#Include ../Libraries/int16.asm
 
 #Program
  start:
   SETD SomeInt16Operands
-  CALL int16sub
-  BRC end
+  CALL int16div
   LDA
   CALL printByteHex
   INCD
   LDA
   CALL printByteHex
-  INIA 0x3A
-  OUTA 0x00
-  BRI start
+  CALL blankSpace
+  INCD
+  LDA
+  CALL printByteHex
+  INCD
+  LDA
+  CALL printByteHex
  end:
   CALL lineFeed
   HALT
@@ -23,5 +27,5 @@
 #Data
 
 SomeInt16Operands:
-  0xFF 0xFF
-  0x00 0x01
+  0x01 0xF4
+  0x00 0x0A
