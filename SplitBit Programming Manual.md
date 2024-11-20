@@ -3,12 +3,30 @@
 SplitBit is a small 8 bit CPU.
 It is a Harvard Architecture machine with a separate 64k memory space for its Program and another for its Data.
 
-It has six registers:
- - The A and B Registers are the 8 bit operands for the ALU. All ALU operations use them as operands. They can also be used as general purpose accumulators.
- - The Q Register is the 8 bit ALU output register, all ALU operations store their result in it.
- - The Program Counter is a 16 bit pointer into the Program Memory. It points to the current operation the CPU is executing. It initializes at address 0x0000.
- - The Data Pointer is a 16 bit pointer into the Data Memory. It points to the current byte of data that the CPU can read or write to, and can be set arbitrarily by the programmer to any value in the Data Memory. It initializes at location 0x0000.
- - The Stack Pointer is a 16 bit pointer into the Data Memory. It points to the current element of the stack, and is only ever modified by the use of the push and pop instructions. It initializes at location 0xFFFF.
+It has seven registers:
+ - The A and B Registers are each a general purpose 8 bit register.
+	 - A and B are the operand registers for the ALU.
+	 - A and B together form a 16-bit circular shift register, AB, in the context of the bit shift instructions, SHL and SHR.
+	 - ALU operations do not overwrite A or B.
+	 - A and B are preserved through subroutine calls. They can pass two bytes to a subroutine, but cannot directly pass bytes back from a subroutine.
+
+ - The Q Register is the 8 bit ALU output register.
+	 - All ALU operations store their result in Q.
+	 - Q is not preserved through subroutine calls. It can be used to pass a one byte result back to the calling routine.
+
+ - The Program Counter is a 16 bit pointer into the Program Memory.
+ 	 - The PC points to the current operation the CPU is executing, it initializes at Program Address 0x0000.
+ 	 - The PC is only modified by the branch instructions and the CALL and RET instructions. It cannot be directly set by the programmer.**
+
+ - The Data Pointer is a 16 bit pointer into the Data Memory.
+ 	 - The DP points to the current byte of data that the CPU can read or write to, it initializes at Data Address 0x0000.
+ 	 - The DP can be set arbitrarily by the programmer to any value.
+
+ - The Stack Pointer is a 16 bit pointer into the Data Memory.
+ 	 - The SP points to the current element of the stack, it initializes at location 0xFFFF.
+ 	 - The SP value is only modified by the push and pop instructions and cannot be set by the programmer.
+ 	 - The SP must always be greater than the DP. If not, the CPU will recognize that the Stack and Data have collided and will halt.
+
  - The Status register is an 8 bit register whose various bits are used as flags. Only three of these flags are used in the current implementation.
 	 - Bit 0 is the Carry/Borrow Flag. Any arithmetic operation either sets or clears it depending on whether or not the result causes Q to overflow/underflow. It is a 1 if a carry/underflow occurred, and a 0 otherwise.
 	 - Bit 1 is the Stack Collision Flag. It is set if the Data Pointer's value ever meets or exceeds the Stack Pointer's value. This condition also sets the Halt Flag.
@@ -37,8 +55,8 @@ Hex Code | Mnemonic | Description
 12 | BRA | Branch on A. If A is zero, loads the immediate next two bytes of Program Memory into the Program Counter.
 13 | BRB | Branch on B. If B is zero, loads the immediate next two bytes of Program Memory into the Program Counter.
 14 | BRC  | Branch if Carry is set.
-17 | CALL | Call subroutine. Stores all the registers to the Stack, A, B, Q, the Data Pointer, and the Program Counter, then performs an immediate branch.
-1F | RET  | Restores all registers from the Stack, then immediately branches to the Return Address by setting the Program Counter to the next instruction after the last CALL.
+17 | CALL | Call subroutine. Stores all the registers to the Stack, A, B, and the Program Counter, then performs an immediate branch.
+1F | RET  | Restores the saved registers from the Stack, then immediately branches to the Return Address by setting the Program Counter to the next instruction after the last CALL.
 
 
 ### Register Operations: 9 Instructions
@@ -128,7 +146,7 @@ End:
 ```
 
 ### Structure of a SplitBit Binary File:
-The Program and Data values are both stored in a single file for loading into the system. The Program Segment must come first, then the Data Segment. The system will look for a three letter header, PRG for program and DAT for data. After the header is a two byte value representing the length of the segment. The system loads the memories with the bytes from the file in sequence starting from address 0x0000.
+The Program and Data values are both stored in a single file for loading into the system. The Program Segment must come first, then the Data Segment. The system will look for a three letter header, PRG for program and DAT for data. After the header is a two byte value representing the length of the segment. The length is stored little endian, which is typical for all values in SplitBit. The system loads the memories with the bytes from the file in sequence starting from address 0x0000.
 
 Here's an example hex dump of the hello world program stored in the proper format:
 

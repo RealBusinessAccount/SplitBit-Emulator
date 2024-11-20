@@ -43,9 +43,6 @@ void genericCall(CPURegisters *cpu){
     cpu->StackPointer--;
     cpu->Data[cpu->StackPointer] = (cpu->DataPointer >> 8) & 0xFF;
     cpu->StackPointer--;
-    // Push Q to the Stack.
-    cpu->Data[cpu->StackPointer] = cpu->Q;
-    cpu->StackPointer--;
     // Push B to the Stack.
     cpu->Data[cpu->StackPointer] = cpu->B;
     cpu->StackPointer--;
@@ -159,29 +156,6 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             // CALL - Push the Program Counter to the Stack, and perform an immediate branch.
             genericCall(cpu);
         break;
-        // case 0x18:
-        //     // CALLA
-        //     if (cpu->A == 0) {
-        //         genericCall(cpu);
-        //     }
-        // break;
-        // case 0x19:
-        //     // CALLB
-        //     if (cpu->B == 0) {
-        //         genericCall(cpu);
-        //     }
-        // break;
-        // case 0x1A:
-        //     // CALLQ
-        //     if (cpu->Q == 0) {
-        //         genericCall(cpu);
-        //     }
-        // case 0x1B:
-        //     // CALLCF
-        //     if (cpu->Status & 0x01) {
-        //         genericCall(cpu);
-        //     }
-        // break;
         case 0x1F:
             // RET - Return from subroutine, restore the registers and set the Program Counter to the Return Address.
             // Pop A from the Stack.
@@ -190,9 +164,6 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             // Pop B from the Stack.
             cpu->StackPointer++;
             cpu->B = cpu->Data[cpu->StackPointer];
-            // Pop Q from the Stack.
-            cpu->StackPointer++;
-            cpu->Q = cpu->Data[cpu->StackPointer];
             // Pop the Data Pointer from the Stack.
             cpu->StackPointer++;
             cpu->DataPointer = (uint16_t)cpu->Data[cpu->StackPointer] << 8;
@@ -220,18 +191,42 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
         break;
         case 0x22:
             // INCA - Add 1 to A.
+            // Set the Carry Flag if the register overflows.
+            if (cpu->A == 0xFF) {
+                cpu->Status |= 0x01;
+            } else {
+                cpu->Status &= ~0x01;
+            }
             cpu->A++;
         break;
         case 0x23:
             // INCB - Add 1 to B.
+            // Set the Carry Flag if the register overflows.
+            if (cpu->B == 0xFF) {
+                cpu->Status |= 0x01;
+            } else {
+                cpu->Status &= ~0x01;
+            }
             cpu->B++;
         break;
         case 0x24:
             // DECA - Subtract 1 from A.
+            // Set the Carry Flag if the register underflows.
+            if (cpu->A == 0x00) {
+                cpu->Status |= 0x01;
+            } else {
+                cpu->Status &= ~0x01;
+            }
             cpu->A--;
         break;
         case 0x25:
             // DECB - Subtract 1 from B.
+            // Set the Carry Flag if the register underflows.
+            if (cpu->B == 0x00) {
+                cpu->Status |= 0x01;
+            } else {
+                cpu->Status &= ~0x01;
+            }
             cpu->B--;
         break;
         case 0x26:
