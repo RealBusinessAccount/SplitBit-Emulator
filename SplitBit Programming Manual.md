@@ -29,7 +29,7 @@ It has seven registers:
  	 - The SP must always be greater than the DP. If not, the CPU will recognize that the Stack and Data have collided and will halt.
 
  - The Status register is an 8 bit register whose various bits are used as flags. Only three of these flags are used in the current implementation.
-	 - Bit 0 is the Carry/Borrow Flag. Any arithmetic operation either sets or clears it depending on whether or not the result causes Q to overflow/underflow. It is a 1 if a carry/underflow occurred, and a 0 otherwise.
+	 - Bit 0 is the Carry/Borrow Flag. Any arithmetic operation either sets or clears it depending on whether or not the result causes Q to overflow/underflow. It is a 1 if a carry/underflow occurred, and a 0 otherwise. If A or B overflows or underflows from the use of an increment or decrement instruction, this flag will also be set. Non-overflowing increments or decrements will also reset it.
 	 - Bit 1 is the Stack Collision Flag. It is set if the Data Pointer's value ever meets or exceeds the Stack Pointer's value. This condition also sets the Halt Flag.
 	 - Bit 7 is the Halt Flag. It is set by the HALT instruction, or if there is a stack collision.
 
@@ -65,10 +65,10 @@ It has seven registers:
 | -- | ---- | -- |
 | 20 | RSTA     | Resets A to 0.      |
 | 21 | RSTB     | Resets B to 0.      |
-| 22 | INCA     | Adds 1 to A.        |
-| 23 | INCB     | Adds 1 to B.        |
-| 24 | DECA     | Subtracts 1 from A. |
-| 25 | DECB     | Subtracts 1 from B. |
+| 22 | INCA     | Adds 1 to A. If it overflows, it sets the Carry Flag, otherwise, it resets it. |
+| 23 | INCB     | Adds 1 to B. If it overflows, it sets the Carry Flag, otherwise, it resets it. |
+| 24 | DECA     | Subtracts 1 from A. If it underflows, it sets the Carry Flag, otherwise, it resets it. |
+| 25 | DECB     | Subtracts 1 from B. If it underflows, it sets the Carry Flag, otherwise, it resets it. |
 | 26 | INIA     | Loads the next byte of Program Memory to A. |
 | 27 | INIB     | Loads the next byte of Program Memory to B. |
 | 28 | CCF      | Clears the Carry Flag. |
