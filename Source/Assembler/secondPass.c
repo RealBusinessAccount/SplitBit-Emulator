@@ -195,5 +195,5 @@ void writeOutputFile(const char *outputFileName, uint8_t *Program, int programCo
 
     fclose(outputFile);
     printf("Successfully wrote SplitBit binary to \"%s\".\n", outputFileName);
-    printf(GREEN "  Program Segment size: %d bytes.\n  Data Segment size: %d bytes.\n    Total size: %d bytes." RESET, programCount, dataCount, (programCount+dataCount+10));
+    printf(GREEN "  Program Segment size: %d bytes.\n  Data Segment size: %d bytes.\n    Total size: %d bytes.\n" RESET, programCount, dataCount, (programCount+dataCount+10));
 }

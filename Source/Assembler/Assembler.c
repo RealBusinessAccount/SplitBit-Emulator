@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
 
     char *fileName = argv[1];
     int index = 0;
-    loadFile(intermediateArray, fileName, &index, &arraySize);
+    loadFile(&intermediateArray, fileName, &index, &arraySize);
     populateLabelTable(intermediateArray, index);
     fillInLabelAddresses(intermediateArray, index);
     populateOutputBuffers(intermediateArray, index, Program, &programLength, Data, &dataLength);

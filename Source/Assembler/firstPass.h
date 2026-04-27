@@ -14,7 +14,7 @@
 
 void freeIncludeList();
 
-int loadFile(intermediateElement *intermediateArray, char *fileName, int *intermediateIndex, size_t *arraySize);
+int loadFile(intermediateElement **intermediateArray, char *fileName, int *intermediateIndex, size_t *arraySize);
 
 #endif // FIRSTPASS_H
 

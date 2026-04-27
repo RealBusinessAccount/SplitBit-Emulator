@@ -44,7 +44,7 @@ void addIncludedFile(const char *fileName) {
     }
 }
 
-int loadFile(intermediateElement *intermediateArray, char *fileName, int *intermediateIndex, size_t *arraySize){
+int loadFile(intermediateElement **intermediateArray, char *fileName, int *intermediateIndex, size_t *arraySize){
     // Initial setup.
     addIncludedFile(fileName);
     int status = NOWHERE;
@@ -56,10 +56,10 @@ int loadFile(intermediateElement *intermediateArray, char *fileName, int *interm
         exit(1);
     }
     // Read off tokens.
-    while (readToken(&intermediateArray[*intermediateIndex], file, &lineNumber)) {
+    while (readToken(&(*intermediateArray)[*intermediateIndex], file, &lineNumber)) {
         if (*intermediateIndex >= *arraySize - 1) {
             *arraySize *= 2;  // Double the size of the array
-            intermediateArray = realloc(intermediateArray, *arraySize * sizeof(intermediateElement));
+            *intermediateArray = realloc(*intermediateArray, *arraySize * sizeof(intermediateElement));
             if (!intermediateArray) {
                 fprintf(stderr, RED "Error: Memory reallocation failed.\n" RESET);
                 exit(1);
@@ -67,10 +67,10 @@ int loadFile(intermediateElement *intermediateArray, char *fileName, int *interm
         }
         //printf("Token number %d\n", intermediateIndex);
         // Go ahead and mark what we already know about this token.
-        intermediateArray[*intermediateIndex].fileName = fileName;
-        intermediateArray[*intermediateIndex].lineNumber = lineNumber;
+        (*intermediateArray)[*intermediateIndex].fileName = fileName;
+        (*intermediateArray)[*intermediateIndex].lineNumber = lineNumber;
         // Take a look at it and determine what it is.
-        int testValue = checkIfKeyword(&intermediateArray[*intermediateIndex]);
+        int testValue = checkIfKeyword(&(*intermediateArray)[*intermediateIndex]);
         if(testValue > 0) {
             switch (testValue){
                 case KEYWORD_INCLUDE:
@@ -78,8 +78,8 @@ int loadFile(intermediateElement *intermediateArray, char *fileName, int *interm
                     status = NOWHERE;
                     // Get the filename and load up the file.
                     (*intermediateIndex)++;
-                    readToken(&intermediateArray[*intermediateIndex], file, &lineNumber);
-                    char *includeFile = intermediateArray[*intermediateIndex].token;
+                    readToken(&(*intermediateArray)[*intermediateIndex], file, &lineNumber);
+                    char *includeFile = (*intermediateArray)[*intermediateIndex].token;
                     if (isFileIncluded(includeFile)) {
                         fprintf(stderr, RED "Error: File %s is included more than once.\n" RESET, includeFile);
                         printf(" File: %s at line %d.\n", fileName, lineNumber);
@@ -97,7 +97,7 @@ int loadFile(intermediateElement *intermediateArray, char *fileName, int *interm
                 break;
             }
         // Next, check to see if it's an instruction.
-        } else if (checkIfInstruction(&intermediateArray[*intermediateIndex])) {
+        } else if (checkIfInstruction(&(*intermediateArray)[*intermediateIndex])) {
             // We should check if we're set up to mark this for the Program Segment.
             if (status != PROGRAM) {
                 fprintf(stderr, RED "Error: Attempting to assemble outside the Program Segment.\n Did you forget to use the #Program keyword?\n" RESET);
@@ -105,7 +105,7 @@ int loadFile(intermediateElement *intermediateArray, char *fileName, int *interm
                 exit(1);
             }
         // Next, check if it's a literal value.
-        } else if (checkIfLiteralValue(&intermediateArray[*intermediateIndex])) {
+        } else if (checkIfLiteralValue(&(*intermediateArray)[*intermediateIndex])) {
             // We should check to make sure we have a destination for it.
             if (status == NOWHERE) {
                 fprintf(stderr, RED "Error: Attempting to write a value to nowhere!\n Did you forget to use the #Program or #Data keyword?\n" RESET);
@@ -114,8 +114,8 @@ int loadFile(intermediateElement *intermediateArray, char *fileName, int *interm
             }
         // Finally, check if it's a label or label definition.
         // First, make sure it hasn't already been marked as a string literal.
-        } else if (intermediateArray[*intermediateIndex].type != STRING) {
-            if (checkIfLabel(&intermediateArray[*intermediateIndex])) {
+        } else if ((*intermediateArray)[*intermediateIndex].type != STRING) {
+            if (checkIfLabel(&(*intermediateArray)[*intermediateIndex])) {
                 if (status == NOWHERE) {
                     fprintf(stderr, RED "Error: Attempting to create or use a label nowhere!\n Did you forget to use the #Program or #Data keyword?\n" RESET);
                     printf(" File: %s at line %d.\n", fileName, lineNumber);
@@ -123,7 +123,7 @@ int loadFile(intermediateElement *intermediateArray, char *fileName, int *interm
                 }
             }
         }
-        intermediateArray[*intermediateIndex].destination = status;
+        (*intermediateArray)[*intermediateIndex].destination = status;
         (*intermediateIndex)++;
     }
     return 0;
