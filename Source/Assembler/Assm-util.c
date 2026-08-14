@@ -9,6 +9,7 @@
 #include <ctype.h>
 #include "Assm-util.h"
 #include "assembly.h"
+#include "../Emulator/cpu.h" // For DATA_POINTERS, so the CPU stays the one source of truth.
 
 int debug = 0;
 
@@ -43,42 +44,105 @@ int checkIfKeyword(intermediateElement *currentElement) {
 
 int checkIfInstruction(intermediateElement *currentElement) {
     char token[32];
-    strncpy(token, currentElement->token, sizeof(token)-1); //copying over one less than the total size of the buffer ensures we wind up with a null terminated string.
-    toUppercase(token);
-    if (getOpcode(token) != 0xFE) {
-        // It's a valid instruction, save its value and set its type.
-        currentElement->type = INSTRUCTION;
-        currentElement->byteValue = getOpcode(token);
-        currentElement->byteLength = 1;
-        if (debug) printf("Token: %s is an instruction.\n", currentElement->token);
-        return 1;
+    if (strlen(currentElement->token) >= sizeof(token)) {
+        // Longer than any mnemonic could be, so it is not one.
+        return 0;
     }
-    return 0;
+    strcpy(token, currentElement->token);
+    toUppercase(token);
+
+    // An instruction that works through a Data Pointer may name which one by
+    // hanging a selector off the mnemonic, as in LDA.2. Split that off before
+    // looking the mnemonic up.
+    char *selector = strchr(token, '.');
+    if (selector) {
+        *selector = '\0';
+        selector++;
+    }
+
+    uint8_t opcode = getOpcode(token);
+    if (opcode == 0xFE) {
+        // It's not an instruction.
+        return 0;
+    }
+
+    currentElement->type = INSTRUCTION;
+    currentElement->byteValue = opcode;
+    currentElement->byteLength = 1;
+    currentElement->dataPointer = 0;
+
+    if (instructionTakesDataPointer(opcode)) {
+        // The selector is emitted whether or not it was written, so these are
+        // always two bytes. Leaving it off is the same as writing 0.
+        currentElement->byteLength = 2;
+        if (selector) {
+            char *end;
+            long value = strtol(selector, &end, 10);
+            if (*selector == '\0' || *end != '\0' || value < 0 || value >= DATA_POINTERS) {
+                fprintf(stderr, RED "Error: \"%s\" does not name a Data Pointer.\n Selectors run from 0 to %d.\n" RESET, currentElement->token, DATA_POINTERS - 1);
+                printf(" File: %s at line %d.\n", currentElement->fileName, currentElement->lineNumber);
+                exit(1);
+            }
+            currentElement->dataPointer = (uint8_t)value;
+        }
+    } else if (selector) {
+        fprintf(stderr, RED "Error: %s does not work through a Data Pointer, so it cannot take a selector.\n" RESET, token);
+        printf(" File: %s at line %d.\n", currentElement->fileName, currentElement->lineNumber);
+        exit(1);
+    }
+
+    if (debug) printf("Token: %s is an instruction using Data Pointer %d.\n", currentElement->token, currentElement->dataPointer);
+    return 1;
 }
 
 int checkIfLiteralValue(intermediateElement *currentElement) {
-    char token[32];
-    strncpy(token, currentElement->token, sizeof(token)-1);
-    if (token[0] == '0') {
-        // It's a literal value. Check if it's hex or dec.
-        if(token[1] == 'x') {
-            // It's a hex literal. Set its value and type.
-            currentElement->type = VALUE;
-            currentElement->byteLength = 1;
-            memmove(token, token + 2, strlen(token)); // Shift the string over to get rid of the 0x.
-            currentElement->byteValue = (uint8_t)strtol(token, NULL, 16);
-            if (debug) printf("Token: %s is a hexadecimal literal. \n", currentElement->token);
-        } else if (token[1] == 'd') {
-            // It's a decimal literal. Set its value and type.
-            currentElement->type = VALUE;
-            currentElement->byteLength = 1;
-            memmove(token, token + 2, strlen(token)); // Shift the string over to get rid of the 0d.
-            currentElement->byteValue = (uint8_t)strtol(token, NULL, 10);
-            if (debug) printf("Token: %s is a decimal literal. \n", currentElement->token);
-        }
-        return 1;
+    const char *token = currentElement->token;
+    if (token[0] != '0') {
+        // It's not a literal value.
+        return 0;
     }
-    return 0;
+    // A leading zero means the programmer was trying to write a literal, so anything
+    // malformed from here on is an error. Falling through to the label check instead
+    // would quietly emit the wrong number of bytes and shift the rest of the program.
+    int base;
+    const char *baseName;
+    if (token[1] == 'x') {
+        base = 16;
+        baseName = "hexadecimal";
+    } else if (token[1] == 'd') {
+        base = 10;
+        baseName = "decimal";
+    } else {
+        fprintf(stderr, RED "Error: Malformed literal value \"%s\".\n Literals must be prefaced with 0x for hexadecimal or 0d for decimal.\n" RESET, token);
+        printf(" File: %s at line %d.\n", currentElement->fileName, currentElement->lineNumber);
+        exit(1);
+    }
+    // Everything after the prefix has to be a digit in that base.
+    const char *digits = token + 2;
+    if (*digits == '\0') {
+        fprintf(stderr, RED "Error: Literal value \"%s\" has no digits after its prefix.\n" RESET, token);
+        printf(" File: %s at line %d.\n", currentElement->fileName, currentElement->lineNumber);
+        exit(1);
+    }
+    for (const char *c = digits; *c; c++) {
+        if (!(base == 16 ? isxdigit((unsigned char)*c) : isdigit((unsigned char)*c))) {
+            fprintf(stderr, RED "Error: \"%c\" is not a %s digit, in literal value \"%s\".\n" RESET, *c, baseName, token);
+            printf(" File: %s at line %d.\n", currentElement->fileName, currentElement->lineNumber);
+            exit(1);
+        }
+    }
+    // The digits are all valid, so the only thing left to get wrong is the range.
+    long value = strtol(digits, NULL, base);
+    if (value > 255) {
+        fprintf(stderr, RED "Error: Literal value \"%s\" is too large to fit in one byte.\n Values must be in the range 0x00 to 0xFF, or 0d0 to 0d255.\n" RESET, token);
+        printf(" File: %s at line %d.\n", currentElement->fileName, currentElement->lineNumber);
+        exit(1);
+    }
+    currentElement->type = VALUE;
+    currentElement->byteLength = 1;
+    currentElement->byteValue = (uint8_t)value;
+    if (debug) printf("Token: %s is a %s literal. \n", token, baseName);
+    return 1;
 }
 
 int checkIfLabel(intermediateElement *currentElement) {

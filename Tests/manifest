@@ -1,0 +1,65 @@
+# SplitBit test manifest
+# Written by Anachronaut
+#
+# One test per line, fields separated by '|'. Blank lines and lines starting
+# with '#' are ignored.
+#
+#   name | source | assemble-from | mode | stdin | limit
+#
+# source and assemble-from are both relative to Programs/. assemble-from exists
+# because #Include paths resolve against the current directory rather than
+# against the including file, so each program has one directory it builds in.
+#
+# Modes:
+#   run       Assemble, execute, compare all output against Tests/expected/<name>.out
+#   assemble  Assemble only. For library files that have no entry point to run
+#   xfail     Assembly is expected to fail. Records a known breakage so that
+#             fixing one is noticed, and so an accidental new one is too
+#
+# limit is a cycle count, for programs that never halt on their own. It is passed
+# to the emulator as --cycles, which bounds the run by cycles rather than by wall
+# clock time and so keeps the recorded output identical from one run to the next.
+# Every program is run with --fast, since the emulated cycle rate has no bearing
+# on what a program prints.
+
+# ---- Programs that halt on their own ----
+hello                | hello.asm                          | .            | run      | -                  | -
+printHello           | printHello.asm                     | .            | run      | -                  | -
+8bitFibonacci        | Fibonacci/8bitFibonacci.asm        | .            | run      | -                  | -
+16bitFibonacci       | Fibonacci/16bitFibonacci.asm       | .            | run      | -                  | -
+32bitFibonacci       | Fibonacci/32bitFibonacci.asm       | .            | run      | -                  | -
+8bitSieve            | primeSieve/8bitSieve.asm           | primeSieve   | run      | -                  | -
+16bitSegmentedSieve  | primeSieve/16bitSegmentedSieve.asm | .            | run      | -                  | -
+mathTest             | testPrograms/mathTest.asm          | testPrograms | run      | -                  | -
+printTest            | testPrograms/printTest.asm         | testPrograms | run      | -                  | -
+int16print           | Libraries/int16print.asm           | Libraries    | run      | -                  | -
+
+# ---- The multiple Data Pointer behaviour, which nothing else exercises ----
+dataPointerTest      | testPrograms/dataPointerTest.asm    | testPrograms | run      | -                  | -
+twoPointerCopy       | testPrograms/twoPointerCopy.asm     | testPrograms | run      | -                  | -
+
+# ---- Programs driven by console input ----
+inputTest            | inputTest.asm                      | .            | run      | inputTest.in       | -
+inputTestOld         | testPrograms/inputTest.asm         | testPrograms | run      | inputTest.in       | -
+replCalculator       | replCalculator.asm                 | .            | run      | replCalculator.in  | -
+
+# ---- Programs that run forever by design, bounded by a cycle count ----
+# 3,000,000 cycles is about fourteen generations of the glider, which puts
+# evolveBoard and its pointer juggling through its paces many times over.
+16x16Life            | gameOfLife/16x16Life.asm           | .            | run      | -                  | 3000000
+
+# ---- Libraries: no entry point, so only check that they assemble ----
+lib-int8             | Libraries/int8.asm                 | .            | assemble | -                  | -
+lib-int16            | Libraries/int16.asm                | .            | assemble | -                  | -
+lib-int32            | Libraries/int32.asm                | .            | assemble | -                  | -
+lib-math             | Libraries/math.asm                 | .            | assemble | -                  | -
+
+# ---- Known breakages, recorded rather than ignored ----
+# print.asm branches to 'start', which only the including program defines.
+lib-print            | Libraries/print.asm                | .            | xfail    | -                  | -
+# These three call print.asm routines but have no #Include line at all.
+printDecimalTest     | testPrograms/printDecimalTest.asm  | testPrograms | xfail    | -                  | -
+printDigitTest       | testPrograms/printDigitTest.asm    | testPrograms | xfail    | -                  | -
+printHexTest         | testPrograms/printHexTest.asm      | testPrograms | xfail    | -                  | -
+# shiftTest includes "print.asm", which is not beside it.
+shiftTest            | testPrograms/shiftTest.asm         | testPrograms | xfail    | -                  | -

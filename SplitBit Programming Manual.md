@@ -3,7 +3,7 @@
 SplitBit is a small 8 bit CPU.
 It is a Harvard Architecture machine with a separate 64k memory space for its Program and another for its Data.
 
-It has seven registers:
+It has ten registers:
 
  - The A and B Registers are each a general purpose 8 bit register.
 	 - A and B are the operand registers for the ALU.
@@ -19,14 +19,13 @@ It has seven registers:
  	 - The PC points to the current operation the CPU is executing, it initializes at Program Address 0x0000.
  	 - The PC is only modified by the branch instructions and the CALL and RET instructions. It cannot be directly set by the programmer.**
 
- - The Data Pointer is a 16 bit pointer into the Data Memory.
- 	 - The DP points to the current byte of data that the CPU can read or write to, it initializes at Data Address 0x0000.
- 	 - The DP can be set arbitrarily by the programmer to any value.
+ - The Data Pointers (0-3) are 16 bit pointers into the Data Memory.
+ 	 - A DP points to the current bytes of data that the CPU can read or write to, it initializes at Data Address 0x0000.
+ 	 - A DP can be set arbitrarily by the programmer to any value.
 
  - The Stack Pointer is a 16 bit pointer into the Data Memory.
  	 - The SP points to the current element of the stack, it initializes at location 0xFFFF.
  	 - The SP value is only modified by the push and pop instructions and cannot be set by the programmer.
- 	 - The SP must always be greater than the DP. If not, the CPU will recognize that the Stack and Data have collided and will halt.
 
  - The Status register is an 8 bit register whose various bits are used as flags. Only three of these flags are used in the current implementation.
 	 - Bit 0 is the Carry/Borrow Flag. Any arithmetic operation either sets or clears it depending on whether or not the result causes Q to overflow/underflow. It is a 1 if a carry/underflow occurred, and a 0 otherwise. If A or B overflows or underflows from the use of an increment or decrement instruction, this flag will also be set. Non-overflowing increments or decrements will also reset it.
@@ -79,24 +78,24 @@ It has seven registers:
 | 30 | PSHQ | Stores Q into Data Memory at the location referenced by the Stack Pointer then decrements the Stack Pointer. |
 | 31 | PSHA | Stores A into Data Memory at the location referenced by the Stack Pointer then decrements the Stack Pointer. |
 | 32 | PSHB | Stores B into Data Memory at the location referenced by the Stack Pointer then decrements the Stack Pointer. |
-| 33 | PSHD | Stores the Data Pointer to the stack, with the low byte on top. Increments the Stack Pointer by two. |
+| 33 | PSHD | Stores the Data Pointer referenced by the next byte in Program Memory to the stack, with the low byte on top. Decrements the Stack Pointer by two. |
 | 34 | POPA | Reads the location referenced by the Stack Pointer from Data Memory into A then increments the Stack Pointer. |
 | 35 | POPB | Reads the location referenced by the Stack Pointer from Data Memory into B then increments the Stack Pointer. |
-| 36 | POPD | Restores the Data Pointer from the stack, increments the Stack Pointer by two. |
+| 36 | POPD | Restores the Data Pointer referenced by the next byte in Program Memory from the stack, increments the Stack Pointer by two. |
 
 ### Data Operations: 10 Instructions
 | Hex Code | Mnemonic | Description |
 | -- | ---- | -- |
-| 40 | INCD | Increments the Data Pointer. |
-| 41 | DECD | Decrements the Data Pointer. |
-| 42 | LDA  | Loads the byte referenced from Data Memory by the Data Pointer into A. |
-| 43 | LDB  | Loads the byte referenced from Data Memory by the Data Pointer into B. |
-| 44 | STQ  | Stores Q into the byte referenced by the Data Pointer in Data Memory. |
-| 45 | STA  | Stores A into the byte referenced by the Data Pointer in Data Memory. |
-| 46 | STB  | Stores B into the byte referenced by the Data Pointer in Data Memory. |
-| 47 | SETD | Loads the next two bytes of Program Memory into the Data Pointer. |
-| 48 | DPUP | Offset Data Pointer up by the value of the immediate next byte of Program Memory. |
-| 49 | DPDN | Offset Data Pointer down by the value of the immediate next byte of Program Memory. |
+| 40 | INCD | Increments the Data Pointer referenced by the next byte in Program Memory. |
+| 41 | DECD | Decrements the Data Pointer referenced by the next byte in Program Memory. |
+| 42 | LDA  | Loads the byte referenced from Data Memory by the Data Pointer into A referenced by the next byte in Program Memory. |
+| 43 | LDB  | Loads the byte referenced from Data Memory by the Data Pointer into B referenced by the next byte in Program Memory. |
+| 44 | STQ  | Stores Q into the byte referenced by the Data Pointer in Data Memory referenced by the next byte in Program Memory. |
+| 45 | STA  | Stores A into the byte referenced by the Data Pointer in Data Memory referenced by the next byte in Program Memory. |
+| 46 | STB  | Stores B into the byte referenced by the Data Pointer in Data Memory referenced by the next byte in Program Memory. |
+| 47 | SETD | Loads the next two bytes of Program Memory into the Data Pointer referenced by the next byte in Program Memory. |
+| 48 | DPUP | Offset Data Pointer referenced by the next byte in Program Memory up by the value of the immediate byte after of Program Memory. |
+| 49 | DPDN | Offset Data Pointer referenced by the next byte in Program Memory down by the value of the immediate byte after of Program Memory. |
 
 
 ### Output Operations: 3 Instructions

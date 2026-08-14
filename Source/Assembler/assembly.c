@@ -82,6 +82,28 @@ const char* getMnemonic(uint8_t opcode) {
     return "---";
 }
 
+int instructionTakesDataPointer(uint8_t opcode) {
+    // These instructions all work through a Data Pointer, and so are followed by a
+    // byte naming which one. Everything else is a single byte opcode as before.
+    switch (opcode) {
+        case 0x33: // PSHD
+        case 0x36: // POPD
+        case 0x40: // INCD
+        case 0x41: // DECD
+        case 0x42: // LDA
+        case 0x43: // LDB
+        case 0x44: // STQ
+        case 0x45: // STA
+        case 0x46: // STB
+        case 0x47: // SETD
+        case 0x48: // DPUP
+        case 0x49: // DPDN
+            return 1;
+        default:
+            return 0;
+    }
+}
+
 uint8_t getOpcode(char* mnemonic) {
     for (int i = 0; i < num_instructions; i++) {
         if (strcmp(instruction_set[i].mnemonic, mnemonic) == 0) {

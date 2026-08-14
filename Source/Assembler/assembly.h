@@ -12,4 +12,6 @@ const char* getMnemonic(uint8_t opcode);
 
 uint8_t getOpcode(char* mnemonic);
 
+int instructionTakesDataPointer(uint8_t opcode);
+
 #endif // CPU_H

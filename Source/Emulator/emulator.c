@@ -12,21 +12,65 @@
 #include "utility.h"
 #include <string.h>
 #include <getopt.h>
+#include <time.h>
 
-uint8_t debugEnable = 0;
-int cycleCount = 0;
+// nanoseconds per second
+#define NS_PER_SEC 1000000000LL
+#define CYCLE_RATE 1000000
+
+typedef struct {
+    long long  cycles_per_sec;   // e.g. 1000000 for 1 MHz
+    long long  accumulator_ns;   // unspent nanoseconds
+    struct timespec prev;
+} CycleTimer;
+
+static inline long long timespec_diff_ns(struct timespec a, struct timespec b) {
+    return (a.tv_sec - b.tv_sec) * NS_PER_SEC + (a.tv_nsec - b.tv_nsec);
+}
+
+void cycle_timer_init(CycleTimer *t, long long cycles_per_sec) {
+    t->cycles_per_sec  = cycles_per_sec;
+    t->accumulator_ns  = 0;
+    clock_gettime(CLOCK_MONOTONIC, &t->prev);
+}
+
+// Call once per host frame. Returns how many SplitBit cycles to execute.
+int cycle_timer_tick(CycleTimer *t) {
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+
+    long long elapsed = timespec_diff_ns(now, t->prev);
+    t->prev = now;
+
+    // optional: clamp to avoid spiral-of-death on hitches
+    if (elapsed > NS_PER_SEC / 10) elapsed = NS_PER_SEC / 10;
+
+    t->accumulator_ns += elapsed;
+
+    long long period_ns = NS_PER_SEC / t->cycles_per_sec;
+    int cycles = (int)(t->accumulator_ns / period_ns);
+    t->accumulator_ns %= period_ns;
+    return cycles;
+}
+
+// How many cycles to run between glances at the wall clock. In fast mode there is
+// no clock to keep pace with, so run a large batch before looking up.
+#define FAST_BATCH 65536
+
+unsigned long cycleCount = 0;
 char *programFile = NULL;
 
 // Memory Banks:
 uint8_t Program[0x10000], Data[0x10000];
 
 int main (int argc, char *argv[]) {
-    uint8_t test = parseOptions(argc, argv);
-    if (test == 1){
-        // Enable the Debug Mode.
-        debugEnable = 1;
-    } else if (test == 2){
-        // User asked for help or gave a bad option, don't execute.
+    EmulatorOptions options;
+    uint8_t result = parseOptions(argc, argv, &options);
+    if (result == OPTIONS_HELP) {
+        // The user asked for help and got it, which is not a failure.
+        return 0;
+    } else if (result == OPTIONS_ERROR) {
+        // Bad command line, don't execute.
         return 1;
     }
     if (optind < argc) {
@@ -47,18 +91,47 @@ int main (int argc, char *argv[]) {
     }
     CPURegisters cpu;
     initializeCPU(&cpu, Program, Data);
-    if(debugEnable) {
+    if(options.debug) {
         printRegisters(&cpu, Program, Data);
     }
-    while (!(cpu.Status & 0x80)) {
-        executeOperation(cpu.Program[cpu.ProgramCounter], &cpu);
-        cpu.ProgramCounter++;
-        cycleCount++;
-        if (debugEnable) {
+
+    CycleTimer timer;
+    cycle_timer_init(&timer, CYCLE_RATE);
+
+    uint8_t limitReached = 0;
+    while (!(cpu.Status & 0x80) && !limitReached) {
+        int cycles;
+        if (options.debug) {
+            // Debug mode advances one instruction per keypress, so the wall clock
+            // has no say in how many cycles to run.
+            cycles = 1;
+        } else if (options.fast) {
+            cycles = FAST_BATCH;
+        } else {
+            cycles = cycle_timer_tick(&timer);
+        }
+        for (int i = 0; i < cycles; i++) {
+            stepCPU(&cpu);
+            cycleCount++;
+            if (cpu.Status & 0x80) {
+                // We've halted.
+                break;
+            }
+            if (options.cycles && cycleCount >= options.cycles) {
+                limitReached = 1;
+                break;
+            }
+        }
+        if (options.debug) {
             getchar();
             printRegisters(&cpu, Program, Data);
-            printf("Cycle: %u\n", cycleCount);
+            printf("Cycle: %lu\n", cycleCount);
         }
     }
-    printf("Execution halted after %u cycles.\n", cycleCount);
+    if (limitReached) {
+        printf("Execution stopped after %lu cycles. (cycle limit reached)\n", cycleCount);
+    } else {
+        printf("Execution halted after %lu cycles.\n", cycleCount);
+    }
+    return 0;
 }

@@ -10,7 +10,18 @@
 #include <stdint.h>
 #include "cpu.h"
 
-uint8_t parseOptions(int argc, char *argv[]);
+// Results of reading the command line.
+#define OPTIONS_OK    0 // Carry on and run the program.
+#define OPTIONS_HELP  1 // The user asked for help, so stop, but not because of an error.
+#define OPTIONS_ERROR 2 // The command line was no good, stop and complain.
+
+typedef struct {
+    uint8_t debug;         // Step one instruction at a time, printing the registers.
+    uint8_t fast;          // Ignore the cycle rate and run as fast as the host allows.
+    unsigned long cycles;  // Stop after this many cycles. Zero means run until the program halts.
+} EmulatorOptions;
+
+uint8_t parseOptions(int argc, char *argv[], EmulatorOptions *options);
 
 void printHelp(const char *programName);
 

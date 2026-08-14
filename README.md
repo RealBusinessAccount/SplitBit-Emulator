@@ -37,7 +37,9 @@ make
 ./SplitBit [options] [binary file]
 ```
 #### Options:
-- -d, --debug: Enable debug mode to single step through cycles.
+- -d, --debug: Enable debug mode to single step through cycles. Each keypress advances one instruction.
+- -c, --cycles N: Stop after N cycles rather than running until the program halts. Useful for programs that never halt, and for getting the same output from a run every time.
+- -f, --fast: Run as fast as the host machine allows, ignoring the emulated cycle rate.
 - -h, --help: Show help and usage information.
 
 ### Usage:
@@ -46,6 +48,20 @@ make
 ```
 #### Notes:
 - The assembled binaries are saved with the same name as the assembly source file they're assembled from, with a .bin extension, in the same directory that you call the assembler from.
+
+### Tests:
+The test suite assembles and runs every program in Programs/ and compares the results against recorded output.
+```
+make test
+```
+Tests are defined in Tests/manifest, one line per program. To record the current output as the expected result, after you have checked that it is correct:
+```
+make bless
+```
+Programs are built inside Tests/build, so running the suite never overwrites the binaries in Programs/. To run only some of the tests, call the runner directly with their names:
+```
+./Tests/run.sh hello 8bitFibonacci
+```
 
 ### Additional Info:
 For more information on the custom ISA and programming for SplitBit, see the Programming Manual and Assembler Manual.

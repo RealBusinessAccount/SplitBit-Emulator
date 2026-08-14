@@ -14,7 +14,10 @@ void initializeCPU(CPURegisters *cpu, uint8_t *programMemory, uint8_t *dataMemor
     cpu->Q = 0;
     cpu->Status = 0;
     cpu->ProgramCounter = 0x0000;
-    cpu->DataPointer = 0x0000;
+    // Every Data Pointer starts at the bottom of Data Memory.
+    for (int i = 0; i < DATA_POINTERS; i++) {
+        cpu->DataPointer[i] = 0x0000;
+    }
     cpu->StackPointer = 0xFFFF;
     cpu->Program = programMemory;
     cpu->Data = dataMemory;
@@ -37,12 +40,16 @@ void genericCall(CPURegisters *cpu){
     cpu->StackPointer--;
     cpu->Data[cpu->StackPointer] = (cpu->ProgramCounter >> 8) & 0xFF;
     cpu->StackPointer--;
-    // Push the Data Pointer to the Stack.
-    // Order, low byte, high byte
-    cpu->Data[cpu->StackPointer] = cpu->DataPointer & 0xFF;
-    cpu->StackPointer--;
-    cpu->Data[cpu->StackPointer] = (cpu->DataPointer >> 8) & 0xFF;
-    cpu->StackPointer--;
+    // Push the preserved Data Pointers to the Stack, lowest numbered first.
+    // Order within each one, low byte, high byte.
+    // The pointers above PRESERVED_DATA_POINTERS are deliberately left alone, so a
+    // subroutine can use one to hand an address back to whoever called it.
+    for (int i = 0; i < PRESERVED_DATA_POINTERS; i++) {
+        cpu->Data[cpu->StackPointer] = cpu->DataPointer[i] & 0xFF;
+        cpu->StackPointer--;
+        cpu->Data[cpu->StackPointer] = (cpu->DataPointer[i] >> 8) & 0xFF;
+        cpu->StackPointer--;
+    }
     // Push B to the Stack.
     cpu->Data[cpu->StackPointer] = cpu->B;
     cpu->StackPointer--;
@@ -51,6 +58,15 @@ void genericCall(CPURegisters *cpu){
     cpu->StackPointer--;
     // Perform a Generic Branch to the Address.
     genericBranch(cpu);
+}
+
+uint16_t *selectDataPointer(CPURegisters *cpu) {
+    // Every instruction that works through a Data Pointer names which one in the
+    // byte immediately after the opcode. Out of range selectors are masked down
+    // rather than rejected, the way a narrow field in hardware would be. It is the
+    // assembler's job to refuse to emit one in the first place.
+    cpu->ProgramCounter++;
+    return &cpu->DataPointer[cpu->Program[cpu->ProgramCounter] & (DATA_POINTERS - 1)];
 }
 
 uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
@@ -164,11 +180,15 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             // Pop B from the Stack.
             cpu->StackPointer++;
             cpu->B = cpu->Data[cpu->StackPointer];
-            // Pop the Data Pointer from the Stack.
-            cpu->StackPointer++;
-            cpu->DataPointer = (uint16_t)cpu->Data[cpu->StackPointer] << 8;
-            cpu->StackPointer++;
-            cpu->DataPointer |= (uint16_t)cpu->Data[cpu->StackPointer];
+            // Pop the preserved Data Pointers from the Stack. This walks the pointers
+            // in the opposite order to genericCall, and takes the high byte before the
+            // low byte, so that it exactly mirrors the way they were pushed.
+            for (int i = PRESERVED_DATA_POINTERS - 1; i >= 0; i--) {
+                cpu->StackPointer++;
+                cpu->DataPointer[i] = (uint16_t)cpu->Data[cpu->StackPointer] << 8;
+                cpu->StackPointer++;
+                cpu->DataPointer[i] |= (uint16_t)cpu->Data[cpu->StackPointer];
+            }
             // Pop the Return Address from the Stack.
             cpu->StackPointer++;
             cpu->ProgramCounter = (uint16_t)cpu->Data[cpu->StackPointer] << 8;
@@ -261,14 +281,16 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             cpu->Data[cpu->StackPointer] = cpu->B;
             cpu->StackPointer--;
         break;
-        case 0x33:
-            // PSHD - Push the Data Pointer Address to the Stack.
+        case 0x33: {
+            // PSHD - Push the selected Data Pointer Address to the Stack.
             // Order, high byte, low byte
             // This ordering makes it easier to add offsets with register math.
-            cpu->Data[cpu->StackPointer] = (cpu->DataPointer >> 8) & 0xFF;
+            uint16_t pushed = *selectDataPointer(cpu);
+            cpu->Data[cpu->StackPointer] = (pushed >> 8) & 0xFF;
             cpu->StackPointer--;
-            cpu->Data[cpu->StackPointer] = cpu->DataPointer & 0xFF;
+            cpu->Data[cpu->StackPointer] = pushed & 0xFF;
             cpu->StackPointer--;
+        }
         break;
         case 0x34:
             // POPA - Pop A from the Stack.
@@ -281,62 +303,70 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             cpu->StackPointer++;
             cpu->B = cpu->Data[cpu->StackPointer];
         break;
-        case 0x36:
-            // POPD - Pop Data Address from the Stack.
+        case 0x36: {
+            // POPD - Pop a Data Address from the Stack into the selected Data Pointer.
+            uint16_t *popped = selectDataPointer(cpu);
             cpu->StackPointer++;
-            cpu->DataPointer = (uint16_t)cpu->Data[cpu->StackPointer];
+            *popped = (uint16_t)cpu->Data[cpu->StackPointer];
             cpu->StackPointer++;
-            cpu->DataPointer |= (uint16_t)cpu->Data[cpu->StackPointer] << 8;
+            *popped |= (uint16_t)cpu->Data[cpu->StackPointer] << 8;
+        }
         break;
         //
         // 4x - Data Operations:
         //
         case 0x40:
-            // INCD - Increment Data Pointer.
-            cpu->DataPointer++;
+            // INCD - Increment the selected Data Pointer.
+            (*selectDataPointer(cpu))++;
         break;
         case 0x41:
-            // DECD - Decrement Data Pointer.
-            cpu->DataPointer--;
+            // DECD - Decrement the selected Data Pointer.
+            (*selectDataPointer(cpu))--;
         break;
         case 0x42:
             // LDA - Load A from Data.
-            cpu->A = cpu->Data[cpu->DataPointer];
+            cpu->A = cpu->Data[*selectDataPointer(cpu)];
         break;
         case 0x43:
             // LDB - Load B from Data.
-            cpu->B = cpu->Data[cpu->DataPointer];
+            cpu->B = cpu->Data[*selectDataPointer(cpu)];
         break;
         case 0x44:
             // STQ - Store Q into Data.
-            cpu->Data[cpu->DataPointer] = cpu->Q;
+            cpu->Data[*selectDataPointer(cpu)] = cpu->Q;
         break;
         case 0x45:
             // STA - Store A into Data.
-            cpu->Data[cpu->DataPointer] = cpu->A;
+            cpu->Data[*selectDataPointer(cpu)] = cpu->A;
         break;
         case 0x46:
             // STB - Store B into Data.
-            cpu->Data[cpu->DataPointer] = cpu->B;
+            cpu->Data[*selectDataPointer(cpu)] = cpu->B;
         break;
-        case 0x47:
-            // SETD - Set the Data Pointer.
+        case 0x47: {
+            // SETD - Set the selected Data Pointer.
+            uint16_t *destination = selectDataPointer(cpu);
             cpu->ProgramCounter++;
             uint16_t Address;
             Address = (uint16_t)cpu->Program[cpu->ProgramCounter] << 8; // Cast the 8 bits to a 16 bit value and shift them to the high byte.
             cpu->ProgramCounter++;
             Address |= (uint16_t)cpu->Program[cpu->ProgramCounter];
-            cpu-> DataPointer = Address;
+            *destination = Address;
+        }
         break;
-        case 0x48:
-            // DPUP - Offset the Data Pointer up by the value of the next byte of Program Memory.
+        case 0x48: {
+            // DPUP - Offset the selected Data Pointer up by the value of the next byte of Program Memory.
+            uint16_t *target = selectDataPointer(cpu);
             cpu->ProgramCounter++;
-            cpu->DataPointer += cpu->Program[cpu->ProgramCounter];
+            *target += cpu->Program[cpu->ProgramCounter];
+        }
         break;
-        case 0x49:
-            // DPDN - Offset the Data Pointer down by the value of the next byte of Program Memory.
+        case 0x49: {
+            // DPDN - Offset the selected Data Pointer down by the value of the next byte of Program Memory.
+            uint16_t *target = selectDataPointer(cpu);
             cpu->ProgramCounter++;
-            cpu->DataPointer -= cpu->Program[cpu->ProgramCounter];
+            *target -= cpu->Program[cpu->ProgramCounter];
+        }
         break;
         //
         // Dx - Output Operations:
@@ -383,10 +413,13 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             // Unknown Instruction.
             return 1;
     }
-    if (cpu->DataPointer >= cpu->StackPointer) {
-        // A Stack Collision was detected.
-        cpu->Status |= 0x82; // Set Stack Collision Flag and Halt . (Bits 7 and 1 of the Status Register);
-        return 2;
-    }
     return 0;
+}
+
+void stepCPU(CPURegisters *cpu) {
+    if (!(cpu->Status & 0x80)) {
+        // The CPU is not halted, so do a cycle.
+        executeOperation(cpu->Program[cpu->ProgramCounter], cpu);
+        cpu->ProgramCounter++;
+    }
 }

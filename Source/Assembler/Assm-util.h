@@ -48,6 +48,7 @@ typedef struct {
     char* fileName;
     int lineNumber;
     uint8_t byteValue;
+    uint8_t dataPointer; // Which Data Pointer this instruction works through, if it works through one.
     int byteLength;
     uint16_t address;
     int type; // "KEYWORD", "INSTRUCTION" , "LABEL" , "VALUE", "STRING"

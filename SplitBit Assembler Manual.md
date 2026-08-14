@@ -12,8 +12,14 @@ The assembler will accept:
 - Decimal values prefaced with 0d, eg. 0d0, 0d120, 0d255.
 - Strings enclosed in double qoutes, eg. "a", "Hello, World!", "It is dark, you are likely to be eaten by a grue."
 
+Any token beginning with a '0' is read as a numerical literal, so a malformed one is an error rather than something the assembler tries to interpret as a label. This also means a label cannot begin with a '0'.
+
+Instructions that read operand bytes out of Program Memory must be followed by those operands. The branch instructions and CALL take a label; SETD takes a label or a pair of literal bytes; INIA, INIB, DPUP, DPDN, and the input and output instructions each take a single literal byte.
+
 
 Labels may be a string of up to 32 alphanumeric characters that must end with a colon, ':'.
+
+A label may be referenced by name, without the colon, to place its two byte address into the Program Segment. Label references are only valid in the Program Segment.
 
 ```
 programStart:

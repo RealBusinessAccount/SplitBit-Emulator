@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include "secondPass.h"
 #include "Assm-util.h"
+#include "assembly.h"
 
 int debugSecondPass = 0;
 
@@ -103,6 +104,55 @@ void fillInLabelAddresses(intermediateElement *intermediateArray, int arraySize)
     }
 }
 
+// Reports the type of the token following index i, or UNKNOWN if there isn't one.
+// The operand checks go through this so that an instruction sitting at the very end of
+// a program is reported as a missing operand instead of reading off the end of the array.
+static int nextTokenType(intermediateElement *intermediateArray, int arraySize, int i) {
+    if (i + 1 >= arraySize) {
+        return UNKNOWN;
+    }
+    return intermediateArray[i + 1].type;
+}
+
+// Every instruction that reads operand bytes out of Program Memory needs those bytes to
+// actually be there. If they aren't, the following instruction gets eaten as an operand
+// and everything after it shifts, so these all have to be hard errors.
+static void checkOperands(intermediateElement *intermediateArray, int arraySize, int i) {
+    uint8_t opcode = intermediateArray[i].byteValue;
+    int nextType = nextTokenType(intermediateArray, arraySize, i);
+    const char *problem = NULL;
+
+    if (((opcode & 0xF0) == 0x10) && (opcode != 0x1F)) {
+        // Branches and CALL take a two byte address, which only a label can supply.
+        if (nextType != LABEL) problem = "Branch without label.";
+    } else if ((opcode & 0xF0) == 0xD0 || (opcode & 0xF0) == 0xE0) {
+        // The instruction is either an input or output and must be followed by a value.
+        if (nextType != VALUE) problem = "I/O without destination port.";
+    } else if (opcode == 0x26 || opcode == 0x27) {
+        // INIA and INIB must be followed by the literal value to load.
+        if (nextType != VALUE) problem = "Immediate load without a value to load.";
+    } else if (opcode == 0x48 || opcode == 0x49) {
+        // DPUP and DPDN must be followed by the literal offset to apply.
+        if (nextType != VALUE) problem = "Data Pointer offset without an offset value.";
+    } else if (opcode == 0x47) {
+        // SETD takes a two byte address, as either a label or a pair of literal bytes.
+        if (nextType == VALUE) {
+            if (nextTokenType(intermediateArray, arraySize, i + 1) != VALUE) {
+                problem = "SETD given one literal byte, but an address is two bytes.";
+            }
+        } else if (nextType != LABEL) {
+            problem = "SETD without an address.";
+        }
+    }
+
+    if (problem) {
+        fprintf(stderr, RED "Error: %s\n" RESET, problem);
+        printf("File: %s at line %d.\n", intermediateArray[i].fileName, intermediateArray[i].lineNumber);
+        printf("Token: %s\n", intermediateArray[i].token);
+        exit(1);
+    }
+}
+
 void populateOutputBuffers(intermediateElement *intermediateArray, int arraySize, uint8_t *Program, int *programCount, uint8_t *Data, int *dataCount) {
     for (int i = 0; i < arraySize; i++) {
         if (intermediateArray[i].destination == PROGRAM) {
@@ -110,23 +160,13 @@ void populateOutputBuffers(intermediateElement *intermediateArray, int arraySize
                 case INSTRUCTION:
                     // Add instruction byte to Program buffer.
                     Program[(*programCount)++] = intermediateArray[i].byteValue;
-
-                    // Check if it's a branch instruction.
-                    if (((intermediateArray[i].byteValue & 0xF0) == 0x10) && (intermediateArray[i].byteValue != 0x1F)){
-                        if (intermediateArray[i + 1].type != LABEL) {
-                            fprintf(stderr, RED "Error: Branch without label.\n" RESET);
-                            printf("File: %s at line %d.\n", intermediateArray[i].fileName, intermediateArray[i].lineNumber);
-                            exit(1);
-                        }
-                    } else if ((intermediateArray[i].byteValue & 0xF0) == 0xD0 || (intermediateArray[i].byteValue & 0xF0) == 0xE0) {
-                        // The instruction is either an input or output and must be followed by a value
-                        if (intermediateArray[i + 1].type != VALUE) {
-                            fprintf(stderr, RED "Error: I/O without destination port.\n" RESET);
-                            printf("File: %s at line %d.\n", intermediateArray[i].fileName, intermediateArray[i].lineNumber);
-                            printf("Token: %s\n", intermediateArray[i].token);
-                            exit(1);
-                        }
+                    // Instructions that work through a Data Pointer carry a selector
+                    // byte naming which one, whether or not the programmer wrote it.
+                    if (instructionTakesDataPointer(intermediateArray[i].byteValue)) {
+                        Program[(*programCount)++] = intermediateArray[i].dataPointer;
                     }
+                    // Make sure any operand bytes this instruction expects are present.
+                    checkOperands(intermediateArray, arraySize, i);
                 break;
                 case VALUE:
                     // Add literal value to Program buffer.
@@ -150,6 +190,14 @@ void populateOutputBuffers(intermediateElement *intermediateArray, int arraySize
                         Data[(*dataCount)++] = intermediateArray[i].token[j];
                     }
                     Data[(*dataCount)++] = '\0';  // Add null terminator to Data buffer
+                break;
+                case LABEL:
+                    // The label table reserved two bytes for this, but there's nothing here
+                    // that knows how to emit them, so every later Data label would be shifted
+                    // out of place. Refuse it rather than assemble something that looks fine.
+                    fprintf(stderr, RED "Error: Label \"%s\" used as a value in the Data Segment.\n Label references are only supported in the Program Segment.\n" RESET, intermediateArray[i].token);
+                    printf("File: %s at line %d.\n", intermediateArray[i].fileName, intermediateArray[i].lineNumber);
+                    exit(1);
                 break;
             }
         }
