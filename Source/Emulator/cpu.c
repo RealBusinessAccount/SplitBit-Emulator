@@ -368,6 +368,28 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             *target -= cpu->Program[cpu->ProgramCounter];
         }
         break;
+        case 0x4A: {
+            // LDD - Load the first Data Pointer from the two bytes of Data Memory
+            // addressed by the second. Byte order matches everywhere else an address
+            // is stored: most significant first, then least significant.
+            // The source is taken by value before anything is written, so LDD.0.0
+            // follows the pointer in DP0 rather than tripping over itself.
+            uint16_t *destination = selectDataPointer(cpu);
+            uint16_t source = *selectDataPointer(cpu);
+            *destination = (uint16_t)cpu->Data[source] << 8;
+            *destination |= (uint16_t)cpu->Data[(uint16_t)(source + 1)];
+        }
+        break;
+        case 0x4B: {
+            // STD - Store the first Data Pointer into the two bytes of Data Memory
+            // addressed by the second. The cast on the second address keeps it inside
+            // Data Memory when the pointer sits at the very top of it.
+            uint16_t value = *selectDataPointer(cpu);
+            uint16_t address = *selectDataPointer(cpu);
+            cpu->Data[address] = (value >> 8) & 0xFF;
+            cpu->Data[(uint16_t)(address + 1)] = value & 0xFF;
+        }
+        break;
         //
         // Dx - Output Operations:
         //

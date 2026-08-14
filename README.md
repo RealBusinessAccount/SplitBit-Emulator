@@ -44,10 +44,35 @@ make
 
 ### Usage:
 ```
-./Assembler [assembly file]
+./Assembler [options] [assembly file]
 ```
+#### Options:
+- -o \<file\>: Write the binary to this path.
+- -I \<dir\>: Look in this directory for included files. May be given more than once.
+- -M \<file\>: Write out which source files the binary depends on, as a make rule.
+- -h, --help: Show help and usage information.
+
 #### Notes:
-- The assembled binaries are saved with the same name as the assembly source file they're assembled from, with a .bin extension, in the same directory that you call the assembler from.
+- Without -o, the assembled binary is saved with the same name as the assembly source file, with a .bin extension, in the directory that you call the assembler from.
+- Included files are looked for beside the file that includes them, and then along the directories given with -I.
+
+### Building Programs With Make:
+The assembler is built to work with make. The -o option puts the binary where the build system wants it, and -M writes out which libraries went into it, so that editing a library reassembles everything that includes it.
+
+Programs/makefile does this for the programs in this repository:
+```
+cd Programs
+make
+```
+
+The rule it uses is small enough to copy into your own projects:
+```
+$(BUILD)/%.bin: %.asm
+	@mkdir -p $(@D)
+	$(ASM) -I Libraries -M $(@:.bin=.d) -o $@ $<
+
+-include $(BINARIES:.bin=.d)
+```
 
 ### Tests:
 The test suite assembles and runs every program in Programs/ and compares the results against recorded output.

@@ -7,46 +7,153 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <ctype.h>
+#include <libgen.h>
+#include <limits.h>
 #include "firstPass.h"
 #include "Assm-util.h"
 #include "assembly.h"
 
-char *includeList[MAX_INCLUDES];
+// Each source file that has gone into this assembly. The path is kept as it was
+// written, because that is what reads well in an error message or a dependency
+// rule. The canonical form is kept alongside it so that the same file reached by
+// two different routes is recognised as one file and included only once.
+typedef struct {
+    char *path;
+    char *canonical;
+} SourceFile;
+
+SourceFile includeList[MAX_INCLUDES];
 int includeCount = 0;
+
+char *includeDirectories[MAX_INCLUDES];
+int includeDirectoryCount = 0;
 
 void freeIncludeList() {
     for (int i = 0; i < includeCount; i++) {
-        if (includeList[i]) {
-            free(includeList[i]);
-        }
+        free(includeList[i].path);
+        free(includeList[i].canonical);
     }
     includeCount = 0;
+    for (int i = 0; i < includeDirectoryCount; i++) {
+        free(includeDirectories[i]);
+    }
+    includeDirectoryCount = 0;
 }
 
-int isFileIncluded(const char *fileName) {
+void addIncludeDirectory(const char *directory) {
+    if (includeDirectoryCount >= MAX_INCLUDES) {
+        fprintf(stderr, RED "Error: Too many include directories.\n" RESET);
+        exit(1);
+    }
+    includeDirectories[includeDirectoryCount] = strdup(directory);
+    includeDirectoryCount++;
+}
+
+int sourceFileCount() {
+    return includeCount;
+}
+
+const char *sourceFile(int index) {
+    return includeList[index].path;
+}
+
+char *recordSourceFile(char *path) {
+    // realpath resolves symlinks and things like "..", so that Libraries/print.asm
+    // and ../Libraries/print.asm are known to be the same file.
+    char *canonical = realpath(path, NULL);
+    if (!canonical) {
+        canonical = strdup(path);
+    }
     for (int i = 0; i < includeCount; i++) {
-        if (strcmp(includeList[i], fileName) == 0) {
-            return 1;
+        if (strcmp(includeList[i].canonical, canonical) == 0) {
+            // Already assembled once. Including it again is not an error, it just
+            // does nothing, which is what lets two libraries share a dependency.
+            free(canonical);
+            free(path);
+            return NULL;
         }
+    }
+    if (includeCount >= MAX_INCLUDES) {
+        fprintf(stderr, RED "Error: Too many included files.\n" RESET);
+        exit(1);
+    }
+    includeList[includeCount].path = path;
+    includeList[includeCount].canonical = canonical;
+    includeCount++;
+    return path;
+}
+
+// Joins a directory and a file name into a newly allocated path.
+static char *joinPath(const char *directory, const char *name) {
+    if (!directory || directory[0] == '\0' || strcmp(directory, ".") == 0) {
+        return strdup(name);
+    }
+    size_t length = strlen(directory) + 1 + strlen(name) + 1;
+    char *joined = malloc(length);
+    if (!joined) {
+        fprintf(stderr, RED "Error: Memory allocation failed.\n" RESET);
+        exit(1);
+    }
+    snprintf(joined, length, "%s/%s", directory, name);
+    return joined;
+}
+
+static int fileExists(const char *path) {
+    FILE *file = fopen(path, "r");
+    if (file) {
+        fclose(file);
+        return 1;
     }
     return 0;
 }
 
-void addIncludedFile(const char *fileName) {
-    if (includeCount < MAX_INCLUDES) {
-        includeList[includeCount] = strdup(fileName);
-        includeCount++;
-    } else {
-        fprintf(stderr, RED "Error: Too many included files.\n" RESET);
-        exit(1);
+// Works out where an #Include actually points. An absolute path is taken as given.
+// Otherwise the file is looked for beside the file that asked for it, so that a
+// library including its own siblings needs no help, and then along the include
+// directories in the order they were given. Returns NULL if it is nowhere.
+static char *resolveInclude(const char *includingFile, const char *requested) {
+    if (requested[0] == '/') {
+        return fileExists(requested) ? strdup(requested) : NULL;
+    }
+
+    char *copy = strdup(includingFile);
+    char *candidate = joinPath(dirname(copy), requested);
+    free(copy);
+    if (fileExists(candidate)) {
+        return candidate;
+    }
+    free(candidate);
+
+    for (int i = 0; i < includeDirectoryCount; i++) {
+        candidate = joinPath(includeDirectories[i], requested);
+        if (fileExists(candidate)) {
+            return candidate;
+        }
+        free(candidate);
+    }
+    return NULL;
+}
+
+// Says where the assembler looked, so that a missing include is easy to fix.
+static void reportMissingInclude(const char *includingFile, const char *requested, int lineNumber) {
+    fprintf(stderr, RED "Error: Couldn't find included file \"%s\".\n" RESET, requested);
+    printf(" File: %s at line %d.\n", includingFile, lineNumber);
+    printf(" Looked for it:\n");
+    char *copy = strdup(includingFile);
+    printf("   beside %s\n", includingFile);
+    free(copy);
+    for (int i = 0; i < includeDirectoryCount; i++) {
+        printf("   in %s\n", includeDirectories[i]);
+    }
+    if (includeDirectoryCount == 0) {
+        printf("   and nowhere else, because no include directories were given with -I.\n");
     }
 }
 
 int loadFile(intermediateElement **intermediateArray, char *fileName, int *intermediateIndex, size_t *arraySize){
-    // Initial setup.
-    addIncludedFile(fileName);
+    // fileName is a path already resolved and recorded by the caller, and the copy
+    // the include list owns, so element fileNames can safely point at it.
     int status = NOWHERE;
     int lineNumber = 1; // Line numbers start at 1.
     // Open the file.
@@ -73,19 +180,26 @@ int loadFile(intermediateElement **intermediateArray, char *fileName, int *inter
         int testValue = checkIfKeyword(&(*intermediateArray)[*intermediateIndex]);
         if(testValue > 0) {
             switch (testValue){
-                case KEYWORD_INCLUDE:
+                case KEYWORD_INCLUDE: {
                     // We need to load another file and process it before continuing.
                     status = NOWHERE;
-                    // Get the filename and load up the file.
+                    // Get the filename and work out where it actually is.
                     (*intermediateIndex)++;
                     readToken(&(*intermediateArray)[*intermediateIndex], file, &lineNumber);
-                    char *includeFile = (*intermediateArray)[*intermediateIndex].token;
-                    if (isFileIncluded(includeFile)) {
-                        fprintf(stderr, RED "Error: File %s is included more than once.\n" RESET, includeFile);
-                        printf(" File: %s at line %d.\n", fileName, lineNumber);
+                    char *requested = (*intermediateArray)[*intermediateIndex].token;
+                    char *resolved = resolveInclude(fileName, requested);
+                    if (!resolved) {
+                        reportMissingInclude(fileName, requested, lineNumber);
                         exit(1);
                     }
-                    loadFile(intermediateArray, includeFile, intermediateIndex, arraySize);
+                    // recordSourceFile takes the path, and hands back NULL if this file
+                    // has already been assembled. Including it twice is harmless, which
+                    // is what lets two libraries depend on a third.
+                    char *owned = recordSourceFile(resolved);
+                    if (owned) {
+                        loadFile(intermediateArray, owned, intermediateIndex, arraySize);
+                    }
+                }
                 break;
                 case KEYWORD_PROGRAM:
                     // Set the state PROGRAM so we mark additional tokens for inclusion into Program Memory.

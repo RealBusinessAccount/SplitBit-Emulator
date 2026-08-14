@@ -4,47 +4,80 @@
 // 10/16/2024
 
 #include "bootstrap.h"
+#include "../Assembler/assembly.h" // For the binary format, which both tools share.
 #include <stdio.h>
 #include <string.h>
 
-    int byte = 0;
-    const uint8_t HEADER_LENGTH = 3; // Number of bytes for the header.
-    const uint8_t LENGTH_SIZE = 2; // Number of bytes for the segment length.
-
-uint32_t readLength(FILE *file) {
-    uint16_t length = 0;
-    for (int i = 0; i < LENGTH_SIZE; i++) {
+// Reads a number of the given width, most significant byte first.
+// Returns 1 if the file runs out before the number does.
+static uint8_t readNumber(FILE *file, int width, const char *what, uint32_t *result) {
+    uint32_t value = 0;
+    for (int i = 0; i < width; i++) {
         int byte = fgetc(file);
         if (byte == EOF) {
-            fprintf(stderr, "Error: Unexpected end of file while reading a segment length.\n");
-            return UINT32_MAX;
+            fprintf(stderr, "Error: Unexpected end of file while reading %s.\n", what);
+            return 1;
         }
-        length = (length << 8) | (uint8_t)byte;
+        value = (value << 8) | (uint8_t)byte;
     }
-    return length;
+    *result = value;
+    return 0;
 }
 
-uint32_t readHeader(FILE *file, const char *expectedHeader) {
-    char header[HEADER_LENGTH];
-    for (int i = 0; i < HEADER_LENGTH; i++) {
+// Reads a fixed length marker and checks it against the one expected. The caller's
+// buffer must have room for length + 1 characters; it always comes back with a null
+// on the end, so it is safe to print in an error message either way.
+static uint8_t readMarker(FILE *file, const char *expected, int length, char *found) {
+    memset(found, 0, length + 1);
+    for (int i = 0; i < length; i++) {
         int byte = fgetc(file);
         if (byte == EOF) {
-            fprintf(stderr, "Error: Unexpected end of file while reading a header.\n");
-            return UINT32_MAX;
+            return 1;
         }
-        header[i] = (uint8_t)byte;
+        found[i] = (char)byte;
     }
-    if (strncmp(header, expectedHeader, 3)) {
-        fprintf(stderr, "Error: Bad header.\n");
-        printf("Header: %s\nExpected Header: %s\n", header, expectedHeader);
-        return UINT32_MAX;
+    return strncmp(found, expected, length) != 0;
+}
+
+// Reads the file header: the magic, the format version, and the features the binary
+// says it needs from the machine.
+static uint8_t readFileHeader(FILE *file) {
+    char magic[SPLITBIT_MAGIC_LENGTH + 1];
+    if (readMarker(file, SPLITBIT_MAGIC, SPLITBIT_MAGIC_LENGTH, magic)) {
+        fprintf(stderr, "Error: This is not a SplitBit binary.\n");
+        if (strncmp(magic, "PRG", 3) == 0) {
+            fprintf(stderr, " It looks like a binary from before the format carried a version.\n Reassemble it and try again.\n");
+        } else {
+            fprintf(stderr, " Expected the file to begin with \"%s\", found \"%s\".\n", SPLITBIT_MAGIC, magic);
+        }
+        return 1;
+    }
+
+    uint32_t version;
+    if (readNumber(file, 1, "the format version", &version)) {
+        return 1;
+    }
+    if (version != SPLITBIT_FORMAT_VERSION) {
+        fprintf(stderr, "Error: This binary is in format version %u, and this emulator reads version %u.\n", version, SPLITBIT_FORMAT_VERSION);
+        return 1;
+    }
+
+    uint32_t required;
+    if (readNumber(file, SPLITBIT_FLAGS_LENGTH, "the feature flags", &required)) {
+        return 1;
+    }
+    uint32_t missing = required & ~(uint32_t)SPLITBIT_FEATURES_SUPPORTED;
+    if (missing) {
+        fprintf(stderr, "Error: This binary was built for a machine this emulator cannot provide.\n");
+        fprintf(stderr, " It asks for feature bits 0x%08X, which are not implemented here.\n", missing);
+        return 1;
     }
     return 0;
 }
 
-uint8_t loadSegment(FILE *file, uint8_t *Memory, uint16_t length) {
-    for (int16_t i = 0; i < length; i++) {
-        byte = fgetc(file);
+static uint8_t loadSegment(FILE *file, uint8_t *Memory, uint32_t length) {
+    for (uint32_t i = 0; i < length; i++) {
+        int byte = fgetc(file);
         if (byte == EOF) {
             fprintf(stderr, "Error: Unexpected end of file while reading a segment.\n");
             return 1;
@@ -54,44 +87,31 @@ uint8_t loadSegment(FILE *file, uint8_t *Memory, uint16_t length) {
     return 0;
 }
 
+// Reads one segment: its marker, its length, and then its contents.
+static uint8_t readSegment(FILE *file, const char *marker, uint8_t *Memory) {
+    char found[SEGMENT_MARKER_LENGTH + 1];
+    if (readMarker(file, marker, SEGMENT_MARKER_LENGTH, found)) {
+        fprintf(stderr, "Error: Expected a \"%s\" segment here, found \"%s\".\n", marker, found);
+        return 1;
+    }
+    uint32_t length;
+    if (readNumber(file, SEGMENT_LENGTH_BYTES, "a segment length", &length)) {
+        return 1;
+    }
+    return loadSegment(file, Memory, length);
+}
+
 uint8_t loadFile(char *path, uint8_t *Program, uint8_t *Data) {
     FILE *file = fopen(path, "rb");
     if (file == NULL) {
         fprintf(stderr, "Error: Couldn't open file: %s\n", path);
         return 1;
     }
-    // Read the first three bytes and check if they're the PRG header.
-    if (readHeader(file, "PRG") == UINT32_MAX) {
-        fclose(file);
-        return 1;
-    }
-    // Now we need to get the length of the Program Section.
-    uint32_t length = readLength(file);
-    if (length == UINT32_MAX) {
-        fclose(file);
-        return 1;
-    }
-    // Now we load the Program Segment.
-    if (loadSegment(file, Program, (uint16_t)length)) {
-        fclose(file);
-        return 1;
-    }
-    // Okay, Program is loaded, now do the same thing but for Data.
-    // Check the header.
-    if (readHeader(file, "DAT") == UINT32_MAX) {
-        return 1;
-    }
-    // Get the legnth of the Data Section.
-    length = readLength(file);
-    if (length == UINT32_MAX){
-        fclose(file);
-        return 1;
-    }
-    // Now load the Data Section.
-    if (loadSegment(file, Data, (uint16_t)length)) {
-        fclose(file);
-        return 1;
-    }
+    // The Program Segment must come first, then the Data Segment. Short circuiting
+    // here means there is one exit, and so only one place that has to close the file.
+    uint8_t failed = readFileHeader(file)
+                  || readSegment(file, "PRG", Program)
+                  || readSegment(file, "DAT", Data);
     fclose(file);
-    return 0;
+    return failed;
 }

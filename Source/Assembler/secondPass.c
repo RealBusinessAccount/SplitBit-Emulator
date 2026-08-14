@@ -162,8 +162,8 @@ void populateOutputBuffers(intermediateElement *intermediateArray, int arraySize
                     Program[(*programCount)++] = intermediateArray[i].byteValue;
                     // Instructions that work through a Data Pointer carry a selector
                     // byte naming which one, whether or not the programmer wrote it.
-                    if (instructionTakesDataPointer(intermediateArray[i].byteValue)) {
-                        Program[(*programCount)++] = intermediateArray[i].dataPointer;
+                    for (int d = 0; d < dataPointerOperands(intermediateArray[i].byteValue); d++) {
+                        Program[(*programCount)++] = intermediateArray[i].dataPointer[d];
                     }
                     // Make sure any operand bytes this instruction expects are present.
                     checkOperands(intermediateArray, arraySize, i);
@@ -192,12 +192,12 @@ void populateOutputBuffers(intermediateElement *intermediateArray, int arraySize
                     Data[(*dataCount)++] = '\0';  // Add null terminator to Data buffer
                 break;
                 case LABEL:
-                    // The label table reserved two bytes for this, but there's nothing here
-                    // that knows how to emit them, so every later Data label would be shifted
-                    // out of place. Refuse it rather than assemble something that looks fine.
-                    fprintf(stderr, RED "Error: Label \"%s\" used as a value in the Data Segment.\n Label references are only supported in the Program Segment.\n" RESET, intermediateArray[i].token);
-                    printf("File: %s at line %d.\n", intermediateArray[i].fileName, intermediateArray[i].lineNumber);
-                    exit(1);
+                    // A label named in the Data Segment puts its address there, which is
+                    // how a program lays down a table of addresses for LDD to walk.
+                    // Two bytes, most significant first, the same order addresses are
+                    // stored in everywhere else.
+                    Data[(*dataCount)++] = (intermediateArray[i].address >> 8) & 0xFF;  // High byte
+                    Data[(*dataCount)++] = intermediateArray[i].address & 0xFF;         // Low byte
                 break;
             }
         }
@@ -211,8 +211,18 @@ void writeOutputFile(const char *outputFileName, uint8_t *Program, int programCo
         exit(1);
     }
 
+    // Write the file header: the magic, the format version, and the features this
+    // binary needs from the machine. An emulator that cannot provide one of those
+    // features refuses the file rather than running it and going quietly wrong.
+    fwrite(SPLITBIT_MAGIC, sizeof(char), SPLITBIT_MAGIC_LENGTH, outputFile);
+    fputc(SPLITBIT_FORMAT_VERSION, outputFile);
+    uint32_t required = SPLITBIT_FEATURES_REQUIRED;
+    for (int i = SPLITBIT_FLAGS_LENGTH - 1; i >= 0; i--) {
+        fputc((required >> (i * 8)) & 0xFF, outputFile);  // Most significant byte first.
+    }
+
     // Write the "PRG" header for the program segment
-    fwrite("PRG", sizeof(char), 3, outputFile);
+    fwrite("PRG", sizeof(char), SEGMENT_MARKER_LENGTH, outputFile);
 
     // Write the program segment length as a 2-byte value (big-endian)
     uint16_t programSize = programCount;
@@ -227,7 +237,7 @@ void writeOutputFile(const char *outputFileName, uint8_t *Program, int programCo
     }
 
     // Write the "DAT" header for the data segment
-    fwrite("DAT", sizeof(char), 3, outputFile);
+    fwrite("DAT", sizeof(char), SEGMENT_MARKER_LENGTH, outputFile);
 
     // Write the data segment length as a 2-byte value (big-endian)
     uint16_t dataSize = dataCount;
@@ -243,5 +253,5 @@ void writeOutputFile(const char *outputFileName, uint8_t *Program, int programCo
 
     fclose(outputFile);
     printf("Successfully wrote SplitBit binary to \"%s\".\n", outputFileName);
-    printf(GREEN "  Program Segment size: %d bytes.\n  Data Segment size: %d bytes.\n    Total size: %d bytes.\n" RESET, programCount, dataCount, (programCount+dataCount+10));
+    printf(GREEN "  Program Segment size: %d bytes.\n  Data Segment size: %d bytes.\n    Total size: %d bytes.\n" RESET, programCount, dataCount, (programCount + dataCount + SPLITBIT_HEADER_BYTES));
 }

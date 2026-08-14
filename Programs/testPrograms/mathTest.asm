@@ -1,8 +1,8 @@
 ; A test for the new math subroutines.
 
-#Include ../Libraries/print.asm
-#Include ../Libraries/int8.asm
-#Include ../Libraries/int16.asm
+#Include print.asm
+#Include int8.asm
+#Include int16.asm
 
 #Program
  start:

@@ -1,6 +1,6 @@
 ; This is an implementation of The Sieve of Eratosthenes that finds all the primes between 2 and 255.
 
-#Include ../Libraries/print.asm
+#Include print.asm
 
 #Program
 

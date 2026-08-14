@@ -1,6 +1,6 @@
 ; Tests for the printing subroutines provided by print.asm
 
-#Include ../Libraries/print.asm
+#Include print.asm
 #Include printDigitTest.asm
 #Include printDecimalTest.asm
 #Include printHexTest.asm

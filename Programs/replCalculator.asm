@@ -5,7 +5,7 @@
 ; Whitespace is optional. Supported operators are + - * & | and ^.
 ; Arithmetic wraps to eight bits. Enter Q to quit.
 
-#Include Libraries/print.asm
+#Include print.asm
 
 #Program
 

@@ -51,13 +51,21 @@ int checkIfInstruction(intermediateElement *currentElement) {
     strcpy(token, currentElement->token);
     toUppercase(token);
 
-    // An instruction that works through a Data Pointer may name which one by
-    // hanging a selector off the mnemonic, as in LDA.2. Split that off before
-    // looking the mnemonic up.
-    char *selector = strchr(token, '.');
-    if (selector) {
-        *selector = '\0';
-        selector++;
+    // An instruction that works through a Data Pointer names which one by hanging a
+    // selector off the mnemonic, as in LDA.2. LDD and STD move a pointer through a
+    // pointer, so they take two, as in LDD.1.0. Split those off before looking the
+    // mnemonic up.
+    char *selector[MAX_DATA_POINTER_OPERANDS] = { NULL };
+    int selectorsGiven = 0;
+    char *dot = strchr(token, '.');
+    while (dot) {
+        *dot = '\0';
+        dot++;
+        if (selectorsGiven < MAX_DATA_POINTER_OPERANDS) {
+            selector[selectorsGiven] = dot;
+        }
+        selectorsGiven++;
+        dot = strchr(dot, '.');
     }
 
     uint8_t opcode = getOpcode(token);
@@ -66,32 +74,38 @@ int checkIfInstruction(intermediateElement *currentElement) {
         return 0;
     }
 
-    currentElement->type = INSTRUCTION;
-    currentElement->byteValue = opcode;
-    currentElement->byteLength = 1;
-    currentElement->dataPointer = 0;
-
-    if (instructionTakesDataPointer(opcode)) {
-        // The selector is emitted whether or not it was written, so these are
-        // always two bytes. Leaving it off is the same as writing 0.
-        currentElement->byteLength = 2;
-        if (selector) {
-            char *end;
-            long value = strtol(selector, &end, 10);
-            if (*selector == '\0' || *end != '\0' || value < 0 || value >= DATA_POINTERS) {
-                fprintf(stderr, RED "Error: \"%s\" does not name a Data Pointer.\n Selectors run from 0 to %d.\n" RESET, currentElement->token, DATA_POINTERS - 1);
-                printf(" File: %s at line %d.\n", currentElement->fileName, currentElement->lineNumber);
-                exit(1);
-            }
-            currentElement->dataPointer = (uint8_t)value;
+    int selectorsWanted = dataPointerOperands(opcode);
+    if (selectorsGiven > selectorsWanted) {
+        if (selectorsWanted == 0) {
+            fprintf(stderr, RED "Error: %s does not work through a Data Pointer, so it cannot take a selector.\n" RESET, token);
+        } else {
+            fprintf(stderr, RED "Error: %s takes %d Data Pointer selector(s), but \"%s\" gives %d.\n" RESET, token, selectorsWanted, currentElement->token, selectorsGiven);
         }
-    } else if (selector) {
-        fprintf(stderr, RED "Error: %s does not work through a Data Pointer, so it cannot take a selector.\n" RESET, token);
         printf(" File: %s at line %d.\n", currentElement->fileName, currentElement->lineNumber);
         exit(1);
     }
 
-    if (debug) printf("Token: %s is an instruction using Data Pointer %d.\n", currentElement->token, currentElement->dataPointer);
+    currentElement->type = INSTRUCTION;
+    currentElement->byteValue = opcode;
+    // The selectors are emitted whether or not they were written, so the length is
+    // fixed by the instruction. Leaving one off is the same as writing 0.
+    currentElement->byteLength = 1 + selectorsWanted;
+
+    for (int i = 0; i < selectorsWanted; i++) {
+        currentElement->dataPointer[i] = 0;
+        if (i < selectorsGiven && selector[i]) {
+            char *end;
+            long value = strtol(selector[i], &end, 10);
+            if (*selector[i] == '\0' || *end != '\0' || value < 0 || value >= DATA_POINTERS) {
+                fprintf(stderr, RED "Error: \"%s\" does not name a Data Pointer.\n Selectors run from 0 to %d.\n" RESET, currentElement->token, DATA_POINTERS - 1);
+                printf(" File: %s at line %d.\n", currentElement->fileName, currentElement->lineNumber);
+                exit(1);
+            }
+            currentElement->dataPointer[i] = (uint8_t)value;
+        }
+    }
+
+    if (debug) printf("Token: %s is an instruction with %d selector(s).\n", currentElement->token, selectorsWanted);
     return 1;
 }
 

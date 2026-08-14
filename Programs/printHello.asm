@@ -5,7 +5,7 @@
 ; 10/27/2024
 
 ; Include the subroutine file.
-#Include Libraries/print.asm
+#Include print.asm
 
 #Program
 

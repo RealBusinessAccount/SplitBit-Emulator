@@ -1,6 +1,6 @@
 ; A Fibonacci number generating program that uses only one byte to store the value.
 
-#Include Libraries/print.asm
+#Include print.asm
 
 #Program
 start:

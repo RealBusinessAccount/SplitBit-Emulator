@@ -49,10 +49,10 @@ for tool in "$ASSEMBLER" "$EMULATOR"; do
     fi
 done
 
+PROGRAMS="$ROOT/Programs"
+
 rm -rf "$BUILD"
 mkdir -p "$BUILD" "$EXPECTED"
-cp -r "$ROOT/Programs/." "$BUILD/"
-find "$BUILD" -name '*.bin' -delete
 
 PASS=0
 FAIL=0
@@ -104,30 +104,30 @@ check() {
 }
 
 assemble() {
-    # assemble <source> <assemble-from>; echoes the built binary path on success
-    local src="$1" dir="$2"
-    local wd="$BUILD/$dir" rel bin
-    rel="$(realpath --relative-to="$wd" "$BUILD/$src")"
-    bin="$wd/$(basename "${src%.asm}").bin"
-    if ( cd "$wd" && "$ASSEMBLER" "$rel" ) >"$BUILD/.assemble.log" 2>&1; then
+    # assemble <name> <source>; echoes the built binary path on success.
+    # Everything builds from Programs/ with Libraries/ on the include path, and the
+    # binary goes to Tests/build, so the source tree is never written to.
+    local name="$1" src="$2"
+    local bin="$BUILD/$name.bin"
+    if ( cd "$PROGRAMS" && "$ASSEMBLER" -I Libraries -o "$bin" "$src" ) >"$BUILD/.assemble.log" 2>&1; then
         echo "$bin"
         return 0
     fi
     return 1
 }
 
-while IFS='|' read -r name src dir mode stdin limit; do
+while IFS='|' read -r name src mode stdin limit; do
     name="$(trim "$name")"
     [ -z "$name" ] && continue
     case "$name" in \#*) continue ;; esac
-    src="$(trim "$src")"; dir="$(trim "$dir")"
+    src="$(trim "$src")"
     mode="$(trim "$mode")"; stdin="$(trim "$stdin")"
     limit="$(trim "$limit")"
 
     wanted "$name" || continue
 
     if [ "$mode" = "xfail" ]; then
-        if assemble "$src" "$dir" >/dev/null; then
+        if assemble "$name" "$src" >/dev/null; then
             FAIL=$((FAIL + 1)); FAILED_NAMES+=("$name")
             report "FAIL" "$name" "expected assembly to fail, but it succeeded"
         else
@@ -137,7 +137,7 @@ while IFS='|' read -r name src dir mode stdin limit; do
         continue
     fi
 
-    if ! BIN="$(assemble "$src" "$dir")"; then
+    if ! BIN="$(assemble "$name" "$src")"; then
         FAIL=$((FAIL + 1)); FAILED_NAMES+=("$name")
         report "FAIL" "$name" "assembly failed"
         head -3 "$BUILD/.assemble.log" | tr -d '\033' | sed 's/\[[0-9;]*m//g' | sed 's/^/         /'

@@ -1,7 +1,7 @@
 ; This program asks the user for input, then prints whatever they input back to the console again.
 ; It stores the input string in a buffer in the Data Memory.
 
-#Include Libraries/print.asm
+#Include print.asm
 
 #Program
 

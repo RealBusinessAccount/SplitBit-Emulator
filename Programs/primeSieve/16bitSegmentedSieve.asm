@@ -9,7 +9,7 @@
 ;
 ; Output is hexadecimal (0002 through FFFD), separated by spaces.
 
-#Include Libraries/print.asm
+#Include print.asm
 
 #Program
 

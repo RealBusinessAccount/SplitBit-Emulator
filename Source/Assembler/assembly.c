@@ -59,6 +59,8 @@ Instruction instruction_set[] = {
     {0x47, "SETD"},
     {0x48, "DPUP"},
     {0x49, "DPDN"},
+    {0x4A, "LDD"},
+    {0x4B, "STD"},
     // Output Operations:
     {0xD0, "OUTQ"},
     {0xD1, "OUTA"},
@@ -82,10 +84,14 @@ const char* getMnemonic(uint8_t opcode) {
     return "---";
 }
 
-int instructionTakesDataPointer(uint8_t opcode) {
-    // These instructions all work through a Data Pointer, and so are followed by a
-    // byte naming which one. Everything else is a single byte opcode as before.
+int dataPointerOperands(uint8_t opcode) {
+    // How many Data Pointer selector bytes follow this opcode. Most instructions
+    // have none. The ones that work through a pointer have one naming which pointer.
+    // LDD and STD move a pointer through a pointer, so they name two.
     switch (opcode) {
+        case 0x4A: // LDD
+        case 0x4B: // STD
+            return 2;
         case 0x33: // PSHD
         case 0x36: // POPD
         case 0x40: // INCD

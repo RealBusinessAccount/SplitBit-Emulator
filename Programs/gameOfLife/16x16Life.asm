@@ -8,7 +8,7 @@
 ; The initial pattern is a glider. ANSI terminal control codes redraw the field
 ; in place. Press Ctrl-C to stop the emulator.
 
-#Include Libraries/print.asm
+#Include print.asm
 
 #Program
 

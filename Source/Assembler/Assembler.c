@@ -8,6 +8,8 @@
 #include <stdint.h>
 #include <string.h>
 #include <libgen.h>
+#include <unistd.h>
+#include <getopt.h>
 #include "Assm-util.h"
 #include "firstPass.h"
 #include "secondPass.h"
@@ -82,11 +84,83 @@ void assemblerCleanup(intermediateElement *intermediateArray, int arraySize, cha
     free(outputFileName);
 }
 
-int main(int argc, char *argv[]) {
-    if (argc < 2) {
-        fprintf(stderr, "Usage: %s <filename>\n", argv[0]);
+void printUsage(const char *programName) {
+    printf("Usage: %s [OPTIONS] <sourcefile>\n", programName);
+    printf("\n");
+    printf("Options:\n");
+    printf("  -o <file>    Write the binary to this path instead of alongside the source.\n");
+    printf("  -I <dir>     Look in this directory for included files. May be given more than once.\n");
+    printf("  -M <file>    Write the source files this binary depends on, as a make rule.\n");
+    printf("  -h, --help   Display this help message.\n");
+}
+
+// Writes a make rule naming every source file that went into the binary, so that a
+// build system knows to reassemble when any of them changes. The empty rules after it
+// are so that deleting a library does not leave make with a prerequisite it cannot
+// build; without them the build stops instead of just reassembling.
+void writeDependencyFile(const char *dependencyPath, const char *outputPath) {
+    FILE *file = fopen(dependencyPath, "w");
+    if (!file) {
+        fprintf(stderr, RED "Error: Could not open file \"%s\" for writing.\n" RESET, dependencyPath);
         exit(1);
     }
+    fprintf(file, "%s:", outputPath);
+    for (int i = 0; i < sourceFileCount(); i++) {
+        fprintf(file, " %s", sourceFile(i));
+    }
+    fprintf(file, "\n\n");
+    // The source itself is index 0, and always exists, so it needs no empty rule.
+    for (int i = 1; i < sourceFileCount(); i++) {
+        fprintf(file, "%s:\n", sourceFile(i));
+    }
+    fclose(file);
+}
+
+int main(int argc, char *argv[]) {
+    static struct option long_options[] = {
+        {"output",  required_argument, 0, 'o'},
+        {"include", required_argument, 0, 'I'},
+        {"depend",  required_argument, 0, 'M'},
+        {"help",    no_argument,       0, 'h'},
+        {0,         0,                 0,  0 }
+        };
+    char *outputFileName = NULL;
+    char *dependencyFileName = NULL;
+    int option_index = 0;
+    int opt;
+
+    while ((opt = getopt_long(argc, argv, "o:I:M:h", long_options, &option_index)) != -1) {
+        switch (opt) {
+            case 'o':
+                outputFileName = strdup(optarg);
+            break;
+            case 'I':
+                addIncludeDirectory(optarg);
+            break;
+            case 'M':
+                dependencyFileName = strdup(optarg);
+            break;
+            case 'h':
+                printUsage(argv[0]);
+                return 0;
+            default:
+                printUsage(argv[0]);
+                return 1;
+        }
+    }
+
+    if (optind >= argc) {
+        fprintf(stderr, RED "Error: No source file specified.\n" RESET);
+        printUsage(argv[0]);
+        return 1;
+    }
+    char *fileName = argv[optind];
+    optind++;
+    if (optind < argc) {
+        fprintf(stderr, RED "Error: Unexpected argument: %s\n" RESET, argv[optind]);
+        return 1;
+    }
+
     // Allocate initial space for the intermediate array.
     size_t arraySize = 1024;
     intermediateElement *intermediateArray = malloc(arraySize * sizeof(intermediateElement));
@@ -95,14 +169,22 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    char *fileName = argv[1];
+    // The file named on the command line is the first source file, and the include
+    // list owns the copy that everything else points at.
+    char *source = recordSourceFile(strdup(fileName));
     int index = 0;
-    loadFile(&intermediateArray, fileName, &index, &arraySize);
+    loadFile(&intermediateArray, source, &index, &arraySize);
     populateLabelTable(intermediateArray, index);
     fillInLabelAddresses(intermediateArray, index);
     populateOutputBuffers(intermediateArray, index, Program, &programLength, Data, &dataLength);
-    char *outputFileName = createOutputFileName(fileName);
+    if (!outputFileName) {
+        outputFileName = createOutputFileName(fileName);
+    }
     writeOutputFile(outputFileName, Program, programLength, Data, dataLength);
+    if (dependencyFileName) {
+        writeDependencyFile(dependencyFileName, outputFileName);
+        free(dependencyFileName);
+    }
     assemblerCleanup(intermediateArray, index, outputFileName);
     return 0;
 }

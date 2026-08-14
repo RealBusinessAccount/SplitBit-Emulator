@@ -11,6 +11,7 @@
 #include <string.h>
 #include <ctype.h>
 #include "Assm-util.h"
+#include "assembly.h"
 
 #define MAX_INCLUDES 128
 
@@ -48,7 +49,7 @@ typedef struct {
     char* fileName;
     int lineNumber;
     uint8_t byteValue;
-    uint8_t dataPointer; // Which Data Pointer this instruction works through, if it works through one.
+    uint8_t dataPointer[MAX_DATA_POINTER_OPERANDS]; // Which Data Pointers this instruction works through, if any.
     int byteLength;
     uint16_t address;
     int type; // "KEYWORD", "INSTRUCTION" , "LABEL" , "VALUE", "STRING"
