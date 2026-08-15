@@ -122,10 +122,49 @@ If a device interrupts and its vector is empty, that is a fault: the machine sto
 
 ## Devices:
 
-| Port | Device |
+| Port | Device | Class |
+| --- | --- | --- |
+| 0x00 | The console. Writing sends a byte to standard output, reading takes one from standard input. | 0x02 |
+| 0x10 | A test device. Writing anything to it puts its own line up, so that interrupt handling can be exercised without waiting on anything. The byte written is ignored. | 0x10 |
+| 0xFF | The bus registry. See Asking What Is There below. | 0x01 |
+
+## Asking What Is There:
+
+A program that only ever runs on one machine can be told where everything is. A program meant to run on more than one has to ask, and the bus registry on port 0xFF is what it asks.
+
+Write a port number to the registry to say which port you are asking about, then read to get that port's record a byte at a time:
+
+| Byte | Meaning |
 | --- | --- |
-| 0x00 | The console. Writing sends a byte to standard output, reading takes one from standard input. |
-| 0x10 | A test device. Writing anything to it puts its own line up, so that interrupt handling can be exercised without waiting on anything. The byte written is ignored. |
+| 0 | The device class. Zero means there is nothing on that port. |
+| 1 | Flags. Bit 0 means the device brings memory of its own. |
+
+Reading past the end of a record gives zero, so a record can grow later without anything already written having to change. Selecting a port starts its record again from the beginning.
+
+```
+  INIA 0x03
+  OUTA 0xFF         ; Ask about port 3.
+  INA 0xFF          ; A is now the class of whatever is on port 3.
+```
+
+The registry answers on the device's behalf and never touches it. That is the reason it exists rather than programs simply reading each port to see what answers: reading a port is a real operation with real consequences, and reading the console to find out what it is would take a character off standard input and then wait for one that may never come.
+
+The registry is read only. A program cannot tell it that a device exists, because saying so would not make one exist, and once a program could write to it nothing reading it could tell what is really there from what has merely been claimed. Which routine handles a device is a separate question, and the vector table already answers it: installing a driver for the device on port 3 means writing hardware vector 3.
+
+Absence describes itself. Reading a port with nothing on it gives zero, so class zero means nothing is there. A machine with no registry at all answers zero when asked about port 0xFF, which correctly says that it cannot be enumerated. A program finds out whether it can ask by asking.
+
+One thing to be careful of: the registry remembers which port it was asked about, so an interrupt handler that enumerates in the middle of an enumeration will lose the caller's place. Enumerate with the Interrupt Flag down, or do it before any device is enabled.
+
+### Device Classes:
+
+| Class | Device |
+| --- | --- |
+| 0x00 | Nothing. |
+| 0x01 | Bus registry. |
+| 0x02 | Console. |
+| 0x03 - 0x0F | Reserved for the machine itself. |
+| 0x10 | Test device. |
+| 0x11 - 0xFF | Peripherals. |
 
 ## Faults:
 

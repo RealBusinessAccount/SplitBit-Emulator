@@ -9,6 +9,36 @@
 #include <stdint.h>
 #include "cpu.h"
 
+// ---- Ports ----
+//
+// Which port a device answers on is a property of the machine rather than of any
+// program, so the numbers live here and everything else refers to them by name.
+
+#define PORT_CONSOLE  0x00
+#define PORT_TEST     0x10
+#define PORT_REGISTRY 0xFF
+
+// ---- Device classes ----
+//
+// What kind of thing is plugged into a port. Class 0 is not a device: reading an
+// unimplemented port already gives zero, so "nothing there" needs no special case and a
+// machine with no registry at all answers correctly by doing nothing.
+//
+// Classes 0x01 to 0x0F belong to the machine itself. Peripherals start at 0x10.
+
+#define DEVICE_NONE     0x00
+#define DEVICE_REGISTRY 0x01
+#define DEVICE_CONSOLE  0x02
+#define DEVICE_TEST     0x10
+
+// What a device brings besides itself. The memory controller will want the first of
+// these to find out which ports own memory it can reach.
+#define DEVICE_FLAG_HAS_MEMORY 0x01
+
+// How many bytes a device's entry in the registry runs to. Reading past the end gives
+// zero, so the record can grow later without anything already written having to change.
+#define DEVICE_RECORD_BYTES 2
+
 uint8_t OutputHandler(uint8_t DataByte, uint8_t Address);
 
 uint8_t InputHandler(uint8_t Address);

@@ -46,6 +46,9 @@ dispatchTest         | testPrograms/dispatchTest.asm      | run      | -        
 # ---- Moving an ALU result back into an operand register ----
 moveQTest            | testPrograms/moveQTest.asm         | run      | -                  | -
 
+# ---- Asking the machine what it is made of ----
+registryTest         | testPrograms/registryTest.asm      | run      | -                  | -
+
 # ---- Moving the cursor along ----
 paddingTest          | testPrograms/paddingTest.asm       | run      | -                  | -
 
