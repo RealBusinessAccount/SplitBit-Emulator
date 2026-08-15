@@ -22,6 +22,7 @@ cd SplitBit-Emulator
 ```
 make
 ```
+The sources are ISO C, and build clean under -std=c11 -pedantic with -Wall -Wextra. Beyond ISO C they need POSIX.1-2008, which the makefile asks for by name, and getopt_long for the long form of the command line options.
 3) Assemble a program:
 ```
 ./Assembler Programs/hello.asm
@@ -37,10 +38,13 @@ make
 ./SplitBit [options] [binary file]
 ```
 #### Options:
-- -d, --debug: Enable debug mode to single step through cycles. Each keypress advances one instruction.
+- -d, --debug: Enable debug mode to single step through cycles. Each key press advances one instruction.
 - -c, --cycles N: Stop after N cycles rather than running until the program halts. Useful for programs that never halt, and for getting the same output from a run every time.
 - -f, --fast: Run as fast as the host machine allows, ignoring the emulated cycle rate.
 - -h, --help: Show help and usage information.
+
+#### Notes:
+- If the CPU reads a byte that is not an instruction, it goes to the fault handler the program installed. If it installed none, it raises the Fault Flag and halts, and the emulator reports the byte and the address it was found at and exits with a non zero status. The same happens if a program or a device asks for a handler that was never installed.
 
 ### Usage:
 ```
@@ -87,6 +91,12 @@ Programs are built inside Tests/build, so running the suite never overwrites the
 ```
 ./Tests/run.sh hello 8bitFibonacci
 ```
+
+To rebuild both tools with the address and undefined behaviour sanitizers and run the suite under them:
+```
+make sanitize
+```
+This catches reads and writes past the end of an array, use after free, leaks, and undefined arithmetic. It also fills fresh allocations with a junk pattern, which turns a read of uninitialised memory from something that quietly works into something the tests notice. It takes about twice as long as make test, and puts the ordinary binaries back when it finishes.
 
 ### Additional Info:
 For more information on the custom ISA and programming for SplitBit, see the Programming Manual and Assembler Manual.

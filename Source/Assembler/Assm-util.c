@@ -32,6 +32,19 @@ int checkIfKeyword(intermediateElement *currentElement) {
         } else if (strcmp(currentElement->token, "#Data") == 0) {
             // Same as for #Program, but mark for inclusion in the Data Segment.
             return KEYWORD_DATA;
+        } else if (strcmp(currentElement->token, "#Align") == 0) {
+            // Puts down as many zero bytes as it takes to reach the next multiple of
+            // the number that follows. The file that needs the boundary is then the
+            // file that asks for it, rather than relying on whatever came before.
+            return KEYWORD_ALIGN;
+        } else if (strcmp(currentElement->token, "#Reserve") == 0) {
+            // Puts down the number of zero bytes that follows, so that a label can
+            // stand for a region rather than just its first byte.
+            return KEYWORD_RESERVE;
+        } else if (strcmp(currentElement->token, "#Vectors") == 0) {
+            // Names which handler belongs to which vector. Nothing here is assembled
+            // into either segment; it is worked out and written into the vector table.
+            return KEYWORD_VECTORS;
         } else {
             // It's a malformed keyword.
             fprintf(stderr, RED "Error: Invalid Keyword \"%s\" in file \"%s\" at line number %d.\n" RESET, currentElement->token, currentElement->fileName, currentElement->lineNumber);
@@ -159,6 +172,44 @@ int checkIfLiteralValue(intermediateElement *currentElement) {
     return 1;
 }
 
+uint16_t readCount(intermediateElement *currentElement, const char *what) {
+    const char *token = currentElement->token;
+    int base;
+    const char *baseName;
+    if (token[0] != '0' || (token[1] != 'x' && token[1] != 'd')) {
+        fprintf(stderr, RED "Error: %s needs a number, prefaced with 0x or 0d. Found \"%s\".\n" RESET, what, token);
+        printf(" File: %s at line %d.\n", currentElement->fileName, currentElement->lineNumber);
+        exit(1);
+    }
+    if (token[1] == 'x') {
+        base = 16;
+        baseName = "hexadecimal";
+    } else {
+        base = 10;
+        baseName = "decimal";
+    }
+    const char *digits = token + 2;
+    if (*digits == '\0') {
+        fprintf(stderr, RED "Error: %s was given \"%s\", which has no digits after its prefix.\n" RESET, what, token);
+        printf(" File: %s at line %d.\n", currentElement->fileName, currentElement->lineNumber);
+        exit(1);
+    }
+    for (const char *c = digits; *c; c++) {
+        if (!(base == 16 ? isxdigit((unsigned char)*c) : isdigit((unsigned char)*c))) {
+            fprintf(stderr, RED "Error: \"%c\" is not a %s digit, in \"%s\".\n" RESET, *c, baseName, token);
+            printf(" File: %s at line %d.\n", currentElement->fileName, currentElement->lineNumber);
+            exit(1);
+        }
+    }
+    long value = strtol(digits, NULL, base);
+    if (value < 1 || value > 0xFFFF) {
+        fprintf(stderr, RED "Error: %s was given \"%s\". It has to be at least 1 and no more than 0xFFFF.\n" RESET, what, token);
+        printf(" File: %s at line %d.\n", currentElement->fileName, currentElement->lineNumber);
+        exit(1);
+    }
+    return (uint16_t)value;
+}
+
 int checkIfLabel(intermediateElement *currentElement) {
     char *token = currentElement->token;
     int length = strlen(token);
@@ -207,7 +258,7 @@ int readToken(intermediateElement *currentElement, FILE *file, int *lineNumber) 
     // Step 3: Handle string literals
     if (c == '"') {
         while ((c = fgetc(file)) != EOF && c != '"') {
-            if (i < sizeof(buffer) - 1) {
+            if (i < (int)(sizeof(buffer) - 1)) {
                 buffer[i++] = c;
             } else {
                 fprintf(stderr, "Error: String literal too long.\n");
@@ -228,7 +279,7 @@ int readToken(intermediateElement *currentElement, FILE *file, int *lineNumber) 
     // Step 4: Handle non-string tokens
     ungetc(c, file);  // Put the first character back
     while ((c = fgetc(file)) != EOF && !isspace(c) && c != ';') {
-        if (i < sizeof(buffer) - 1) {
+        if (i < (int)(sizeof(buffer) - 1)) {
             buffer[i++] = c;
         } else {
             fprintf(stderr, "Error: Token too long.\n");

@@ -28,7 +28,10 @@ Instruction instruction_set[] = {
     {0x12, "BRA"},
     {0x13, "BRB"},
     {0x14, "BRC"},
+    {0x15, "BRD"},
     {0x17, "CALL"},
+    {0x18, "SWI"},
+    {0x19, "RETI"},
     {0x1F, "RET"},
     // Register Operations:
     {0x20, "RSTA"},
@@ -40,6 +43,10 @@ Instruction instruction_set[] = {
     {0x26, "INIA"},
     {0x27, "INIB"},
     {0x28, "CCF"},
+    {0x29, "MVQA"},
+    {0x2A, "MVQB"},
+    {0x2B, "SIF"},
+    {0x2C, "CIF"},
     // Stack Operations:
     {0x30, "PSHQ"},
     {0x31, "PSHA"},
@@ -61,6 +68,7 @@ Instruction instruction_set[] = {
     {0x49, "DPDN"},
     {0x4A, "LDD"},
     {0x4B, "STD"},
+    {0x4C, "MVSD"},
     // Output Operations:
     {0xD0, "OUTQ"},
     {0xD1, "OUTA"},
@@ -92,6 +100,7 @@ int dataPointerOperands(uint8_t opcode) {
         case 0x4A: // LDD
         case 0x4B: // STD
             return 2;
+        case 0x15: // BRD
         case 0x33: // PSHD
         case 0x36: // POPD
         case 0x40: // INCD
@@ -104,6 +113,7 @@ int dataPointerOperands(uint8_t opcode) {
         case 0x47: // SETD
         case 0x48: // DPUP
         case 0x49: // DPDN
+        case 0x4C: // MVSD
             return 1;
         default:
             return 0;

@@ -28,7 +28,9 @@ PROGRAMS = \
 	Fibonacci/32bitFibonacci.asm \
 	primeSieve/8bitSieve.asm \
 	primeSieve/16bitSegmentedSieve.asm \
-	gameOfLife/16x16Life.asm
+	primeSieve/16bitSegmentedSieveModern.asm \
+	gameOfLife/16x16Life.asm \
+	gameOfLife/16x16LifeModern.asm
 
 BINARIES = $(PROGRAMS:%.asm=$(BUILD)/%.bin)
 DEPENDENCIES = $(BINARIES:.bin=.d)

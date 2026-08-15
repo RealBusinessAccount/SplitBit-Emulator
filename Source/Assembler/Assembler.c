@@ -80,6 +80,9 @@ void assemblerCleanup(intermediateElement *intermediateArray, int arraySize, cha
     // Free the list of labels.
     freeLabelList();
 
+    // Free the list of vectors.
+    freeVectorList();
+
     // Free the output file name
     free(outputFileName);
 }
@@ -161,9 +164,11 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Allocate initial space for the intermediate array.
+    // Allocate initial space for the intermediate array. calloc rather than malloc,
+    // because not every element sets every one of its own fields, and a stray
+    // byteLength would quietly shift every address that follows it.
     size_t arraySize = 1024;
-    intermediateElement *intermediateArray = malloc(arraySize * sizeof(intermediateElement));
+    intermediateElement *intermediateArray = calloc(arraySize, sizeof(intermediateElement));
     if (!intermediateArray) {
         fprintf(stderr, RED "Error: Memory allocation failed.\n" RESET);
         exit(1);
@@ -176,6 +181,10 @@ int main(int argc, char *argv[]) {
     loadFile(&intermediateArray, source, &index, &arraySize);
     populateLabelTable(intermediateArray, index);
     fillInLabelAddresses(intermediateArray, index);
+    // Vectors come after the labels, because a handler is named by its label, and before
+    // the buffers are filled, because SWI needs the number its vector was given.
+    populateVectorTable(intermediateArray, index);
+    fillInVectorReferences(intermediateArray, index);
     populateOutputBuffers(intermediateArray, index, Program, &programLength, Data, &dataLength);
     if (!outputFileName) {
         outputFileName = createOutputFileName(fileName);

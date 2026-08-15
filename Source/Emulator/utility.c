@@ -68,11 +68,31 @@ uint8_t parseOptions(int argc, char *argv[], EmulatorOptions *options) {
     return OPTIONS_OK;
 }
 
+// Writes a byte out as eight binary digits, most significant first. printf's %b is
+// a recent addition to C and not available everywhere, so this does it by hand.
+// The buffer must have room for nine characters.
+static void formatBinary(uint8_t value, char *out) {
+    for (int i = 0; i < 8; i++) {
+        out[i] = (value & (0x80 >> i)) ? '1' : '0';
+    }
+    out[8] = '\0';
+}
+
 void printRegisters(CPURegisters *cpu, uint8_t *Program, uint8_t *Data) {
+    char status[9];
+    formatBinary(cpu->Status, status);
     printf("***** CPU Registers *****\n");
-    printf("A: 0x%02X\tB: 0x%02X\tQ: 0x%02X\tStatus: 0b%08b\n", cpu->A, cpu->B, cpu->Q, cpu->Status);
+    printf("A: 0x%02X\tB: 0x%02X\tQ: 0x%02X\tStatus: 0b%s\n", cpu->A, cpu->B, cpu->Q, status);
     printf("Program Counter: 0x%04X     Current Instruction: 0x%02X (%s)\n", cpu->ProgramCounter, Program[cpu->ProgramCounter],getMnemonic(Program[cpu->ProgramCounter]));
-    printf("   Data Pointer: 0x%04X      Current Data Value: 0x%02X\n", cpu->DataPointer[0], Data[cpu->DataPointer[0]]);
-    printf("  Stack Pointer: 0x%04X           Current Value: (0x%02X) (0x%02X)\n", cpu->StackPointer, Data[cpu->StackPointer+1], Data[cpu->StackPointer+2]);
+    for (int i = 0; i < DATA_POINTERS; i++) {
+        printf(" Data Pointer %d: 0x%04X      Current Data Value: 0x%02X%s\n",
+               i, cpu->DataPointer[i], Data[cpu->DataPointer[i]],
+               i >= PRESERVED_DATA_POINTERS ? "   (volatile)" : "");
+    }
+    // The two casts keep these inside Data Memory. The Stack Pointer starts at the
+    // very top, so without them the display would read off the end of the array
+    // before a single byte has been pushed.
+    printf("  Stack Pointer: 0x%04X           Current Value: (0x%02X) (0x%02X)\n", cpu->StackPointer,
+           Data[(uint16_t)(cpu->StackPointer + 1)], Data[(uint16_t)(cpu->StackPointer + 2)]);
 }
 

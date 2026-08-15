@@ -164,13 +164,22 @@ int loadFile(intermediateElement **intermediateArray, char *fileName, int *inter
     }
     // Read off tokens.
     while (readToken(&(*intermediateArray)[*intermediateIndex], file, &lineNumber)) {
-        if (*intermediateIndex >= *arraySize - 1) {
-            *arraySize *= 2;  // Double the size of the array
-            *intermediateArray = realloc(*intermediateArray, *arraySize * sizeof(intermediateElement));
-            if (!intermediateArray) {
+        if ((size_t)*intermediateIndex >= *arraySize - 1) {
+            size_t grownSize = *arraySize * 2;  // Double the size of the array.
+            // Into a temporary, so that the old allocation is still ours to free if
+            // this fails, rather than being lost the moment realloc returns NULL.
+            intermediateElement *grown = realloc(*intermediateArray, grownSize * sizeof(intermediateElement));
+            if (!grown) {
                 fprintf(stderr, RED "Error: Memory reallocation failed.\n" RESET);
                 exit(1);
             }
+            // New elements have to start blank. realloc leaves the new space holding
+            // whatever the heap had in it before, and an element that never sets its
+            // own byteLength, such as a keyword or a label definition, would then add
+            // rubbish to the running address and move everything after it.
+            memset(grown + *arraySize, 0, (grownSize - *arraySize) * sizeof(intermediateElement));
+            *intermediateArray = grown;
+            *arraySize = grownSize;
         }
         //printf("Token number %d\n", intermediateIndex);
         // Go ahead and mark what we already know about this token.
@@ -185,13 +194,24 @@ int loadFile(intermediateElement **intermediateArray, char *fileName, int *inter
                     status = NOWHERE;
                     // Get the filename and work out where it actually is.
                     (*intermediateIndex)++;
-                    readToken(&(*intermediateArray)[*intermediateIndex], file, &lineNumber);
+                    if (!readToken(&(*intermediateArray)[*intermediateIndex], file, &lineNumber)) {
+                        // The file ended straight after the keyword, so there is no
+                        // name to read and nothing sensible to go looking for.
+                        fprintf(stderr, RED "Error: #Include without a file name.\n" RESET);
+                        printf(" File: %s at line %d.\n", fileName, lineNumber);
+                        exit(1);
+                    }
                     char *requested = (*intermediateArray)[*intermediateIndex].token;
                     char *resolved = resolveInclude(fileName, requested);
                     if (!resolved) {
                         reportMissingInclude(fileName, requested, lineNumber);
                         exit(1);
                     }
+                    // The included file's first token is about to be read into this
+                    // same slot, so let the file name go now. Leaving it would strand
+                    // the only pointer to it the moment it is overwritten.
+                    free((*intermediateArray)[*intermediateIndex].token);
+                    (*intermediateArray)[*intermediateIndex].token = NULL;
                     // recordSourceFile takes the path, and hands back NULL if this file
                     // has already been assembled. Including it twice is harmless, which
                     // is what lets two libraries depend on a third.
@@ -208,6 +228,56 @@ int loadFile(intermediateElement **intermediateArray, char *fileName, int *inter
                 case KEYWORD_DATA:
                     // Set the state to DATA so we mark additional tokens for inclusion into Data Memory.
                     status = DATA;
+                break;
+                case KEYWORD_ALIGN:
+                case KEYWORD_RESERVE: {
+                    // Both take a count, and both only make sense somewhere that has a
+                    // cursor to move along.
+                    const char *what = (testValue == KEYWORD_ALIGN) ? "#Align" : "#Reserve";
+                    if (status != PROGRAM && status != DATA) {
+                        fprintf(stderr, RED "Error: %s outside the Program or Data Segment.\n There is nothing there for it to move along.\n" RESET, what);
+                        printf(" File: %s at line %d.\n", fileName, lineNumber);
+                        exit(1);
+                    }
+                    // The count is read here rather than being left to the literal check,
+                    // because it is an instruction to the assembler and never becomes a
+                    // byte, so a byte's range would be the wrong limit for it. A page
+                    // alignment needs 256, and a reservation is often far larger.
+                    intermediateElement *directive = &(*intermediateArray)[*intermediateIndex];
+                    (*intermediateIndex)++;
+                    if (!readToken(&(*intermediateArray)[*intermediateIndex], file, &lineNumber)) {
+                        fprintf(stderr, RED "Error: %s without a number.\n" RESET, what);
+                        printf(" File: %s at line %d.\n", fileName, lineNumber);
+                        exit(1);
+                    }
+                    (*intermediateArray)[*intermediateIndex].fileName = fileName;
+                    (*intermediateArray)[*intermediateIndex].lineNumber = lineNumber;
+                    uint16_t count = readCount(&(*intermediateArray)[*intermediateIndex], what);
+
+                    // The count token itself contributes nothing; the directive carries
+                    // everything, so that one element stands for one run of zeroes.
+                    (*intermediateArray)[*intermediateIndex].type = KEYWORD;
+                    (*intermediateArray)[*intermediateIndex].byteLength = 0;
+                    (*intermediateArray)[*intermediateIndex].destination = NOWHERE;
+
+                    directive->destination = status;
+                    if (testValue == KEYWORD_ALIGN) {
+                        // How many zeroes this comes to depends on where the cursor has
+                        // reached, which is not known until the second pass walks it.
+                        directive->type = ALIGNMENT;
+                        directive->address = count;
+                        directive->byteLength = 0;
+                    } else {
+                        directive->type = PADDING;
+                        directive->byteLength = count;
+                    }
+                    (*intermediateIndex)++;
+                    continue;
+                }
+                case KEYWORD_VECTORS:
+                    // Set the state to VECTORS. Tokens from here on name handlers rather
+                    // than becoming bytes, and the second pass reads them.
+                    status = VECTORS;
                 break;
             }
         // Next, check to see if it's an instruction.
@@ -234,6 +304,18 @@ int loadFile(intermediateElement **intermediateArray, char *fileName, int *inter
                     fprintf(stderr, RED "Error: Attempting to create or use a label nowhere!\n Did you forget to use the #Program or #Data keyword?\n" RESET);
                     printf(" File: %s at line %d.\n", fileName, lineNumber);
                     exit(1);
+                }
+                // A name written after SWI is a vector rather than an address, so it
+                // stands for one byte instead of two. This is settled by what the name
+                // follows, so that it does not depend on the Vector Segment having been
+                // read first, which it may not have been: it can live in another file.
+                if (status == PROGRAM
+                    && (*intermediateArray)[*intermediateIndex].type == LABEL
+                    && *intermediateIndex > 0
+                    && (*intermediateArray)[*intermediateIndex - 1].type == INSTRUCTION
+                    && (*intermediateArray)[*intermediateIndex - 1].byteValue == 0x18) {
+                    (*intermediateArray)[*intermediateIndex].type = VECTOR_REFERENCE;
+                    (*intermediateArray)[*intermediateIndex].byteLength = 1;
                 }
             }
         }

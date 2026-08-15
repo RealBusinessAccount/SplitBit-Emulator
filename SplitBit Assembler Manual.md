@@ -1,13 +1,16 @@
 # SplitBit Assembler Manual:
 
-SplitBit assembly syntax is similar to many other assembler syntaxes. Whitepsace at the start or end of a line is disregarded by the assembler and may be used to make programs more readable to the programmer. The Instruction Mnemonics are listed in the SplitBit Programming Manual, and the assembler is not case sensitve in regard to the mnemonics.
+SplitBit assembly syntax is similar to many other assembler syntaxes. Whitespace at the start or end of a line is disregarded by the assembler and may be used to make programs more readable to the programmer. The Instruction Mnemonics are listed in the SplitBit Programming Manual, and the assembler is not case sensitive in regard to the mnemonics.
 
 A semicolon, ';', denotes the start of a comment, anything beyond it on a line is disregarded by the assembler.
 
-Special Keywords are denoted with hash marks, '#'. The Keywords are #Include, #Program, and #Data.
+Special Keywords are denoted with hash marks, '#'. The Keywords are #Include, #Program, #Data, #Vectors, #Align, and #Reserve.
+
+The first four say what kind of thing follows them. #Align and #Reserve are instructions to the assembler in the middle of a segment, and are described under Moving The Cursor Along.
 
 SplitBit programs must have a Program Segment. You define the start of a program with the #Program Keyword.
 SplitBit programs may have a Data Segment. You may define the start of the data with the #Data Keyword.
+SplitBit programs may have a Vector Segment. You define it with the #Vectors Keyword. See The Vector Segment below.
 
 ## Literal Values:
 
@@ -15,7 +18,7 @@ Literal values may be defined in a few ways. Numerical values must be within the
 The assembler will accept:
 - Hexadecimal values prefaced with 0x, eg. 0x00, 0x7F.
 - Decimal values prefaced with 0d, eg. 0d0, 0d120, 0d255.
-- Strings enclosed in double qoutes, eg. "a", "Hello, World!", "It is dark, you are likely to be eaten by a grue."
+- Strings enclosed in double quotes, eg. "a", "Hello, World!", "It is dark, you are likely to be eaten by a grue."
 
 Any token beginning with a '0' is read as a numerical literal, so a malformed one is an error rather than something the assembler tries to interpret as a label. This also means a label cannot begin with a '0'.
 
@@ -30,6 +33,8 @@ loopStart:
 
 errorHandler01:
 ```
+
+A name may only be defined once across a program and everything it includes. Defining it twice is an error, because otherwise a reference resolves to whichever definition came first, and a typo or a name that two libraries both happen to use is very hard to track down.
 
 A label may be referenced by name, without the colon, to place its two byte address wherever the reference appears.
 
@@ -78,9 +83,81 @@ Writing a selector on an instruction that does not work through a Data Pointer i
 
 ## Instruction Operands:
 
-Instructions that read operand bytes out of Program Memory must be followed by those operands. The branch instructions and CALL take a label; SETD takes a label or a pair of literal bytes; INIA, INIB, DPUP, DPDN, and the input and output instructions each take a single literal byte.
+Instructions that read operand bytes out of Program Memory must be followed by those operands. The branch instructions and CALL take a label; SETD takes a label or a pair of literal bytes; INIA, INIB, DPUP, DPDN, and the input and output instructions each take a single literal byte; SWI takes the name of a vector, or a literal number.
+
+Leaving an operand off is an error rather than something the assembler works around, because the instruction would otherwise take whatever followed it as the operand and every address after that would shift.
 
 Data Pointer selectors do not count as operands here, because they are written on the mnemonic rather than after it.
+
+## Moving The Cursor Along:
+
+Both segments are written from the beginning, and every label stands for wherever the cursor had reached when the assembler met it. Two directives move that cursor without you having to write zeroes by hand.
+
+`#Align` puts down as many zero bytes as it takes to reach the next multiple of the number that follows it.
+
+```
+#Data
+
+  #Align 0x100
+Segment:              ; Guaranteed to begin at a page boundary.
+```
+
+This matters for code that does address arithmetic on a pointer's low byte and treats the carry out as reaching the end of something. Both prime sieves work that way, and both now ask for the boundary themselves. Before this existed they relied on print.asm padding its data out to a whole page, which worked but put the requirement in a different file from the code that needed it, and quietly charged every other program 253 bytes for it.
+
+`#Reserve` puts down the number of zero bytes that follows it, so that a label can stand for a whole region rather than just its first byte.
+
+```
+#Data
+
+Buffer:
+  #Reserve 0d256      ; Anything after this begins 256 bytes further on.
+Next:
+```
+
+Without it a label like Buffer is one byte as far as the assembler knows, so a later label lands inside the region and the two quietly overlap.
+
+Both take a number written the way literals are, prefaced with 0x or 0d, but the number may go up to 0xFFFF rather than being held to a single byte. Neither number is ever emitted, so a byte's range would be the wrong limit: a page alignment needs 256, and a reservation is often much larger.
+
+Both work in the Program Segment as well as the Data Segment, and both are an error anywhere else, because outside a segment there is no cursor to move.
+
+## The Vector Segment:
+
+A vector says where to go when something happens: the machine starting up, a program asking for a service, a device wanting attention, or the CPU meeting a byte it cannot decode. The Vector Segment says which of your routines belongs to which vector, and the assembler works out the rest.
+
+A program does not need one. Without a Vector Segment a program starts at the beginning and behaves exactly as it always has.
+
+Every line names a vector and then the label of the routine that handles it.
+
+```
+#Vectors
+
+  Boot        realStart
+  BadOpcode   reportFault
+  openFile    openFileHandler
+  Device 0x10 diskReady
+```
+
+Three names already mean something:
+
+| Name | Vector |
+| --- | --- |
+| Boot | Where the machine begins at power on. Without this a program starts at the beginning of its Program Segment. |
+| SoftReset | A warm restart. SWI SoftReset is how a program asks for one. |
+| BadOpcode | The CPU met a byte that is not an instruction. |
+
+Anything else you name is a software interrupt of your own. You do not choose its number and you never write one: the assembler allocates them in the order they appear, starting above the range held back for faults that do not exist yet. That is the same bargain as labels everywhere else in SplitBit assembly, where you name a thing and let the assembler work out where it went.
+
+You then use the name as the operand of SWI:
+
+```
+  SWI openFile
+```
+
+A device is different, because its number is not a choice. A device interrupts on the port it is plugged into, so the Device line says which port rather than giving it a name of its own. The port is a literal value, and the routine after it handles that device.
+
+The assembler will refuse two handlers for the same vector, a name used with SWI that no Vector Segment gives a handler to, and a handler that is not a label.
+
+Vectors 3 through 15 are held back for faults that have not been defined yet. They have no names, so there is currently no way to write a handler for one, and none is needed: each will be given a name of its own as the fault it stands for is defined. Because you never write a vector number, there is no way to land on one of them by accident either.
 
 ## Including Other Files:
 
@@ -141,7 +218,7 @@ Programs/makefile in this repository builds every program that way, if you would
 
 #Program
 
-start:              ; By uninforced convention, Program Labels start with a lowercase letter.
+start:              ; By unenforced convention, Program Labels start with a lowercase letter.
   SETD HelloString  ; Set the Data Pointer to the address of the string.
   CALL printString  ; Call the string printing subroutine.
   HALT              ; End the program.
@@ -158,7 +235,7 @@ printString:        ; Expects Data Pointer to be set to the beginning of the str
 
 #Data
 
-HelloString:  ; By uninforced convention, Data Labels start with a capital letter.
+HelloString:  ; By unenforced convention, Data Labels start with a capital letter.
 "Hello, World!"
 ```
 
@@ -197,3 +274,78 @@ Dest:
 ```
 
 Remember that DP0, DP1 and DP2 survive a CALL, so a loop like this one can call a subroutine in the middle without losing either pointer. DP3 does not survive, which is what makes it the pointer a subroutine uses to hand an address back.
+
+## An Example Using Interrupts:
+
+This program installs three handlers and never writes a vector number. The Boot Vector sends the machine somewhere other than the first byte of the program, a trap the program names for itself is reached with SWI, and the test device on port 0x10 is caught when it asks for attention.
+
+```
+; Interrupt handling from all three directions.
+
+#Program
+
+start:
+  CIF               ; Hold devices off while we set up.
+  SETD.0 Greeting
+  CALL printString
+
+  SWI announce      ; A trap of our own, reached by name.
+
+  INIA 0d1
+  OUTA 0x10         ; Ask the test device for attention. Its line goes up.
+  SIF               ; Let it through. It is answered before the next instruction.
+
+  HALT
+
+; A trap. It is entered with a full frame, so it may use any register it likes
+; without agreeing anything with the code it interrupted.
+announce:
+  SETD.0 Trapped
+  CALL printString
+  RETI
+
+; The device handler. Reached because the device sits on port 0x10.
+deviceReady:
+  SETD.0 Device
+  CALL printString
+  RETI
+
+; The fault handler. It reports and stops, rather than trying to carry on.
+reportFault:
+  SETD.0 Broken
+  CALL printString
+  HALT
+
+printString:        ; Expects DP0 to be set to the beginning of the string.
+  LDA.0
+  BRA printDone
+  OUTA 0x00
+  INCD.0
+  BRI printString
+ printDone:
+  INIA 0x0A
+  OUTA 0x00
+  RET
+
+#Data
+
+Greeting:
+"ready"
+Trapped:
+"trap"
+Device:
+"device"
+Broken:
+"bad opcode"
+
+#Vectors
+
+  Boot          start         ; Begin here rather than at the first byte.
+  BadOpcode     reportFault
+  announce      announce      ; A name of our own. The assembler numbers it.
+  Device 0x10   deviceReady   ; Named by the port, because that is what decides it.
+```
+
+The output is `ready`, `trap`, then `device`.
+
+Note that a vector name and a routine name are kept apart, so naming both `announce` is allowed. If that reads as confusing, name them differently: nothing requires them to match.

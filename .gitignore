@@ -1,5 +1,8 @@
 Tests/build/
+Programs/build/
 Object/
 Assembler
 SplitBit
 CLAUDE.md
+resume
+codexResume.sh

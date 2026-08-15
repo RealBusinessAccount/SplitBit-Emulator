@@ -23,16 +23,31 @@
 #define LABEL_DEFINITION 4
 #define VALUE 5
 #define STRING 6
+// A name from the Vector Segment, used as the operand of SWI. It stands for a vector
+// number rather than an address, so it emits one byte where a label emits two.
+#define VECTOR_REFERENCE 7
+// Zero bytes put down to move the cursor along, from #Reserve. How many is known as
+// soon as it is read.
+#define PADDING 8
+// The same, from #Align, where how many depends on where the cursor has got to. The
+// count is worked out in the second pass and the alignment itself is kept in address.
+#define ALIGNMENT 9
 
 // Keyword values.
 #define KEYWORD_INCLUDE 1
 #define KEYWORD_PROGRAM 2
 #define KEYWORD_DATA 3
+#define KEYWORD_VECTORS 4
+#define KEYWORD_ALIGN 5
+#define KEYWORD_RESERVE 6
 
 // Destination values.
 #define NOWHERE 0
 #define PROGRAM 1
 #define DATA 2
+// The Vector Segment does not become bytes at an address the way the other two do. It
+// says which handler belongs to which vector, and the assembler works out the rest.
+#define VECTORS 3
 
 // For colorful text.
 #define RESET "\x1B[0m"
@@ -65,5 +80,10 @@ int checkIfLiteralValue(intermediateElement *currentElement);
 int checkIfLabel(intermediateElement *currentElement);
 
 int readToken(intermediateElement *currentElement, FILE *file, int *lineNumber);
+
+// Reads a count written the way a literal is, but allowing the full range of an address
+// rather than a single byte. #Align and #Reserve both take one, and neither number is
+// ever emitted as a byte, so there is no reason to hold them to a byte's range.
+uint16_t readCount(intermediateElement *currentElement, const char *what);
 
 #endif

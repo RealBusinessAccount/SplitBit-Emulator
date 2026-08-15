@@ -166,11 +166,18 @@ while IFS='|' read -r name src mode stdin limit; do
             # bounds them by cycle count rather than by wall clock.
             EMUARGS=(--fast)
             [ "$limit" != "-" ] && EMUARGS+=(--cycles "$limit")
-            if ! timeout "$RUN_TIMEOUT" "$EMULATOR" "${EMUARGS[@]}" "$BIN" <"$IN" >"$OUT" 2>&1; then
+            timeout "$RUN_TIMEOUT" "$EMULATOR" "${EMUARGS[@]}" "$BIN" <"$IN" >"$OUT" 2>&1
+            STATUS=$?
+            if [ "$STATUS" -eq 124 ]; then
                 FAIL=$((FAIL + 1)); FAILED_NAMES+=("$name")
                 report "FAIL" "$name" "did not finish within ${RUN_TIMEOUT}s"
                 continue
             fi
+            # What a program exits with is part of what it does, so it is recorded
+            # with the output rather than thrown away. A program that faults is
+            # supposed to exit non zero, and that should be just as pinned down as
+            # what it printed.
+            printf '[exit %d]\n' "$STATUS" >> "$OUT"
             check "$name" "$OUT"
             ;;
         *)

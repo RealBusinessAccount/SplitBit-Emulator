@@ -5,15 +5,78 @@
 
 #include "cpu.h"
 #include "io.h"
+#include "../Assembler/assembly.h" // For the vector table layout, which both tools share.
 
 uint16_t shiftRegister;
+
+// Reads one entry out of a vector table. Most significant byte first, matching the
+// branch instructions and the binary format.
+static uint16_t readVector(const uint8_t *programMemory, uint16_t base, uint8_t index) {
+    uint16_t address = base + (uint16_t)index * VECTOR_ENTRY_BYTES;
+    return ((uint16_t)programMemory[address] << 8) | (uint16_t)programMemory[address + 1];
+}
+
+// Builds an interrupt frame and dispatches through a vector. The resume address is the
+// address execution should carry on from once the handler returns, and it goes into the
+// frame as a real address so that a handler can read it and make sense of it.
+//
+// Returns 0 if it dispatched. If the vector is empty there is nothing to dispatch to, so
+// it raises a fault and returns 1 rather than jumping to the bottom of Program Memory
+// and running whatever happens to be there.
+//
+// Note that a zero entry means "no handler" to everything that dispatches, including the
+// two entries the CPU treats as start addresses when it reads them at reset. The
+// exemption belongs to that one read, not to the entries themselves.
+static uint8_t enterInterrupt(CPURegisters *cpu, uint16_t base, uint8_t index, uint16_t resumeAddress) {
+    uint16_t handler = readVector(cpu->Program, base, index);
+    if (handler == 0x0000) {
+        cpu->Fault = FAULT_NO_HANDLER;
+        cpu->FaultVector = index;
+        cpu->Status |= STATUS_FAULT;
+        cpu->Status |= STATUS_HALT;
+        return 1;
+    }
+    // Order mirrors genericCall exactly: low byte then high byte, lowest numbered Data
+    // Pointer first, so that anything walking the Stack sees a familiar shape.
+    cpu->Data[cpu->StackPointer] = resumeAddress & 0xFF;
+    cpu->StackPointer--;
+    cpu->Data[cpu->StackPointer] = (resumeAddress >> 8) & 0xFF;
+    cpu->StackPointer--;
+    for (int i = 0; i < DATA_POINTERS; i++) {
+        cpu->Data[cpu->StackPointer] = cpu->DataPointer[i] & 0xFF;
+        cpu->StackPointer--;
+        cpu->Data[cpu->StackPointer] = (cpu->DataPointer[i] >> 8) & 0xFF;
+        cpu->StackPointer--;
+    }
+    cpu->Data[cpu->StackPointer] = cpu->B;
+    cpu->StackPointer--;
+    cpu->Data[cpu->StackPointer] = cpu->A;
+    cpu->StackPointer--;
+    cpu->Data[cpu->StackPointer] = cpu->Q;
+    cpu->StackPointer--;
+    cpu->Data[cpu->StackPointer] = cpu->Status;
+    cpu->StackPointer--;
+    // A handler runs with hardware interrupts held off unless it says otherwise, so an
+    // interrupt cannot arrive inside the handler for another one and grow the Stack
+    // without bound. The old setting rode into the frame inside the Status register, so
+    // RETI puts it back without anything having to remember it separately.
+    cpu->Status &= ~STATUS_INTERRUPT;
+    // The Program Counter is stepped after every instruction, so land one short of the
+    // handler and let that step land on its first byte. genericBranch does the same.
+    cpu->ProgramCounter = handler - 1;
+    return 0;
+}
 
 void initializeCPU(CPURegisters *cpu, uint8_t *programMemory, uint8_t *dataMemory) {
     cpu->A = 0;
     cpu->B = 0;
     cpu->Q = 0;
     cpu->Status = 0;
-    cpu->ProgramCounter = 0x0000;
+    // Execution begins wherever the boot vector points. It is a start address rather
+    // than a handler, so a zero there is not "nothing installed" but the address
+    // 0x0000, which is where a program carrying no vector table of its own begins.
+    // That is what lets everything written before the table existed still run.
+    cpu->ProgramCounter = readVector(programMemory, SOFTWARE_VECTOR_BASE, VECTOR_BOOT);
     // Every Data Pointer starts at the bottom of Data Memory.
     for (int i = 0; i < DATA_POINTERS; i++) {
         cpu->DataPointer[i] = 0x0000;
@@ -21,6 +84,8 @@ void initializeCPU(CPURegisters *cpu, uint8_t *programMemory, uint8_t *dataMemor
     cpu->StackPointer = 0xFFFF;
     cpu->Program = programMemory;
     cpu->Data = dataMemory;
+    cpu->Fault = FAULT_NONE;
+    cpu->FaultVector = 0;
 }
 
 void genericBranch(CPURegisters *cpu){
@@ -70,25 +135,29 @@ uint16_t *selectDataPointer(CPURegisters *cpu) {
 }
 
 uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
+    // ADD and SUB share this. It is declared here rather than after a case label
+    // because a label may only be followed by a statement in ISO C, and a
+    // declaration is not one.
+    uint16_t result;
     switch(Instruction) {
         // 0x - Arithmetic and Logic Operations.
         case 0x00:
             // ADD - A + B + Carry -> Q
-            uint16_t result = (uint16_t)cpu->A + (uint16_t)cpu->B + (cpu->Status & 0x01);
+            result = (uint16_t)cpu->A + (uint16_t)cpu->B + (cpu->Status & STATUS_CARRY);
             if (result > 255) {
-                cpu->Status |= 0x01;
+                cpu->Status |= STATUS_CARRY;
             } else {
-                cpu->Status &= ~0x01;
+                cpu->Status &= ~STATUS_CARRY;
             }
             cpu->Q = result & 0xFF;
         break;
         case 0x01:
             // SUB - A - B - Carry -> Q
-            result = (uint16_t)cpu->A - (uint16_t)cpu->B - (cpu->Status & 0x01);
+            result = (uint16_t)cpu->A - (uint16_t)cpu->B - (cpu->Status & STATUS_CARRY);
             if (result > 255) {
-                cpu->Status |= 0x01;
+                cpu->Status |= STATUS_CARRY;
             } else {
-                cpu->Status &= ~0x01;
+                cpu->Status &= ~STATUS_CARRY;
             }
             cpu->Q = result & 0xFF;
         break;
@@ -162,16 +231,68 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
         break;
         case 0x14:
             // BRC - Do an immediate branch if the Carry Flag is set.
-            if (cpu->Status & 0x01) {
+            if (cpu->Status & STATUS_CARRY) {
                 genericBranch(cpu);
             } else {
                 cpu->ProgramCounter+=2;
             }
         break;
+        case 0x15: {
+            // BRD - Branch to the address held in a Data Pointer.
+            // This is the only branch whose destination is not written into the
+            // program, which is what makes a table of addresses something a program
+            // can dispatch through rather than only read.
+            uint16_t destination = *selectDataPointer(cpu);
+            // stepCPU adds one after every instruction, so aim one short.
+            cpu->ProgramCounter = destination - 1;
+        }
+        break;
         case 0x17:
             // CALL - Push the Program Counter to the Stack, and perform an immediate branch.
             genericCall(cpu);
         break;
+        case 0x18: {
+            // SWI - Software Interrupt. The byte after the opcode names the vector.
+            // Never masked: this is an instruction the program deliberately ran, not
+            // something a device asked for.
+            uint16_t site = cpu->ProgramCounter;
+            cpu->ProgramCounter++;
+            uint8_t vector = cpu->Program[cpu->ProgramCounter];
+            // Execution resumes after the operand, which the Program Counter is sitting
+            // on, so the resume address is one further on than that.
+            if (enterInterrupt(cpu, SOFTWARE_VECTOR_BASE, vector, cpu->ProgramCounter + 1)) {
+                // No handler. Leave the Program Counter on the SWI itself rather than
+                // its operand, so the report names the instruction that failed.
+                cpu->ProgramCounter = site - 1;
+            }
+        } break;
+        case 0x19: {
+            // RETI - Return from an interrupt. Pops the frame in the exact reverse of
+            // the order enterInterrupt pushed it.
+            cpu->StackPointer++;
+            cpu->Status = cpu->Data[cpu->StackPointer];
+            cpu->StackPointer++;
+            cpu->Q = cpu->Data[cpu->StackPointer];
+            cpu->StackPointer++;
+            cpu->A = cpu->Data[cpu->StackPointer];
+            cpu->StackPointer++;
+            cpu->B = cpu->Data[cpu->StackPointer];
+            for (int i = DATA_POINTERS - 1; i >= 0; i--) {
+                cpu->StackPointer++;
+                cpu->DataPointer[i] = (uint16_t)cpu->Data[cpu->StackPointer] << 8;
+                cpu->StackPointer++;
+                cpu->DataPointer[i] |= (uint16_t)cpu->Data[cpu->StackPointer];
+            }
+            uint16_t resumeAddress;
+            cpu->StackPointer++;
+            resumeAddress = (uint16_t)cpu->Data[cpu->StackPointer] << 8;
+            cpu->StackPointer++;
+            resumeAddress = resumeAddress | (uint16_t)cpu->Data[cpu->StackPointer];
+            // The frame holds the address to carry on from. The Program Counter is
+            // stepped after every instruction, so land one short of it. RET does the
+            // same job with its +2, for the same reason.
+            cpu->ProgramCounter = resumeAddress - 1;
+        } break;
         case 0x1F:
             // RET - Return from subroutine, restore the registers and set the Program Counter to the Return Address.
             // Pop A from the Stack.
@@ -213,9 +334,9 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             // INCA - Add 1 to A.
             // Set the Carry Flag if the register overflows.
             if (cpu->A == 0xFF) {
-                cpu->Status |= 0x01;
+                cpu->Status |= STATUS_CARRY;
             } else {
-                cpu->Status &= ~0x01;
+                cpu->Status &= ~STATUS_CARRY;
             }
             cpu->A++;
         break;
@@ -223,9 +344,9 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             // INCB - Add 1 to B.
             // Set the Carry Flag if the register overflows.
             if (cpu->B == 0xFF) {
-                cpu->Status |= 0x01;
+                cpu->Status |= STATUS_CARRY;
             } else {
-                cpu->Status &= ~0x01;
+                cpu->Status &= ~STATUS_CARRY;
             }
             cpu->B++;
         break;
@@ -233,9 +354,9 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             // DECA - Subtract 1 from A.
             // Set the Carry Flag if the register underflows.
             if (cpu->A == 0x00) {
-                cpu->Status |= 0x01;
+                cpu->Status |= STATUS_CARRY;
             } else {
-                cpu->Status &= ~0x01;
+                cpu->Status &= ~STATUS_CARRY;
             }
             cpu->A--;
         break;
@@ -243,9 +364,9 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             // DECB - Subtract 1 from B.
             // Set the Carry Flag if the register underflows.
             if (cpu->B == 0x00) {
-                cpu->Status |= 0x01;
+                cpu->Status |= STATUS_CARRY;
             } else {
-                cpu->Status &= ~0x01;
+                cpu->Status &= ~STATUS_CARRY;
             }
             cpu->B--;
         break;
@@ -261,7 +382,25 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
         break;
         case 0x28:
             // CCF - Clear the Carry Flag.
-            cpu->Status &= ~0x01;
+            cpu->Status &= ~STATUS_CARRY;
+        break;
+        case 0x29:
+            // MVQA - Copy Q into A.
+            cpu->A = cpu->Q;
+        break;
+        case 0x2A:
+            // MVQB - Copy Q into B.
+            cpu->B = cpu->Q;
+        break;
+        case 0x2B:
+            // SIF - Set the Interrupt Flag, enabling hardware interrupts.
+            cpu->Status |= STATUS_INTERRUPT;
+        break;
+        case 0x2C:
+            // CIF - Clear the Interrupt Flag, disabling hardware interrupts.
+            // Software interrupts and faults are delivered either way, so this
+            // only ever holds off a device.
+            cpu->Status &= ~STATUS_INTERRUPT;
         break;
         //
         // 3x - Stack Operations:
@@ -390,6 +529,18 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             cpu->Data[(uint16_t)(address + 1)] = value & 0xFF;
         }
         break;
+        case 0x4C: {
+            // MVSD - Copy the Stack Pointer into the selected Data Pointer.
+            //
+            // The Stack Pointer still cannot be written, so this does not let a program
+            // move the Stack. It lets a program find it, which is what reading anything
+            // already on the Stack requires. An interrupt handler needs this to reach
+            // its own frame, and so does anything that wants to walk back through the
+            // calls that led to where it is.
+            uint16_t *target = selectDataPointer(cpu);
+            *target = cpu->StackPointer;
+        }
+        break;
         //
         // Dx - Output Operations:
         //
@@ -429,7 +580,7 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
         break;
         case 0xFF:
             // HALT - Set the Halt Bit of the Status Register.
-            cpu->Status |= 0x80;
+            cpu->Status |= STATUS_HALT;
         break;
         default:
             // Unknown Instruction.
@@ -439,9 +590,51 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
 }
 
 void stepCPU(CPURegisters *cpu) {
-    if (!(cpu->Status & 0x80)) {
+    if (!(cpu->Status & STATUS_HALT)) {
+        // A device asking for attention is answered between instructions and never
+        // inside one, so the address that goes into the frame is always the start of an
+        // instruction and RETI always lands somewhere meaningful.
+        //
+        // A line that is up while the Interrupt Flag is clear stays up. Masking holds a
+        // device off; it does not lose what the device was asking for.
+        if (cpu->Status & STATUS_INTERRUPT) {
+            int port = nextPendingInterrupt();
+            if (port >= 0) {
+                clearInterrupt((uint8_t)port);
+                if (enterInterrupt(cpu, HARDWARE_VECTOR_BASE, (uint8_t)port, cpu->ProgramCounter)) {
+                    // The device asked and nobody was listening. enterInterrupt has
+                    // already stopped the machine; correct the cause, because the empty
+                    // entry is in the hardware table rather than the software one.
+                    cpu->Fault = FAULT_NO_DEVICE_HANDLER;
+                    return;
+                }
+                // Entering the handler is what this cycle did, so no instruction runs.
+                // The step puts the Program Counter on the handler's first byte, the
+                // same way it does everywhere else.
+                cpu->ProgramCounter++;
+                return;
+            }
+        }
         // The CPU is not halted, so do a cycle.
-        executeOperation(cpu->Program[cpu->ProgramCounter], cpu);
+        if (executeOperation(cpu->Program[cpu->ProgramCounter], cpu)) {
+            // Nothing decodes that byte. Hand it to the fault vector, which gets the
+            // address of the offending byte itself rather than the one after it, so
+            // that a handler can read the byte that failed and say what it was.
+            //
+            // A handler returning with a bare RETI will therefore meet the same byte
+            // again. That is the documented behaviour: resuming past a fault means
+            // deciding where to resume, which is the handler's business and not the
+            // CPU's guess.
+            uint16_t faultingAddress = cpu->ProgramCounter;
+            if (enterInterrupt(cpu, SOFTWARE_VECTOR_BASE, VECTOR_INVALID_OPCODE, faultingAddress)) {
+                // Nothing is installed, so stop where we are. The Program Counter is
+                // still on the offending byte, which is what the report wants. The
+                // cause is the byte, not the empty vector, so say so.
+                cpu->Fault = FAULT_BAD_OPCODE;
+                return;
+            }
+            // Dispatched. Fall through, so the step below lands on the handler.
+        }
         cpu->ProgramCounter++;
     }
 }

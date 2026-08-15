@@ -99,7 +99,12 @@ int main (int argc, char *argv[]) {
     cycle_timer_init(&timer, CYCLE_RATE);
 
     uint8_t limitReached = 0;
-    while (!(cpu.Status & 0x80) && !limitReached) {
+    while (!(cpu.Status & STATUS_HALT) && !limitReached) {
+        if (options.debug) {
+            // Wait before advancing, not after, so that a keypress is what moves the
+            // machine on rather than something that happens once it already has.
+            getchar();
+        }
         int cycles;
         if (options.debug) {
             // Debug mode advances one instruction per keypress, so the wall clock
@@ -113,7 +118,7 @@ int main (int argc, char *argv[]) {
         for (int i = 0; i < cycles; i++) {
             stepCPU(&cpu);
             cycleCount++;
-            if (cpu.Status & 0x80) {
+            if (cpu.Status & STATUS_HALT) {
                 // We've halted.
                 break;
             }
@@ -123,13 +128,26 @@ int main (int argc, char *argv[]) {
             }
         }
         if (options.debug) {
-            getchar();
             printRegisters(&cpu, Program, Data);
             printf("Cycle: %lu\n", cycleCount);
         }
     }
     if (limitReached) {
         printf("Execution stopped after %lu cycles. (cycle limit reached)\n", cycleCount);
+    } else if (cpu.Status & STATUS_FAULT) {
+        // The Program Counter is still pointing at whatever the CPU could not get past.
+        printf("Execution halted after %lu cycles.\n", cycleCount);
+        if (cpu.Fault == FAULT_NO_HANDLER) {
+            fprintf(stderr, "Fault: Software vector %u, dispatched from Program Address 0x%04X, has no handler installed.\n",
+                    cpu.FaultVector, cpu.ProgramCounter);
+        } else if (cpu.Fault == FAULT_NO_DEVICE_HANDLER) {
+            fprintf(stderr, "Fault: The device on port %u interrupted at Program Address 0x%04X, and hardware vector %u has no handler installed.\n",
+                    cpu.FaultVector, cpu.ProgramCounter, cpu.FaultVector);
+        } else {
+            fprintf(stderr, "Fault: 0x%02X at Program Address 0x%04X is not an instruction.\n",
+                    Program[cpu.ProgramCounter], cpu.ProgramCounter);
+        }
+        return 1;
     } else {
         printf("Execution halted after %lu cycles.\n", cycleCount);
     }

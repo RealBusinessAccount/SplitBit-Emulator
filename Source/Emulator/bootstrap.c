@@ -101,6 +101,49 @@ static uint8_t readSegment(FILE *file, const char *marker, uint8_t *Memory) {
     return loadSegment(file, Memory, length);
 }
 
+// Reads the Vector Segment, which is optional and last. A file that simply ends here
+// was written before vectors existed, and an empty table is exactly right for it: every
+// entry reads as zero, which means no handler, and the boot vector reading zero means
+// the program starts at 0x0000 the way it always did.
+//
+// Each entry says where in Program Memory the vector sits and where its handler is, so
+// installing one is a write straight into the vector table.
+static uint8_t readVectorSegment(FILE *file, uint8_t *Program) {
+    int first = fgetc(file);
+    if (first == EOF) {
+        return 0;
+    }
+    ungetc(first, file);
+
+    char found[SEGMENT_MARKER_LENGTH + 1];
+    if (readMarker(file, "VEC", SEGMENT_MARKER_LENGTH, found)) {
+        fprintf(stderr, "Error: Expected a \"VEC\" segment here, found \"%s\".\n", found);
+        return 1;
+    }
+    uint32_t length;
+    if (readNumber(file, SEGMENT_LENGTH_BYTES, "the vector segment length", &length)) {
+        return 1;
+    }
+    if (length % VECTOR_ENTRY_FILE_BYTES != 0) {
+        fprintf(stderr, "Error: The vector segment is %u bytes, which is not a whole number of vectors.\n", length);
+        return 1;
+    }
+    for (uint32_t i = 0; i < length / VECTOR_ENTRY_FILE_BYTES; i++) {
+        uint32_t slot, handler;
+        if (readNumber(file, 2, "a vector address", &slot)
+         || readNumber(file, 2, "a handler address", &handler)) {
+            return 1;
+        }
+        if (slot < SOFTWARE_VECTOR_BASE) {
+            fprintf(stderr, "Error: This binary puts a vector at 0x%04X, which is below the vector table.\n", slot);
+            return 1;
+        }
+        Program[slot] = (handler >> 8) & 0xFF;
+        Program[(uint16_t)(slot + 1)] = handler & 0xFF;
+    }
+    return 0;
+}
+
 uint8_t loadFile(char *path, uint8_t *Program, uint8_t *Data) {
     FILE *file = fopen(path, "rb");
     if (file == NULL) {
@@ -111,7 +154,8 @@ uint8_t loadFile(char *path, uint8_t *Program, uint8_t *Data) {
     // here means there is one exit, and so only one place that has to close the file.
     uint8_t failed = readFileHeader(file)
                   || readSegment(file, "PRG", Program)
-                  || readSegment(file, "DAT", Data);
+                  || readSegment(file, "DAT", Data)
+                  || readVectorSegment(file, Program);
     fclose(file);
     return failed;
 }
