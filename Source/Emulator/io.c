@@ -4,7 +4,10 @@
 // 10/16/2024
 
 #include "io.h"
+#include "../Assembler/assembly.h" // For the fault vector numbers.
+#include "controller.h"
 #include <stdio.h>
+#include <string.h>
 
 // One bit per port, so a device can ask for attention without anything having to poll
 // it. Eight ports to the byte, low bit first.
@@ -37,6 +40,48 @@ int nextPendingInterrupt(void) {
     return -1;
 }
 
+// ---- Refusing ----
+//
+// Set when a device will not do what it was asked, and read by the CPU immediately
+// after the instruction that asked. It is not a queue: an instruction does one thing to
+// one port, so there is only ever one refusal outstanding.
+
+static uint8_t refusedVector = 0;
+static uint8_t refusedPort = 0;
+
+void refuseAccess(uint8_t faultVector) {
+    refusedVector = faultVector;
+}
+
+uint8_t takeRefusal(void) {
+    uint8_t vector = refusedVector;
+    refusedVector = 0;
+    return vector;
+}
+
+uint8_t refusingPort(void) {
+    return refusedPort;
+}
+
+// ---- A device that brings memory ----
+//
+// The simplest thing that owns a bank. Writing to its port fills its memory with the
+// byte written, which stands in for a disk controller reading a sector: the CPU asks for
+// something and the memory it owns then holds the answer. The waiting is taken out so a
+// test runs the same way every time.
+
+#define DEVICE_MEMORY_BYTES 256
+
+static uint8_t deviceMemoryBlock[DEVICE_MEMORY_BYTES];
+
+uint8_t *deviceMemory(uint8_t port, uint32_t *capacity) {
+    if (port != PORT_MEMORY) {
+        return NULL;
+    }
+    *capacity = DEVICE_MEMORY_BYTES;
+    return deviceMemoryBlock;
+}
+
 // ---- The bus registry ----
 //
 // What is plugged into this machine. The table is fixed when the machine is built: a
@@ -57,6 +102,8 @@ typedef struct {
 static const DeviceRecord deviceTable[] = {
     { PORT_CONSOLE,  DEVICE_CONSOLE,  0 },
     { PORT_TEST,     DEVICE_TEST,     0 },
+    { PORT_REFUSE,   DEVICE_REFUSE,   0 },
+    { PORT_MEMORY,   DEVICE_MEMORY,   DEVICE_FLAG_HAS_MEMORY },
     { PORT_REGISTRY, DEVICE_REGISTRY, 0 },
 };
 static const int deviceCount = (int)(sizeof(deviceTable) / sizeof(deviceTable[0]));
@@ -66,7 +113,15 @@ static const int deviceCount = (int)(sizeof(deviceTable) / sizeof(deviceTable[0]
 static uint8_t registrySelected = 0;
 static uint8_t registryCursor = 0;
 
+static const DeviceRecord controllerRecord = { CONTROLLER_PORT_BASE, DEVICE_CONTROLLER, 0 };
+
 static const DeviceRecord *deviceOnPort(uint8_t port) {
+    // The controller answers on a block of ports rather than one, so every port in the
+    // block reports it. Its own memory is bank 2, which is already registered, so it
+    // does not set the flag that means "this brings memory somebody has to register".
+    if (port >= CONTROLLER_PORT_BASE && port <= CONTROLLER_PORT_TOP) {
+        return &controllerRecord;
+    }
     for (int i = 0; i < deviceCount; i++) {
         if (deviceTable[i].port == port) {
             return &deviceTable[i];
@@ -90,6 +145,12 @@ static uint8_t readRegistry(void) {
 }
 
 uint8_t OutputHandler(uint8_t DataByte, uint8_t Address) {
+    // Whichever port is being talked to is the one that would be doing any refusing.
+    refusedPort = Address;
+    // The controller answers on a block of ports, which is a range rather than a list.
+    if (Address >= CONTROLLER_PORT_BASE && Address <= CONTROLLER_PORT_TOP) {
+        return controllerWrite(DataByte, Address);
+    }
     // This function sends the DataByte to the appropriate place based on the Port Address.
     switch(Address) {
         case PORT_CONSOLE:
@@ -97,6 +158,18 @@ uint8_t OutputHandler(uint8_t DataByte, uint8_t Address) {
             // For now, I'll implement this so it simply writes each byte out as it comes in.
             // Later, I'll want to use a buffer for this for performance, probably.
             putchar(DataByte);
+        break;
+        case PORT_MEMORY:
+            // Fills the memory this device owns with the byte written. Nothing is
+            // reachable from here: to get at it, register it as a bank and go through
+            // the controller, which is the only thing that can reach a device's memory.
+            memset(deviceMemoryBlock, DataByte, DEVICE_MEMORY_BYTES);
+        break;
+        case PORT_REFUSE:
+            // A device that refuses everything. It exists so that a device's ability to
+            // stop the CPU can be tested before anything depends on it, and so that the
+            // path stays tested once the memory controller is the only real user.
+            refuseAccess(VECTOR_GUARD_VIOLATION);
         break;
         case PORT_REGISTRY:
             // Names the port the registry is being asked about. This is the only thing
@@ -122,10 +195,19 @@ uint8_t OutputHandler(uint8_t DataByte, uint8_t Address) {
 }
 
 uint8_t InputHandler(uint8_t Address) {
+    refusedPort = Address;
+    if (Address >= CONTROLLER_PORT_BASE && Address <= CONTROLLER_PORT_TOP) {
+        return controllerRead(Address);
+    }
     switch(Address) {
         case PORT_CONSOLE:
             // If data is sent here, it should be read from STDIN.
             return getchar();
+        break;
+        case PORT_REFUSE:
+            // Refuses reads as well, so both directions are covered.
+            refuseAccess(VECTOR_GUARD_VIOLATION);
+            return 0;
         break;
         case PORT_REGISTRY:
             // One byte of the selected port's record, then the next, and zero once the

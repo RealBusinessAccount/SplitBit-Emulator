@@ -144,9 +144,11 @@ static const struct {
     const char *name;
     uint8_t index;
 } reservedVectors[] = {
-    { "Boot",      VECTOR_BOOT },
-    { "SoftReset", VECTOR_SOFT_RESET },
-    { "BadOpcode", VECTOR_INVALID_OPCODE },
+    { "Boot",           VECTOR_BOOT },
+    { "SoftReset",      VECTOR_SOFT_RESET },
+    { "BadOpcode",      VECTOR_INVALID_OPCODE },
+    { "GuardViolation", VECTOR_GUARD_VIOLATION },
+    { "BankFault",      VECTOR_BANK_FAULT },
 };
 static const int reservedVectorCount = (int)(sizeof(reservedVectors) / sizeof(reservedVectors[0]));
 

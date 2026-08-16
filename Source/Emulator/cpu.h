@@ -47,7 +47,8 @@ typedef enum {
     FAULT_NONE = 0,
     FAULT_BAD_OPCODE,  // A byte that does not decode to an instruction.
     FAULT_NO_HANDLER,  // Dispatched through a software vector with nothing in it.
-    FAULT_NO_DEVICE_HANDLER  // A device interrupted, and its vector was empty.
+    FAULT_NO_DEVICE_HANDLER, // A device interrupted, and its vector was empty.
+    FAULT_DEVICE_REFUSED     // A device refused, and nothing was installed to catch it.
 } FaultCause;
 
 // The struct containing the CPU registers.

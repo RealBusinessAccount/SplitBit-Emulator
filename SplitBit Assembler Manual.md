@@ -137,13 +137,15 @@ Every line names a vector and then the label of the routine that handles it.
   Device 0x10 diskReady
 ```
 
-Three names already mean something:
+Five names already mean something:
 
 | Name | Vector |
 | --- | --- |
 | Boot | Where the machine begins at power on. Without this a program starts at the beginning of its Program Segment. |
 | SoftReset | A warm restart. SWI SoftReset is how a program asks for one. |
 | BadOpcode | The CPU met a byte that is not an instruction. |
+| GuardViolation | A device refused a write, because it landed inside a raised fence. |
+| BankFault | A bank was named that has nothing in it, or an access ran past its end. |
 
 Anything else you name is a software interrupt of your own. You do not choose its number and you never write one: the assembler allocates them in the order they appear, starting above the range held back for faults that do not exist yet. That is the same bargain as labels everywhere else in SplitBit assembly, where you name a thing and let the assembler work out where it went.
 
@@ -157,7 +159,7 @@ A device is different, because its number is not a choice. A device interrupts o
 
 The assembler will refuse two handlers for the same vector, a name used with SWI that no Vector Segment gives a handler to, and a handler that is not a label.
 
-Vectors 3 through 15 are held back for faults that have not been defined yet. They have no names, so there is currently no way to write a handler for one, and none is needed: each will be given a name of its own as the fault it stands for is defined. Because you never write a vector number, there is no way to land on one of them by accident either.
+Vectors 5 through 15 are held back for faults that have not been defined yet. They have no names, so there is currently no way to write a handler for one, and none is needed: each will be given a name of its own as the fault it stands for is defined, the way GuardViolation and BankFault were. Because you never write a vector number, there is no way to land on one of them by accident either.
 
 ## Including Other Files:
 

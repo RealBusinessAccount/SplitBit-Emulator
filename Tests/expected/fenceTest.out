@@ -1,0 +1,8 @@
+outside ok
+caught 0200
+caught 01FC
+read ok
+lowered ok
+fenced 05
+Execution halted after 535 cycles.
+[exit 0]

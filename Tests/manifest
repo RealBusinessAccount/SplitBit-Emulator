@@ -46,6 +46,33 @@ dispatchTest         | testPrograms/dispatchTest.asm      | run      | -        
 # ---- Moving an ALU result back into an operand register ----
 moveQTest            | testPrograms/moveQTest.asm         | run      | -                  | -
 
+# ---- The memory controller ----
+# Reading and writing Program Memory, which the instruction set deliberately cannot do,
+# and the bank table that says what is reachable.
+controllerReadTest   | testPrograms/controllerReadTest.asm | run     | -                  | -
+controllerWriteTest  | testPrograms/controllerWriteTest.asm | run    | -                  | -
+# Block transfers: between banks, within one, overlapping, and one that is refused.
+blitTest             | testPrograms/blitTest.asm          | run      | -                  | -
+# A program that loads a program: blits code into Program Memory, installs a vector at
+# run time, and calls it. If the vector install ever silently failed, the SWI would fault
+# with "no handler" rather than printing, so this test cannot pass by accident.
+loaderTest           | testPrograms/loaderTest.asm        | run      | -                  | -
+
+# Giving a bank number to a device's memory, which is what an OS does at boot.
+registerBankTest     | testPrograms/registerBankTest.asm  | run      | -                  | -
+# The fence: raised, walked into, clipped by a blit, read through, and lowered again.
+fenceTest            | testPrograms/fenceTest.asm         | run      | -                  | -
+# Meant to fault: a bank knows how big it is.
+bankBoundsTest       | testPrograms/bankBoundsTest.asm    | run      | -                  | -
+
+# ---- A device saying no ----
+# Refusing is not interrupting: it stops the instruction that asked, rather than asking
+# for attention later. The device on port 0x11 refuses everything so this path stays
+# tested before the memory controller becomes its only real user.
+refusalTest          | testPrograms/refusalTest.asm       | run      | -                  | -
+# The same, with nothing installed to catch it. Meant to fault.
+refusalFaultTest     | testPrograms/refusalFaultTest.asm  | run      | -                  | -
+
 # ---- Asking the machine what it is made of ----
 registryTest         | testPrograms/registryTest.asm      | run      | -                  | -
 

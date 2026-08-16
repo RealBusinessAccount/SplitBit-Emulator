@@ -67,6 +67,25 @@ static uint8_t enterInterrupt(CPURegisters *cpu, uint16_t base, uint8_t index, u
     return 0;
 }
 
+// A device that refused what it was asked stops the machine where it stands, rather than
+// raising a line and letting execution carry on past the mistake. The frame carries the
+// address of the instruction that asked, so a handler can see which one it was, and so a
+// bare RETI meets it again the way every other fault on this machine does.
+//
+// Returns 1 if the machine has stopped because nothing was installed to catch it.
+static uint8_t answerRefusal(CPURegisters *cpu, uint16_t site) {
+    uint8_t refusal = takeRefusal();
+    if (refusal == 0) {
+        return 0;
+    }
+    if (enterInterrupt(cpu, SOFTWARE_VECTOR_BASE, refusal, site)) {
+        cpu->Fault = FAULT_DEVICE_REFUSED;
+        cpu->FaultVector = refusingPort();
+        cpu->ProgramCounter = site - 1;
+    }
+    return 0;
+}
+
 void initializeCPU(CPURegisters *cpu, uint8_t *programMemory, uint8_t *dataMemory) {
     cpu->A = 0;
     cpu->B = 0;
@@ -544,33 +563,48 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
         //
         // Dx - Output Operations:
         //
-        case 0xD0:
+        case 0xD0: {
             // OUTQ - Write the value of Q to an output port.
+            uint16_t site = cpu->ProgramCounter;
             cpu->ProgramCounter++;
             OutputHandler(cpu->Q, cpu->Program[cpu->ProgramCounter]);
+            answerRefusal(cpu, site);
+        }
         break;
-        case 0xD1:
+        case 0xD1: {
             // OUTA - Write the value of A to an output port.
+            uint16_t site = cpu->ProgramCounter;
             cpu->ProgramCounter++;
             OutputHandler(cpu->A, cpu->Program[cpu->ProgramCounter]);
+            answerRefusal(cpu, site);
+        }
         break;
-        case 0xD2:
+        case 0xD2: {
             // OUTB - Write the value of B to an output port.
+            uint16_t site = cpu->ProgramCounter;
             cpu->ProgramCounter++;
             OutputHandler(cpu->B, cpu->Program[cpu->ProgramCounter]);
+            answerRefusal(cpu, site);
+        }
         break;
         //
         // Ex - Input Operations:
         //
-        case 0xE0:
+        case 0xE0: {
             // INA - Read an Input to A.
+            uint16_t site = cpu->ProgramCounter;
             cpu->ProgramCounter++;
             cpu->A = InputHandler(cpu->Program[cpu->ProgramCounter]);
+            answerRefusal(cpu, site);
+        }
         break;
-        case 0xE1:
+        case 0xE1: {
             // INB - Read an Input to B.
+            uint16_t site = cpu->ProgramCounter;
             cpu->ProgramCounter++;
             cpu->B = InputHandler(cpu->Program[cpu->ProgramCounter]);
+            answerRefusal(cpu, site);
+        }
         break;
         //
         // Fx - Special Operations:

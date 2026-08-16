@@ -16,6 +16,8 @@
 
 #define PORT_CONSOLE  0x00
 #define PORT_TEST     0x10
+#define PORT_REFUSE   0x11
+#define PORT_MEMORY   0x12
 #define PORT_REGISTRY 0xFF
 
 // ---- Device classes ----
@@ -29,10 +31,13 @@
 #define DEVICE_NONE     0x00
 #define DEVICE_REGISTRY 0x01
 #define DEVICE_CONSOLE  0x02
+#define DEVICE_CONTROLLER 0x03
 #define DEVICE_TEST     0x10
+#define DEVICE_REFUSE   0x11
+#define DEVICE_MEMORY   0x12
 
-// What a device brings besides itself. The memory controller will want the first of
-// these to find out which ports own memory it can reach.
+// What a device brings besides itself. This means memory that somebody has to register
+// with the controller, so the controller's own bank 2 does not count: it is already there.
 #define DEVICE_FLAG_HAS_MEMORY 0x01
 
 // How many bytes a device's entry in the registry runs to. Reading past the end gives
@@ -58,5 +63,36 @@ void clearInterrupt(uint8_t port);
 
 // The lowest numbered port with its line up, or -1 if none of them are.
 int nextPendingInterrupt(void);
+
+// ---- Refusing ----
+//
+// A device can refuse what it was asked to do. Interrupting is a device asking for
+// attention later; refusing is a device saying no to the instruction happening now, so
+// it has to stop the machine where it stands rather than raise a line and let execution
+// carry on past the mistake.
+//
+// The refusal names a software vector, so the cause is known from the entry it arrives
+// through, the same way every other fault on this machine works.
+
+void refuseAccess(uint8_t faultVector);
+
+// ---- Memory a device brings ----
+//
+// Returns the memory owned by the device on this port, or NULL if it owns none, and
+// fills in how much of it there is. This is how the controller finds out what a device
+// brings when it is told to register a bank.
+//
+// It is a direct look at the machine's device table rather than a conversation through
+// the registry's port. The port protocol remembers which port it was asked about, so a
+// controller that used it would silently lose the place of any enumeration a program had
+// in progress. Same table, two consumers, and only one of them needs the protocol.
+uint8_t *deviceMemory(uint8_t port, uint32_t *capacity);
+
+// The vector a device refused with, or 0 if none did. Reading it clears it, because a
+// refusal is answered once.
+uint8_t takeRefusal(void);
+
+// Which port did the refusing. Only meaningful alongside a refusal.
+uint8_t refusingPort(void);
 
 #endif // IO_H

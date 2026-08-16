@@ -1,7 +1,7 @@
 # SplitBit Emulator
 
 ## Overview:
-SplitBit is a custom CPU designed for hobbyist projects and experimentation. The SplitBit Emulator is a C implementation of its bespoke instruction set architecture. It allows users to load and run binary programs created for the SplitBit CPU interactively from the command line.
+SplitBit is a custom 8 bit system designed for hobbyist projects and experimentation: a CPU with its own instruction set, an interrupt and vector system, a bus that programs can enumerate, and a memory controller that can load code. The SplitBit Emulator is a C implementation of it. It allows users to load and run binary programs created for SplitBit interactively from the command line.
 
 ### Features:
 - 8-bit Harvard Architecture: The system memory is separated into two 64k banks, one for the Program Memory and another for the Data Memory.
@@ -10,7 +10,10 @@ SplitBit is a custom CPU designed for hobbyist projects and experimentation. The
 - CLI Based: Debug messages and CPU input and output are supported through the command line.
 - Binary File Support: Load programs and data from binary files.
 - Modular Codebase: Mostly clean separation of CPU, I/O, and utility functions for easy modification.
-- Assembler: Assemble human readable assembly language files directly into SplitBit compatible binary files. Supports including external files, handling labels, and defining Program and Data segments.
+- Interrupts: Software traps, hardware lines from devices, and faults, all arriving through one vector table with a full context save.
+- Devices: A bus registry that says what a machine is made of, so a program can ask rather than being told.
+- Memory Controller: Reads and writes Program Memory, moves blocks between memory banks, reaches memory that devices bring with them, and guards a range against being written by accident. It is how a SplitBit machine loads a program.
+- Assembler: Assemble human readable assembly language files directly into SplitBit compatible binary files. Supports including external files, handling labels, alignment and reservation, and defining Program, Data and Vector segments.
 
 ### Installation:
 1) Clone the repository:

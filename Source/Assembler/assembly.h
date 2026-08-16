@@ -62,7 +62,11 @@
 #define VECTOR_BOOT          0
 #define VECTOR_SOFT_RESET    1
 #define VECTOR_INVALID_OPCODE 2
-// Vectors 3 to 15 are held back for faults that do not exist yet, so that each cause
+// A device refused a write, because it landed inside a raised fence.
+#define VECTOR_GUARD_VIOLATION 3
+// A bank was named that has nothing registered in it, or an access ran past its end.
+#define VECTOR_BANK_FAULT     4
+// Vectors 5 to 15 are held back for faults that do not exist yet, so that each cause
 // can have an entry of its own rather than sharing one and needing a cause register to
 // tell them apart. Everything from 16 up belongs to programs.
 #define VECTOR_FIRST_FREE    16

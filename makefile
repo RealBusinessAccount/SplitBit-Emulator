@@ -23,7 +23,7 @@ SRC_DIR_ASM = Source/Assembler
 OBJ_DIR = Object
 
 # Source files
-EMU_SRCS = emulator.c io.c utility.c cpu.c bootstrap.c assembly.c
+EMU_SRCS = emulator.c io.c controller.c utility.c cpu.c bootstrap.c assembly.c
 ASM_SRCS = Assembler.c assembly.c firstPass.c Assm-util.c secondPass.c
 
 EMU_OBJS = $(EMU_SRCS:%.c=$(OBJ_DIR)/%.o)

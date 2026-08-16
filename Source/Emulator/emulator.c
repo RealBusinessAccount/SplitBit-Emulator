@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include "cpu.h"
+#include "controller.h"
 #include "utility.h"
 #include <string.h>
 #include <getopt.h>
@@ -90,6 +91,9 @@ int main (int argc, char *argv[]) {
         return 1;
     }
     CPURegisters cpu;
+    // The controller has to know where the memories are before anything can reach
+    // them through it. Banks 0 and 1 are those two arrays.
+    initializeController(Program, Data);
     initializeCPU(&cpu, Program, Data);
     if(options.debug) {
         printRegisters(&cpu, Program, Data);
@@ -139,6 +143,9 @@ int main (int argc, char *argv[]) {
         printf("Execution halted after %lu cycles.\n", cycleCount);
         if (cpu.Fault == FAULT_NO_HANDLER) {
             fprintf(stderr, "Fault: Software vector %u, dispatched from Program Address 0x%04X, has no handler installed.\n",
+                    cpu.FaultVector, cpu.ProgramCounter);
+        } else if (cpu.Fault == FAULT_DEVICE_REFUSED) {
+            fprintf(stderr, "Fault: The device on port %u refused the access at Program Address 0x%04X, and nothing is installed to deal with it.\n",
                     cpu.FaultVector, cpu.ProgramCounter);
         } else if (cpu.Fault == FAULT_NO_DEVICE_HANDLER) {
             fprintf(stderr, "Fault: The device on port %u interrupted at Program Address 0x%04X, and hardware vector %u has no handler installed.\n",
