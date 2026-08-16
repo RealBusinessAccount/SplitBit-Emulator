@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include "cpu.h"
 #include "controller.h"
+#include "io.h"
 #include "utility.h"
 #include <string.h>
 #include <getopt.h>
@@ -90,6 +91,9 @@ int main (int argc, char *argv[]) {
         fprintf(stderr, "Error: Couldn't read file: %s\n", programFile);
         return 1;
     }
+    if (options.disk != NULL && attachDisk(options.disk, options.writeProtect)) {
+        return 1;
+    }
     CPURegisters cpu;
     // The controller has to know where the memories are before anything can reach
     // them through it. Banks 0 and 1 are those two arrays.
@@ -136,6 +140,7 @@ int main (int argc, char *argv[]) {
             printf("Cycle: %lu\n", cycleCount);
         }
     }
+    detachDisk();
     if (limitReached) {
         printf("Execution stopped after %lu cycles. (cycle limit reached)\n", cycleCount);
     } else if (cpu.Status & STATUS_FAULT) {

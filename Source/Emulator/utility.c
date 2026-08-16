@@ -17,6 +17,9 @@ void printHelp(const char *programName) {
     printf("  -d, --debug       Enable debug mode.\n");
     printf("  -c, --cycles N    Stop after N cycles instead of running until the program halts.\n");
     printf("  -f, --fast        Run as fast as possible, ignoring the emulated cycle rate.\n");
+    printf("  -D, --disk FILE   Attach a disk image, making one if it is not there.\n");
+    printf("  -W, --write-protect  Attach the disk read only. A disk the host will not let\n");
+    printf("                    you write is read only whether you ask for this or not.\n");
     printf("  -h, --help        Display this help message.\n");
 }
 
@@ -25,6 +28,8 @@ uint8_t parseOptions(int argc, char *argv[], EmulatorOptions *options) {
         {"debug",  no_argument,       0, 'd'},
         {"cycles", required_argument, 0, 'c'},
         {"fast",   no_argument,       0, 'f'},
+        {"disk",   required_argument, 0, 'D'},
+        {"write-protect", no_argument, 0, 'W'},
         {"help",   no_argument,       0, 'h'},
         {0,        0,                 0,  0 }
         };
@@ -34,9 +39,11 @@ uint8_t parseOptions(int argc, char *argv[], EmulatorOptions *options) {
     options->debug = 0;
     options->fast = 0;
     options->cycles = 0;
+    options->disk = NULL;
+    options->writeProtect = 0;
 
     // Parse options
-    while ((opt = getopt_long(argc, argv, "dc:fh", long_options, &option_index)) != -1) {
+    while ((opt = getopt_long(argc, argv, "dc:fhD:W", long_options, &option_index)) != -1) {
         switch (opt) {
             case 'd':
                 options->debug = 1;
@@ -56,6 +63,12 @@ uint8_t parseOptions(int argc, char *argv[], EmulatorOptions *options) {
             break;
             case 'f':
                 options->fast = 1;
+            break;
+            case 'D':
+                options->disk = optarg;
+            break;
+            case 'W':
+                options->writeProtect = 1;
             break;
             case 'h':
                 printHelp(argv[0]);

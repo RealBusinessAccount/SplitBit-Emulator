@@ -18,6 +18,16 @@
 #define PORT_TEST     0x10
 #define PORT_REFUSE   0x11
 #define PORT_MEMORY   0x12
+
+// The disk answers on a block of four ports and interrupts on the first of them. A device
+// that spans more than one port raises its line on its base, which is the rule the
+// machine has not needed until now: the controller spans sixteen and never interrupts.
+#define PORT_DISK        0x20
+#define PORT_DISK_TOP    0x23
+#define DISK_BLOCK_HIGH  0x20
+#define DISK_BLOCK_LOW   0x21
+#define DISK_COMMAND     0x22
+#define DISK_STATUS      0x23
 #define PORT_REGISTRY 0xFF
 
 // ---- Device classes ----
@@ -35,10 +45,48 @@
 #define DEVICE_TEST     0x10
 #define DEVICE_REFUSE   0x11
 #define DEVICE_MEMORY   0x12
+#define DEVICE_DISK     0x13
 
 // What a device brings besides itself. This means memory that somebody has to register
 // with the controller, so the controller's own bank 2 does not count: it is already there.
 #define DEVICE_FLAG_HAS_MEMORY 0x01
+
+// ---- The disk ----
+//
+// Blocks are a page each, so a block number is the whole of a 16 bit address and the
+// arithmetic never needs a multiply. Sixteen megabytes is absurd for this machine, which
+// is the point: there is room for anything a filesystem might want to grow into later.
+
+#define DISK_BLOCK_BYTES 256
+
+// A fresh image is made the size of Program and Data together, which is a round number
+// for this machine and small enough to read in a hex editor while it is being built.
+#define DISK_DEFAULT_BLOCKS 512
+
+#define DISK_COMMAND_READ  0x01
+#define DISK_COMMAND_WRITE 0x02
+
+// Set while an operation is still going. It always reads clear here, because the host
+// finishes before the next instruction does, but a machine with a slower disk would set
+// it and a program that ignores it would break there. Honour it anyway.
+#define DISK_STATUS_BUSY  0x01
+// Set when the disk cannot be written at all. Unlike the two bits above it, this is not
+// about the last operation: it is a standing property of the medium, readable before
+// anything is attempted. A write protected disk is barred here, in the device, rather
+// than by anything in the filesystem, so writing blocks directly cannot get around it.
+#define DISK_STATUS_PROTECTED 0x04
+
+// Set when the last operation did not work: no image, or a block that is not on it.
+// A disk that cannot read a block is an ordinary thing that happens to working programs,
+// so it says so rather than stopping the machine.
+#define DISK_STATUS_ERROR 0x02
+
+// Attaches an image, making one if it is not there. A disk is read only if the host will
+// not let the file be written, or if writeProtect asks for it, which is the emulated
+// equivalent of the tab on the side of a floppy. Returns 1 if it could not attach.
+uint8_t attachDisk(const char *path, uint8_t writeProtect);
+
+void detachDisk(void);
 
 // How many bytes a device's entry in the registry runs to. Reading past the end gives
 // zero, so the record can grow later without anything already written having to change.

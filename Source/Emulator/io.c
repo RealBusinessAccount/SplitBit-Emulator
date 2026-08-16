@@ -63,6 +63,109 @@ uint8_t refusingPort(void) {
     return refusedPort;
 }
 
+// ---- The disk ----
+//
+// A block device and nothing more. It knows numbered blocks and has never heard of a
+// file, which is the whole point: a filesystem is software this machine will run, not
+// something the host does on its behalf. A disk that understood filenames would be the
+// emulator doing the work and the machine pretending it had.
+
+static FILE *diskImage = NULL;
+static uint32_t diskBlockCount = 0;
+static uint8_t diskBuffer[DISK_BLOCK_BYTES];
+static uint16_t diskBlock = 0;
+static uint8_t diskStatus = 0;
+static uint8_t diskProtected = 0;
+
+uint8_t attachDisk(const char *path, uint8_t writeProtect) {
+    diskProtected = writeProtect ? 1 : 0;
+    diskImage = fopen(path, "r+b");
+    if (diskImage == NULL) {
+        // It may be there and simply not writable, which is a read only disk rather than
+        // a missing one. Try that before deciding to make a new one.
+        diskImage = fopen(path, "rb");
+        if (diskImage != NULL) {
+            diskProtected = 1;
+        }
+    }
+    if (diskImage == NULL) {
+        // Nothing there, so make one. A fresh image is zeroes, which is what an unwritten
+        // block should read as.
+        diskImage = fopen(path, "w+b");
+        if (diskImage == NULL) {
+            fprintf(stderr, "Error: Couldn't open or create the disk image: %s\n", path);
+            return 1;
+        }
+        static const uint8_t empty[DISK_BLOCK_BYTES] = {0};
+        for (uint32_t i = 0; i < DISK_DEFAULT_BLOCKS; i++) {
+            if (fwrite(empty, 1, DISK_BLOCK_BYTES, diskImage) != DISK_BLOCK_BYTES) {
+                fprintf(stderr, "Error: Couldn't write the disk image: %s\n", path);
+                fclose(diskImage);
+                diskImage = NULL;
+                return 1;
+            }
+        }
+    }
+    if (fseek(diskImage, 0, SEEK_END) != 0) {
+        fprintf(stderr, "Error: Couldn't measure the disk image: %s\n", path);
+        fclose(diskImage);
+        diskImage = NULL;
+        return 1;
+    }
+    long size = ftell(diskImage);
+    // A part written block at the end is not a block, so it is not counted.
+    diskBlockCount = (size > 0) ? (uint32_t)(size / DISK_BLOCK_BYTES) : 0;
+    // The protect bit is a standing property, so it reads true before anything has been
+    // asked of the disk rather than only after a write has been turned away.
+    diskStatus = diskProtected ? DISK_STATUS_PROTECTED : 0;
+    return 0;
+}
+
+void detachDisk(void) {
+    if (diskImage != NULL) {
+        fclose(diskImage);
+        diskImage = NULL;
+    }
+}
+
+// Reads or writes the block the block registers name. The line goes up either way: the
+// operation finished, and whether it worked is what Status is for.
+static void diskCommand(uint8_t command) {
+    // The protect bit describes the disk rather than the operation, so it survives.
+    diskStatus = diskProtected ? DISK_STATUS_PROTECTED : 0;
+    if (command == DISK_COMMAND_WRITE && diskProtected) {
+        diskStatus |= DISK_STATUS_ERROR;
+        raiseInterrupt(PORT_DISK);
+        return;
+    }
+    if (diskImage == NULL || diskBlock >= diskBlockCount) {
+        diskStatus |= DISK_STATUS_ERROR;
+        raiseInterrupt(PORT_DISK);
+        return;
+    }
+    long offset = (long)diskBlock * DISK_BLOCK_BYTES;
+    if (fseek(diskImage, offset, SEEK_SET) != 0) {
+        diskStatus |= DISK_STATUS_ERROR;
+        raiseInterrupt(PORT_DISK);
+        return;
+    }
+    size_t moved = 0;
+    if (command == DISK_COMMAND_READ) {
+        moved = fread(diskBuffer, 1, DISK_BLOCK_BYTES, diskImage);
+    } else if (command == DISK_COMMAND_WRITE) {
+        moved = fwrite(diskBuffer, 1, DISK_BLOCK_BYTES, diskImage);
+        fflush(diskImage);
+    } else {
+        diskStatus |= DISK_STATUS_ERROR;
+        raiseInterrupt(PORT_DISK);
+        return;
+    }
+    if (moved != DISK_BLOCK_BYTES) {
+        diskStatus |= DISK_STATUS_ERROR;
+    }
+    raiseInterrupt(PORT_DISK);
+}
+
 // ---- A device that brings memory ----
 //
 // The simplest thing that owns a bank. Writing to its port fills its memory with the
@@ -75,11 +178,18 @@ uint8_t refusingPort(void) {
 static uint8_t deviceMemoryBlock[DEVICE_MEMORY_BYTES];
 
 uint8_t *deviceMemory(uint8_t port, uint32_t *capacity) {
-    if (port != PORT_MEMORY) {
-        return NULL;
+    if (port == PORT_MEMORY) {
+        *capacity = DEVICE_MEMORY_BYTES;
+        return deviceMemoryBlock;
     }
-    *capacity = DEVICE_MEMORY_BYTES;
-    return deviceMemoryBlock;
+    if (port == PORT_DISK) {
+        // The disk's buffer is one block. Reading fills it and writing takes what is in
+        // it, and the only way to reach it is to register it as a bank and go through the
+        // controller.
+        *capacity = DISK_BLOCK_BYTES;
+        return diskBuffer;
+    }
+    return NULL;
 }
 
 // ---- The bus registry ----
@@ -104,6 +214,7 @@ static const DeviceRecord deviceTable[] = {
     { PORT_TEST,     DEVICE_TEST,     0 },
     { PORT_REFUSE,   DEVICE_REFUSE,   0 },
     { PORT_MEMORY,   DEVICE_MEMORY,   DEVICE_FLAG_HAS_MEMORY },
+    { PORT_DISK,     DEVICE_DISK,     DEVICE_FLAG_HAS_MEMORY },
     { PORT_REGISTRY, DEVICE_REGISTRY, 0 },
 };
 static const int deviceCount = (int)(sizeof(deviceTable) / sizeof(deviceTable[0]));
@@ -121,6 +232,11 @@ static const DeviceRecord *deviceOnPort(uint8_t port) {
     // does not set the flag that means "this brings memory somebody has to register".
     if (port >= CONTROLLER_PORT_BASE && port <= CONTROLLER_PORT_TOP) {
         return &controllerRecord;
+    }
+    if (port > PORT_DISK && port <= PORT_DISK_TOP) {
+        // The base port is in the table proper, since that is the one that owns the
+        // memory and raises the line. The rest of the block reports the same device.
+        return deviceOnPort(PORT_DISK);
     }
     for (int i = 0; i < deviceCount; i++) {
         if (deviceTable[i].port == port) {
@@ -159,6 +275,9 @@ uint8_t OutputHandler(uint8_t DataByte, uint8_t Address) {
             // Later, I'll want to use a buffer for this for performance, probably.
             putchar(DataByte);
         break;
+        case DISK_BLOCK_HIGH: diskBlock = (uint16_t)(DataByte << 8) | (diskBlock & 0x00FF); break;
+        case DISK_BLOCK_LOW:  diskBlock = (diskBlock & 0xFF00) | DataByte; break;
+        case DISK_COMMAND:    diskCommand(DataByte); break;
         case PORT_MEMORY:
             // Fills the memory this device owns with the byte written. Nothing is
             // reachable from here: to get at it, register it as a bank and go through
@@ -204,6 +323,9 @@ uint8_t InputHandler(uint8_t Address) {
             // If data is sent here, it should be read from STDIN.
             return getchar();
         break;
+        case DISK_BLOCK_HIGH: return (uint8_t)(diskBlock >> 8);
+        case DISK_BLOCK_LOW:  return (uint8_t)(diskBlock & 0xFF);
+        case DISK_STATUS:     return diskStatus;
         case PORT_REFUSE:
             // Refuses reads as well, so both directions are covered.
             refuseAccess(VECTOR_GUARD_VIOLATION);

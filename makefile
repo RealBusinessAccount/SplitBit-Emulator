@@ -20,21 +20,25 @@ POSIXFLAGS = -D_POSIX_C_SOURCE=200809L
 # Directories
 SRC_DIR_EMU = Source/Emulator
 SRC_DIR_ASM = Source/Assembler
+SRC_DIR_DSK = Source/DiskTool
 OBJ_DIR = Object
 
 # Source files
 EMU_SRCS = emulator.c io.c controller.c utility.c cpu.c bootstrap.c assembly.c
 ASM_SRCS = Assembler.c assembly.c firstPass.c Assm-util.c secondPass.c
+DSK_SRCS = SplitDisk.c
 
 EMU_OBJS = $(EMU_SRCS:%.c=$(OBJ_DIR)/%.o)
 ASM_OBJS = $(ASM_SRCS:%.c=$(OBJ_DIR)/%.o)
+DSK_OBJS = $(DSK_SRCS:%.c=$(OBJ_DIR)/%.o)
 
 # Output binary names
 EMU_TARGET = SplitBit
 ASM_TARGET = Assembler
+DSK_TARGET = SplitDisk
 
 # Default target: build both emulator and assembler
-all: $(EMU_TARGET) $(ASM_TARGET)
+all: $(EMU_TARGET) $(ASM_TARGET) $(DSK_TARGET)
 
 # Emulator binary
 $(EMU_TARGET): $(EMU_OBJS)
@@ -49,17 +53,30 @@ $(OBJ_DIR)/%.o: $(SRC_DIR_EMU)/%.c
 	mkdir -p $(OBJ_DIR)
 	$(CC) $(CFLAGS) $(POSIXFLAGS) $(DEPFLAGS) -c $< -o $@
 
+# Disk tool binary
+$(DSK_TARGET): $(DSK_OBJS)
+	$(CC) $(CFLAGS) -o $(DSK_TARGET) $(DSK_OBJS)
+
+# Compile disk tool source files to object files
+$(OBJ_DIR)/%.o: $(SRC_DIR_DSK)/%.c
+	@mkdir -p $(OBJ_DIR)
+	$(CC) $(CFLAGS) $(POSIXFLAGS) $(DEPFLAGS) -c $< -o $@
+
 # Compile assembler source files to object files
 $(OBJ_DIR)/%.o: $(SRC_DIR_ASM)/%.c
 	mkdir -p $(OBJ_DIR)
 	$(CC) $(CFLAGS) $(POSIXFLAGS) $(DEPFLAGS) -c $< -o $@
 
 # Pull in the header dependencies written out by the compiler above.
--include $(EMU_OBJS:.o=.d) $(ASM_OBJS:.o=.d)
+-include $(EMU_OBJS:.o=.d) $(ASM_OBJS:.o=.d) $(DSK_OBJS:.o=.d)
 
 # Run the test suite against the programs in Programs/
-test: $(EMU_TARGET) $(ASM_TARGET)
+test: $(EMU_TARGET) $(ASM_TARGET) $(DSK_TARGET)
 	@./Tests/run.sh
+	@echo
+	@./Tests/disk.sh
+	@echo
+	@./Tests/docs.sh
 
 # Rebuild both tools with the address and undefined behaviour sanitizers and run
 # the test suite under them. Slower than 'make test', and worth running before a
@@ -92,10 +109,10 @@ bless: $(EMU_TARGET) $(ASM_TARGET)
 clean:
 	rm -rf $(OBJ_DIR)
 	rm -rf Tests/build
-	rm -f $(EMU_TARGET) $(ASM_TARGET)
+	rm -f $(EMU_TARGET) $(ASM_TARGET) $(DSK_TARGET)
 
 # Install compiled binaries
-install: $(EMU_TARGET) $(ASM_TARGET)
+install: $(EMU_TARGET) $(ASM_TARGET) $(DSK_TARGET)
 	mkdir -p "$(PREFIX)/bin"
 	install -m 755 $^ "$(PREFIX)/bin/"
 

@@ -335,7 +335,8 @@ static void checkOperands(intermediateElement *intermediateArray, int arraySize,
     // the branch block takes an address: RET has none, and BRD gets its destination
     // from a Data Pointer instead of from the program.
     if (opcode == 0x10 || opcode == 0x11 || opcode == 0x12 ||
-        opcode == 0x13 || opcode == 0x14 || opcode == 0x17) {
+        opcode == 0x13 || opcode == 0x14 || opcode == 0x17 ||
+        opcode == 0x1A || opcode == 0x1B || opcode == 0x1C || opcode == 0x1D) {
         // Branches and CALL take a two byte address, which only a label can supply.
         if (nextType != LABEL) problem = "Branch without label.";
     } else if ((opcode & 0xF0) == 0xD0 || (opcode & 0xF0) == 0xE0) {

@@ -37,6 +37,10 @@ It has ten registers:
 	 - Bit 2 is the Interrupt Flag. It is set by SIF and cleared by CIF. While it is set the CPU answers devices asking for attention; while it is clear they wait. Arriving at a handler clears it, and RETI restores it along with the rest of the Status register. See Hardware Interrupts below.
 	 - Bit 7 is the Halt Flag. It is set by the HALT instruction, and by a fault.
 
+Each condition has a branch both ways round, so a loop that carries on while something is not zero is one instruction rather than a branch over an unconditional one. Before these existed a quarter of every conditional branch in the corpus was written backwards and padded out, and each of those needed a label invented only to be jumped past.
+
+A conditional branch reads the thing it names at the moment it runs. BRA looks at A, and it does not matter which instruction set A or how long ago. The two that read the Carry Flag are the exception, and they say so in their names. That is worth knowing when reading somebody else's code: nothing else on this machine leaves a hidden condition behind for a later branch to find.
+
 ## The Vector Table:
 
 The top kilobyte of Program Memory is reserved for vectors. Each entry is two bytes, most significant byte first, and holds a Program Memory address.
@@ -129,6 +133,7 @@ If a device interrupts and its vector is empty, that is a fault: the machine sto
 | 0x00 | The console. Writing sends a byte to standard output, reading takes one from standard input. | 0x02 |
 | 0x10 | A test device. Writing anything to it puts its own line up, so that interrupt handling can be exercised without waiting on anything. The byte written is ignored. | 0x10 |
 | 0x11 | A device that refuses everything, in both directions, so that refusal can be exercised without the memory controller. | 0x11 |
+| 0x20 - 0x23 | The disk. See Storage below. It interrupts on 0x20, its base port. | 0x13 |
 | 0x12 | A device that owns 256 bytes of memory. Writing to its port fills that memory with the byte written, standing in for a disk controller reading a sector. Its memory is unreachable until it is registered as a bank. | 0x12 |
 | 0xE0 - 0xEF | The memory controller. See The Memory Controller below. | 0x03 |
 | 0xFF | The bus registry. See Asking What Is There below. | 0x01 |
@@ -172,7 +177,8 @@ One thing to be careful of: the registry remembers which port it was asked about
 | 0x10 | Test device, which raises its own line. |
 | 0x11 | Test device, which refuses everything. |
 | 0x12 | Test device, which owns memory. |
-| 0x13 - 0xFF | Peripherals. |
+| 0x13 | Disk. |
+| 0x14 - 0xFF | Peripherals. |
 
 ## The Memory Controller:
 
@@ -285,6 +291,16 @@ A range that ends before it starts is refused. No address could be inside it, so
 
 A raised fence is published in the bank table along with everything else about the bank, so a program can see what is guarded without having to remember.
 
+### What The Fence Does Not Do:
+
+It is worth being plain about the limit, because the name suggests more than it delivers.
+
+Every write to Program Memory goes through the controller, so a fence over bank 0 catches all of them. That is what it is for: code that gets walked over is otherwise discovered much later, when the wreckage is finally executed, thousands of cycles from the mistake and with the evidence gone. A fence turns that into a fault at the instruction responsible, with the address still in the controller's registers to be read.
+
+Data Memory is different. STA, STB, STQ and STD write bank 1 directly and never go near the controller, so a runaway Data Pointer walking over a program's variables is **not** caught and cannot be. Catching it would mean putting the check inside the CPU's store path, which would make an instruction behave differently depending on state that does not appear in the listing. That is the thing this machine does not do.
+
+So the fence protects code from a mistaken loader. It is not general memory protection, and a program should not be written as though it were.
+
 ### Loading A Program:
 
 Everything the controller does adds up to one thing a SplitBit machine could not do before: run code that was not in the binary it started from.
@@ -314,16 +330,6 @@ INIA, OUTA and RETI name no places, so a routine built only from those runs corr
 
 So loading works and relocating does not exist. A program can be put into memory at the address it was built for, and it will run. Putting it anywhere else is an unsolved problem, and a real one, because a machine that can only ever load a program to one place cannot load two programs at once.
 
-### What The Fence Does Not Do:
-
-It is worth being plain about the limit, because the name suggests more than it delivers.
-
-Every write to Program Memory goes through the controller, so a fence over bank 0 catches all of them. That is what it is for: code that gets walked over is otherwise discovered much later, when the wreckage is finally executed, thousands of cycles from the mistake and with the evidence gone. A fence turns that into a fault at the instruction responsible, with the address still in the controller's registers to be read.
-
-Data Memory is different. STA, STB, STQ and STD write bank 1 directly and never go near the controller, so a runaway Data Pointer walking over a program's variables is **not** caught and cannot be. Catching it would mean putting the check inside the CPU's store path, which would make an instruction behave differently depending on state that does not appear in the listing. That is the thing this machine does not do.
-
-So the fence protects code from a mistaken loader. It is not general memory protection, and a program should not be written as though it were.
-
 ### Being Turned Away:
 
 A bank knows how big it is, so an access past the end of one is a BankFault rather than a read of whatever happens to be next. Naming a bank with nothing registered in it is the same fault.
@@ -331,6 +337,120 @@ A bank knows how big it is, so an access past the end of one is a BankFault rath
 A write the controller will not perform is a GuardViolation. There are two reasons for one: the bank is read only, or the write touches a fence that has been raised over it.
 
 Both arrive at the instruction that asked, so a handler sees which one it was. A handler that means to carry on past it steps the saved address on by two, since the input and output instructions are an opcode and a port.
+
+## Storage:
+
+The disk is a block device. It knows numbered blocks of 256 bytes and has never heard of a file. A filesystem is software this machine runs, not something done on its behalf: a disk that understood filenames would be the emulator doing the work while the machine pretended it had.
+
+A block is a page, so a block number is a whole 16 bit address and the arithmetic never needs a multiply. Sixteen megabytes of them is absurd for this machine, which is the point: there is room for whatever a filesystem grows into.
+
+| Port | Register |
+| --- | --- |
+| 0x20 | BlockHigh |
+| 0x21 | BlockLow |
+| 0x22 | Command. 0x01 reads, 0x02 writes. |
+| 0x23 | Status. Bit 0 busy, bit 1 the last operation failed, bit 2 the disk is write protected. |
+
+The disk owns one block of memory, its buffer. Reading fills it and writing takes what is in it. Like any memory a device brings, it is unreachable until it has been registered as a bank, and reachable only through the memory controller even then. The CPU never touches it directly.
+
+A device that answers on more than one port raises its line on the first of them, so the disk interrupts on 0x20.
+
+### Waiting:
+
+A command returns at once and the line goes up when the block has moved. Status bit 0 says the disk is still working.
+
+That bit always reads clear here, because the host finishes before the next instruction does. **Honour it anyway.** A machine with a slower disk would set it, and a program written to ignore it would work on this one and fail on that one. Waiting for the line is the other way, and the right one once vectors are installed; the bit is what a bootstrap polls before there are any.
+
+### Write Protection:
+
+A disk may be read only, and the bar is in the device. Status bit 2 says so.
+
+That bit is not like the two below it. Busy and error describe the last operation; **protection describes the medium**, so it reads true before anything has been asked of the disk at all. A program can find out whether it can write without having to try and be refused.
+
+The bar being in the device is the point of it. A flag in a superblock can be got around by writing blocks directly, and this cannot be got around at all. It is the tab on the side of a floppy rather than a note asking politely.
+
+A disk is read only if it was attached that way, or if the host will not let its image be written. The machine cannot tell those two apart, and has no reason to.
+
+Reading a protected disk is ordinary and does not disturb the bit.
+
+### When It Does Not Work:
+
+Status bit 1 says the last operation failed: there is no disk, or the block asked for is not on it.
+
+A disk error is not a fault. Faults on this machine mean it cannot continue, and a read that fails is an ordinary thing that happens to working programs on failing media. It is reported so that a program can cope with it, rather than stopping the machine and taking the choice away.
+
+## Reading The Filesystem:
+
+The disk knows blocks and nothing else, so a filesystem is software. Programs/Libraries/sbfs.asm reads one.
+
+| Routine | Does |
+| --- | --- |
+| sbfsMount | Registers the disk's buffer as bank 3, reads the superblock, and checks the disk is one of ours. Q is zero if it is. |
+| sbfsFind | DP0 names a file, ending in a zero byte. Q is zero if it was found, and then SbfsFileStart, SbfsFileBlocks and SbfsFileTail describe it. |
+| sbfsRead | Reads the file that was found into Data Memory at DP1. Q is zero if it worked. |
+| sbfsCreate | Makes a file. DP0 names it, and SbfsFileBlocks with SbfsFileTail say how big it is. Q is zero if it was made, and then SbfsFileStart says where it went. |
+| sbfsWriteFile | Writes the file that was made, from Data Memory at DP1. |
+
+A file's size is settled when it is made, because nothing can grow one afterwards. Files are laid down contiguously, so the block after a file usually belongs to somebody else. A program that does not know how much it will write has to guess high and accept the slack, or build its output elsewhere and make the file once the size is known.
+
+Finding room is a walk through the directory rather than a lookup, because there is no allocation table. With files laid down contiguously the directory already says which blocks are spoken for, and a second copy of that would be a second thing to keep right. The free count in the superblock is kept up to date but it is a note rather than the truth: it can be worked out again from the directory, and the directory is the one to believe.
+
+A file's length is its block count times 256 plus its tail, which is the same as putting the block count in the high byte and the tail in the low one. Nothing pads a file out, so the bytes after the end of one are whatever else happened to be in that block, and it is the reading program's business to stop where the tail says.
+
+The other implementation of this format is SplitDisk, on the host. Nothing is shared between the two but the specification, so a change to either has to be a change to both.
+
+### What A Subroutine Can And Cannot Hand Back:
+
+This is the thing that catches people, including whoever wrote the last three pieces of system code, so it is worth stating once and plainly.
+
+CALL saves **A, B, and Data Pointers 0, 1 and 2**, and RET puts all five back. So a subroutine cannot return anything in any of them: whatever it puts there is undone by its own return, silently, and the caller carries on with its old values as though the subroutine had never run.
+
+What comes back is **Q**, which is one byte, and **Data Pointer 3**, which is two. That is the whole of it, and it is why DP3 is not preserved.
+
+The same rule catches a loop that steps a pointer inside a subroutine. The step is thrown away every time round, so the loop reads the same byte forever and the fault is a wrong answer rather than a crash.
+
+If two bytes have to come back and DP3 is spoken for, the honest answers are to write them into Data Memory, or to do the work in the caller rather than in a routine. A short sequence written out twice is better than a subroutine that quietly does nothing.
+
+The same rule cuts the other way, which is easier to miss. Because DP3 is not put back, **a routine you call may leave something of its own in it**. It is where a routine hands a pointer out, so it is not a safe place to leave one of your own across a call to anything that might use it. The Stack is: push it before the call and pop it after, and it will be exactly as it was.
+
+A label may only be defined once across a program and everything it includes, so a routine in one library cannot use a name that another has already taken.
+
+## Loading A Program From A Disk:
+
+A program that was not the one the machine booted from carries sixteen bytes in front of it saying where it belongs.
+
+| Offset | Size | Holds |
+| --- | --- | --- |
+| 0 | 4 | SBEX |
+| 4 | 1 | Version. One. |
+| 5 | 1 | Reserved. |
+| 6 | 2 | Where the code goes in Program Memory. |
+| 8 | 2 | Where to start running. |
+| 10 | 2 | How many bytes of code there are. |
+| 12 | 2 | Where the data goes in Data Memory. |
+| 14 | 2 | How many bytes of data there are. |
+| 16 | | The code, and then the data. |
+
+Programs/loader.asm reads one off a disk, puts the two pieces where the header asks, and jumps to the entry with BRD. Every part of that already existed: the filesystem finds the file, the memory controller writes Program Memory, and BRD turns an address worked out at run time into somewhere to go. The header is the only new thing.
+
+The magic matters for the same reason it does everywhere else on this machine. Without it, loading a text file would put nonsense into Program Memory and then jump into it.
+
+### Where A Program Says It Lives:
+
+**Nothing relocates anything.** A program is put exactly where its header asks, and that has to be the address it was assembled for, or every branch and every SETD inside it points somewhere wrong.
+
+A program is assembled for its address by reserving the front of each segment. #Reserve at the top of the Program Segment puts the first instruction after it at a known address, and the same in the Data Segment does it for the data, so every label inside is already right.
+
+```
+#Program
+  #Reserve 0x2000       ; This program's code lives from 0x2000.
+hello:
+  ...
+```
+
+That is not general placement, since only the first thing in a segment can be put anywhere. It is exactly enough for a program that wants to live at one address, which is what a loadable program is.
+
+The loader keeps its own code and data below the addresses the loaded program claims. That is an arrangement between the two of them rather than anything the machine enforces, and it is the part that a real operating system would have to do properly.
 
 ## Refusing:
 
@@ -379,7 +499,7 @@ The Bytes column is the total length of the instruction, counting its opcode, an
 | 07 | SHL  | 1 | A and B form a circular shift register. Rotate this register left. |
 | 08 | SHR  | 1 | A and B form a circular shift register. Rotate this register right. |
 
-### Branch and Subroutine Operations: 8 Instructions
+### Branch and Subroutine Operations: 14 Instructions
 | Hex Code | Mnemonic | Bytes | Description |
 | -- | ---- | -- | -- |
 | 10 | BRI  | 3 | Branch Immediately. Loads the immediate next two bytes of Program Memory into the Program Counter, first the most significant byte, then the least. |
@@ -388,12 +508,16 @@ The Bytes column is the total length of the instruction, counting its opcode, an
 | 13 | BRB  | 3 | Branch on B. If B is zero, loads the immediate next two bytes of Program Memory into the Program Counter. |
 | 14 | BRC  | 3 | Branch if Carry is set. |
 | 15 | BRD  | 2 | Branch to the address held in the named Data Pointer. |
+| 1A | BNQ  | 3 | Branch if Q is not zero. |
+| 1B | BNA  | 3 | Branch if A is not zero. |
+| 1C | BNB  | 3 | Branch if B is not zero. |
+| 1D | BNC  | 3 | Branch if the Carry Flag is clear. |
 | 17 | CALL | 3 | Call subroutine. Pushes the Program Counter, Data Pointers 0 through 2, B and A to the Stack, then performs an immediate branch. This costs ten bytes of Stack. |
 | 18 | SWI  | 2 | Software Interrupt. The next byte names a software vector. Pushes an interrupt frame and dispatches through it. Never masked. |
 | 19 | RETI | 1 | Return from an interrupt. Restores everything the frame holds and carries on from where the interrupt arrived. |
 | 1F | RET  | 1 | Return from subroutine. Restores A, B, and Data Pointers 0 through 2 from the Stack, then sets the Program Counter to the instruction after the CALL. Data Pointer 3 and Q are left as the subroutine leaves them. |
 
-### Register Operations: 11 Instructions
+### Register Operations: 13 Instructions
 | Hex Code | Mnemonic | Bytes | Description |
 | -- | ---- | -- | -- |
 | 20 | RSTA | 1 | Resets A to 0. |
@@ -423,7 +547,7 @@ Q is where every ALU result lands, and Q is not itself an ALU operand, so MVQA a
 | 35 | POPB | 1 | Reads the location referenced by the Stack Pointer from Data Memory into B then increments the Stack Pointer. |
 | 36 | POPD | 2 | Restores the named Data Pointer from the stack, increments the Stack Pointer by two. |
 
-### Data Operations: 12 Instructions
+### Data Operations: 13 Instructions
 | Hex Code | Mnemonic | Bytes | Description |
 | -- | ---- | -- | -- |
 | 40 | INCD | 2 | Increments the named Data Pointer. |
@@ -465,7 +589,7 @@ LDD and STD are how a program follows an address it has stored, rather than one 
 
 ## Input and Output In the Emulator:
 
-The current implementation has Input 0 and Output 0 hooked to stdin and stdout respectively, allowing programs to read to and from the console.
+Port 0 is the console: writing sends a byte to standard output and reading takes one from standard input. Everything else this machine has is listed under Devices above, and a program that wants to know what is actually there asks the bus registry rather than assuming.
 
 ### Example Program: Hello World
 ```
@@ -507,7 +631,9 @@ A file begins with a nine byte header:
 
 The feature flags are how a binary states that it needs something the base machine does not provide. An emulator that cannot provide everything a binary asks for refuses to run it, rather than running it and going quietly wrong. No feature bits are defined yet, so the field is currently zero in every binary.
 
-After the header come the two segments, the Program Segment first and then the Data Segment. Each begins with a three character marker, `PRG` or `DAT`, followed by a two byte length. The system loads each memory with the bytes that follow, in sequence, starting from address 0x0000.
+After the header come the segments. The Program Segment comes first and then the Data Segment, each beginning with a three character marker, `PRG` or `DAT`, followed by a two byte length. The system loads each memory with the bytes that follow, in sequence, starting from address 0x0000.
+
+A third segment may follow them, marked `VEC`, holding the vectors a program named in its Vector Segment. It is four bytes an entry: two saying where in Program Memory the vector sits, and two saying where its handler is. A program that named no vectors has no such segment, and a file that simply ends after its Data Segment is one written before vectors existed. Either way the reader treats the end of the file as an empty table, which is why adding this cost no format version and left every binary already written still loadable.
 
 Here is the hello world program above, assembled and dumped as hex:
 

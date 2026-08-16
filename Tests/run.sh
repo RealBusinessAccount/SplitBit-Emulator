@@ -54,6 +54,12 @@ PROGRAMS="$ROOT/Programs"
 rm -rf "$BUILD"
 mkdir -p "$BUILD" "$EXPECTED"
 
+# Disk images the tests read from are built here, with the host tool, before anything
+# runs. The build directory is thrown away above, so they are always freshly made.
+if [ -x "$TESTS/makedisks.sh" ]; then
+    "$TESTS/makedisks.sh" "$BUILD" || { echo "Couldn't build the test disks."; exit 1; }
+fi
+
 PASS=0
 FAIL=0
 BLESSED=0
@@ -116,13 +122,14 @@ assemble() {
     return 1
 }
 
-while IFS='|' read -r name src mode stdin limit; do
+while IFS='|' read -r name src mode stdin limit disk; do
     name="$(trim "$name")"
     [ -z "$name" ] && continue
     case "$name" in \#*) continue ;; esac
     src="$(trim "$src")"
     mode="$(trim "$mode")"; stdin="$(trim "$stdin")"
-    limit="$(trim "$limit")"
+    limit="$(trim "$limit")"; disk="$(trim "$disk")"
+    [ -z "$disk" ] && disk="-"
 
     wanted "$name" || continue
 
@@ -166,6 +173,24 @@ while IFS='|' read -r name src mode stdin limit; do
             # bounds them by cycle count rather than by wall clock.
             EMUARGS=(--fast)
             [ "$limit" != "-" ] && EMUARGS+=(--cycles "$limit")
+            # A disk starts fresh for every run, so a test cannot pass because of what a
+            # previous one left lying on it. The emulator makes the image if it is
+            # missing, which is what removing it first arranges for.
+            if [ "$disk" != "-" ]; then
+                # A trailing :ro attaches the image write protected, so that a test can
+                # check the device bars writes rather than the filesystem asking nicely.
+                DISKFILE="${disk%:ro}"
+                # A name with a directory in it is one of the images makedisks.sh built,
+                # and is used as it stands. A bare name is scratch: it is removed first so
+                # that nothing a test writes can be seen by the next one, and the emulator
+                # makes a blank image in its place.
+                case "$DISKFILE" in
+                    */*) ;;
+                    *) rm -f "$BUILD/$DISKFILE" ;;
+                esac
+                EMUARGS+=(--disk "$BUILD/$DISKFILE")
+                [ "$disk" != "$DISKFILE" ] && EMUARGS+=(--write-protect)
+            fi
             timeout "$RUN_TIMEOUT" "$EMULATOR" "${EMUARGS[@]}" "$BIN" <"$IN" >"$OUT" 2>&1
             STATUS=$?
             if [ "$STATUS" -eq 124 ]; then

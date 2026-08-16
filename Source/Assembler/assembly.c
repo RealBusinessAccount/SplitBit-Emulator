@@ -29,6 +29,13 @@ Instruction instruction_set[] = {
     {0x13, "BRB"},
     {0x14, "BRC"},
     {0x15, "BRD"},
+    // The same four conditions the other way round. A quarter of the conditional
+    // branches in the corpus were a branch over an unconditional one before these
+    // existed, each of them needing a label invented only to be jumped past.
+    {0x1A, "BNQ"},
+    {0x1B, "BNA"},
+    {0x1C, "BNB"},
+    {0x1D, "BNC"},
     {0x17, "CALL"},
     {0x18, "SWI"},
     {0x19, "RETI"},

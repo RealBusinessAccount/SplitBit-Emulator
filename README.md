@@ -12,6 +12,9 @@ SplitBit is a custom 8 bit system designed for hobbyist projects and experimenta
 - Modular Codebase: Mostly clean separation of CPU, I/O, and utility functions for easy modification.
 - Interrupts: Software traps, hardware lines from devices, and faults, all arriving through one vector table with a full context save.
 - Devices: A bus registry that says what a machine is made of, so a program can ask rather than being told.
+- Filesystem: SBFS, read and written by SplitBit itself, and by a host tool that speaks the same format so an image can be moved either way.
+- Loadable Programs: A program that was not booted from carries a header saying where it belongs, and Programs/loader.asm reads one off a disk, puts it there, and runs it.
+- Storage: A block device with 256 byte blocks and 16 megabytes of them, backed by an image file on the host. It knows blocks and not files, because a filesystem is meant to be software SplitBit runs.
 - Memory Controller: Reads and writes Program Memory, moves blocks between memory banks, reaches memory that devices bring with them, and guards a range against being written by accident. It is how a SplitBit machine loads a program.
 - Assembler: Assemble human readable assembly language files directly into SplitBit compatible binary files. Supports including external files, handling labels, alignment and reservation, and defining Program, Data and Vector segments.
 
@@ -21,7 +24,7 @@ SplitBit is a custom 8 bit system designed for hobbyist projects and experimenta
 git clone https://github.com/RealBusinessAccount/SplitBit-Emulator.git
 cd SplitBit-Emulator
 ```
-2) Build the Emulator and the Assembler: You'll need gcc and make or similar.
+2) Build the Emulator, the Assembler and the disk tool: You'll need gcc and make or similar.
 ```
 make
 ```
@@ -44,10 +47,27 @@ The sources are ISO C, and build clean under -std=c11 -pedantic with -Wall -Wext
 - -d, --debug: Enable debug mode to single step through cycles. Each key press advances one instruction.
 - -c, --cycles N: Stop after N cycles rather than running until the program halts. Useful for programs that never halt, and for getting the same output from a run every time.
 - -f, --fast: Run as fast as the host machine allows, ignoring the emulated cycle rate.
+- -D, --disk \<file\>: Attach a disk image, creating a 128K one if the file is not there.
+- -W, --write-protect: Attach the disk read only. A disk whose image the host will not let you write is read only whether you ask for this or not.
 - -h, --help: Show help and usage information.
 
 #### Notes:
 - If the CPU reads a byte that is not an instruction, it goes to the fault handler the program installed. If it installed none, it raises the Fault Flag and halts, and the emulator reports the byte and the address it was found at and exits with a non zero status. The same happens if a program or a device asks for a handler that was never installed.
+
+### Usage:
+```
+./SplitDisk <command> <image> [arguments]
+```
+#### Commands:
+- format \<image\> [blocks] [dirblocks]: Lay down a fresh filesystem. 512 blocks and 8 of directory by default, which is 128K and room for 64 files.
+- list \<image\>: Show what is on the disk.
+- put \<image\> \<file\> [name]: Put a host file onto it. Without a name it uses the file's own, which is often longer than the 22 characters a name may be.
+- get \<image\> \<name\> [file]: Take one off it.
+- delete \<image\> \<name\>: Remove one.
+
+#### Notes:
+- SplitDisk speaks the same on disk format SplitBit does, so an image it makes is one the machine can read, and one the machine writes is one it can read back. Until SplitBit can write its own filesystem this is the only way to get a program onto a disk.
+- Files are laid down contiguously, so a disk can have free blocks without having them in one piece. When that happens put says so rather than putting part of a file on.
 
 ### Usage:
 ```
@@ -86,6 +106,12 @@ The test suite assembles and runs every program in Programs/ and compares the re
 ```
 make test
 ```
+Disk images that tests read from are built by Tests/makedisks.sh before the run, using SplitDisk. A test that reads one is therefore checked against a filesystem written by different code from the same written format, rather than against itself.
+
+The disk tool is checked separately by Tests/disk.sh, which make test runs afterwards: it puts files of every awkward size onto an image and takes them off again, and checks that the things the format says cannot happen are refused.
+
+Tests/docs.sh then checks the manuals against the code: that every instruction has a row and every row is an instruction, that the counts in the headings are right, that every directive is written down, that every routine the manuals promise exists, and that the worked examples still assemble to the bytes printed beside them. Documentation goes stale quietly, and this is what stops it.
+
 Tests are defined in Tests/manifest, one line per program. To record the current output as the expected result, after you have checked that it is correct:
 ```
 make bless

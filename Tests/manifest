@@ -4,7 +4,7 @@
 # One test per line, fields separated by '|'. Blank lines and lines starting
 # with '#' are ignored.
 #
-#   name | source | mode | stdin | limit
+#   name | source | mode | stdin | limit | disk
 #
 # source is relative to Programs/. Everything assembles from there with
 # Libraries/ on the include path, and the binary is written into Tests/build.
@@ -18,6 +18,14 @@
 # limit is a cycle count, for programs that never halt on their own. It is passed
 # to the emulator as --cycles, which bounds the run by cycles rather than by wall
 # clock time and so keeps the recorded output identical from one run to the next.
+#
+# disk names a disk image to attach, made fresh inside Tests/build for every run so that
+# nothing a test writes can be seen by the next one. Leave it off for a machine with no
+# disk, which is most of them. A trailing :ro attaches it write protected.
+#
+# A disk name with a directory in it, such as disks/sbfs.img, is one of the images that
+# Tests/makedisks.sh builds with SplitDisk before the run. Those are used as they stand,
+# so a test can read a filesystem written by the other implementation of the format.
 # Every program is run with --fast, since the emulated cycle rate has no bearing
 # on what a program prints.
 
@@ -43,6 +51,11 @@ pointerTableTest     | testPrograms/pointerTableTest.asm  | run      | -        
 staticTableTest      | testPrograms/staticTableTest.asm   | run      | -                  | -
 dispatchTest         | testPrograms/dispatchTest.asm      | run      | -                  | -
 
+# ---- Branching both ways round ----
+# Each of the four conditions is checked taken and not taken, so a branch that always
+# went the same way would be caught rather than looking right half the time.
+branchTest           | testPrograms/branchTest.asm        | run      | -                  | -
+
 # ---- Moving an ALU result back into an operand register ----
 moveQTest            | testPrograms/moveQTest.asm         | run      | -                  | -
 
@@ -53,6 +66,24 @@ controllerReadTest   | testPrograms/controllerReadTest.asm | run     | -        
 controllerWriteTest  | testPrograms/controllerWriteTest.asm | run    | -                  | -
 # Block transfers: between banks, within one, overlapping, and one that is refused.
 blitTest             | testPrograms/blitTest.asm          | run      | -                  | -
+# Reading a filesystem that the host tool wrote. The two are separate implementations of
+# one written format, so this is where any drift between them would show.
+sbfsReadTest         | testPrograms/sbfsReadTest.asm      | run      | -                  | -     | disks/sbfs.img
+
+# Writing a filesystem, then reading back what was written. The disk starts with a file
+# on it, so allocation has to find room rather than start at the beginning.
+sbfsWriteTest        | testPrograms/sbfsWriteTest.asm     | run      | -                  | -     | disks/write.img
+
+# Loading a program off a disk and running it. Everything below this line existed before
+# the loader did; the only new part is the sixteen bytes on the front of a loadable
+# program saying where it goes.
+loader               | loader.asm                         | run      | -                  | -     | disks/load.img
+
+# Storage. The image is made fresh for each run, so block 3 starts as zeroes.
+diskTest             | testPrograms/diskTest.asm          | run      | -                  | -     | disk.img
+# The same disk attached write protected, so the device bars writes rather than software.
+diskProtectTest      | testPrograms/diskProtectTest.asm   | run      | -                  | -     | protected.img:ro
+
 # A program that loads a program: blits code into Program Memory, installs a vector at
 # run time, and calls it. If the vector install ever silently failed, the SWI would fault
 # with "no handler" rather than printing, so this test cannot pass by accident.

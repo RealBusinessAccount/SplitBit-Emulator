@@ -19,6 +19,8 @@ typedef struct {
     uint8_t debug;         // Step one instruction at a time, printing the registers.
     uint8_t fast;          // Ignore the cycle rate and run as fast as the host allows.
     unsigned long cycles;  // Stop after this many cycles. Zero means run until the program halts.
+    const char *disk;      // Disk image to attach, or NULL for a machine with no disk.
+    uint8_t writeProtect;  // Attach the disk read only, the way a tab on a floppy would.
 } EmulatorOptions;
 
 uint8_t parseOptions(int argc, char *argv[], EmulatorOptions *options);

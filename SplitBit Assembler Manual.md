@@ -22,6 +22,10 @@ The assembler will accept:
 
 Any token beginning with a '0' is read as a numerical literal, so a malformed one is an error rather than something the assembler tries to interpret as a label. This also means a label cannot begin with a '0'.
 
+A string may be up to 255 characters. Each one is written down with a zero byte on the end, which is what lets a program find where it stops, and it means two strings written one after the other are not one longer string: there is a zero between them. A run of bytes longer than a string can hold has to be written as literals, or put there by the program itself while it runs.
+
+The one exception to the single byte rule is #Align and #Reserve, whose numbers are never emitted as bytes and may go up to 0xFFFF. See Moving The Cursor Along.
+
 ## Labels:
 
 Labels may be a string of up to 32 alphanumeric characters that must end with a colon, ':'.

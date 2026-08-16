@@ -270,6 +270,38 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             // CALL - Push the Program Counter to the Stack, and perform an immediate branch.
             genericCall(cpu);
         break;
+        case 0x1A:
+            // BNQ - Branch if Q is not 0.
+            if(cpu->Q != 0) {
+                genericBranch(cpu);
+            } else {
+                cpu->ProgramCounter+=2;
+            }
+        break;
+        case 0x1B:
+            // BNA - Branch if A is not 0.
+            if(cpu->A != 0) {
+                genericBranch(cpu);
+            } else {
+                cpu->ProgramCounter+=2;
+            }
+        break;
+        case 0x1C:
+            // BNB - Branch if B is not 0.
+            if(cpu->B != 0) {
+                genericBranch(cpu);
+            } else {
+                cpu->ProgramCounter+=2;
+            }
+        break;
+        case 0x1D:
+            // BNC - Branch if the Carry Flag is clear.
+            if (!(cpu->Status & STATUS_CARRY)) {
+                genericBranch(cpu);
+            } else {
+                cpu->ProgramCounter+=2;
+            }
+        break;
         case 0x18: {
             // SWI - Software Interrupt. The byte after the opcode names the vector.
             // Never masked: this is an instruction the program deliberately ran, not
