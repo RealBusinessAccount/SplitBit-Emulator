@@ -68,8 +68,25 @@
 #define VECTOR_BANK_FAULT     4
 // Vectors 5 to 15 are held back for faults that do not exist yet, so that each cause
 // can have an entry of its own rather than sharing one and needing a cause register to
-// tell them apart. Everything from 16 up belongs to programs.
-#define VECTOR_FIRST_FREE    16
+// tell them apart. Everything from 16 up belongs to programs, in two halves.
+//
+// PINNED, 16 to 63. Numbers in here are never handed out by the assembler; a program that
+// wants one writes it down. This is where anything TWO SEPARATELY ASSEMBLED PROGRAMS have
+// to agree about lives - the system's services, and any library that stays resident and is
+// called through the vector table.
+//
+// AUTOMATIC, 64 up. Numbered by the assembler in the order they are written. These belong
+// to one program and nothing outside it can name them, so what number they get does not
+// matter as long as it is not somebody else's.
+//
+// THE SPLIT IS THE POINT. With one range for both, what number a program's own traps got
+// depended on what it had included: adding a line that included the system's service names
+// silently pushed every trap after it along by three. Worse, a program that did NOT include
+// them was given 16, which is osPrintString, so installing its own handler would have
+// replaced a system service by accident. Numbers that must agree are now written out loud,
+// and numbers that need not agree are drawn from somewhere nobody else is looking.
+#define VECTOR_FIRST_PINNED  16
+#define VECTOR_FIRST_AUTO    64
 
 // The first address the vector table occupies, and so the first address that program
 // text may not use.

@@ -193,11 +193,11 @@ A line with a name and nothing after it declares the name and its number without
 ```
 ; services.asm, included by both sides
 #Vectors
-  osPrint
-  osExit
+  osPrint  0d16
+  osExit   0d17
 ```
 
-Because the order is fixed in that one file, both sides give them the same numbers, and neither has to write a number down.
+The numbers are there because this is the case where a number has to be agreed. Everything else in a Vector Segment is numbered by the assembler, which can only see one program at a time — and that is exactly the situation where it cannot help. See Numbers You Write Down below.
 
 Five names already mean something:
 
@@ -209,7 +209,7 @@ Five names already mean something:
 | GuardViolation | A device refused a write, because it landed inside a raised fence. |
 | BankFault | A bank was named that has nothing in it, or an access ran past its end. |
 
-Anything else you name is a software interrupt of your own. You do not choose its number and you never write one: the assembler allocates them in the order they appear, starting above the range held back for faults that do not exist yet. That is the same bargain as labels everywhere else in SplitBit assembly, where you name a thing and let the assembler work out where it went.
+Anything else you name is a software interrupt of your own. Usually you do not choose its number: the assembler allocates them in the order they appear, from vector 64 upwards. That is the same bargain as labels everywhere else in SplitBit assembly, where you name a thing and let the assembler work out where it went.
 
 You then use the name as the operand of SWI:
 
@@ -221,7 +221,36 @@ A device is different, because its number is not a choice. A device interrupts o
 
 The assembler will refuse two handlers for the same vector, a name used with SWI that no Vector Segment gives a handler to, and a handler that is not a label.
 
-Vectors 5 through 15 are held back for faults that have not been defined yet. They have no names, so there is currently no way to write a handler for one, and none is needed: each will be given a name of its own as the fault it stands for is defined, the way GuardViolation and BankFault were. Because you never write a vector number, there is no way to land on one of them by accident either.
+### Numbers You Write Down:
+
+A vector number is worth arguing about in exactly one situation: when two programs that are **not assembled together** have to mean the same thing by a name. A program calling `osExit` was built long before, and separately from, whatever implements it. Nothing the assembler can see ties those two together, because it only ever sees one of them.
+
+For that case a number may be written between the name and the handler.
+
+```
+#Vectors
+
+  osExit  0d18  handleExit    ; pinned, and implemented here
+  osPrint 0d16                ; pinned, implemented by somebody else
+  openFile      openHandler   ; the assembler picks the number
+```
+
+The software vector space is divided so the two kinds cannot meet:
+
+| Vectors | Whose |
+| --- | --- |
+| 0 to 2 | Boot, SoftReset and BadOpcode. The machine's, and fixed. |
+| 3 to 15 | Faults. Named as each is defined; the rest are held back. |
+| 16 to 63 | **Pinned.** Never handed out. A number here is written down or it is not used. |
+| 64 to 255 | **Automatic.** Handed out in order. These belong to one program and nothing outside it can name them. |
+
+You may give a number only in the pinned range. Below it belongs to the machine, and above it is where the assembler is allocating, so a number claimed there could be handed to something else in the same breath.
+
+**Why the split exists**, because it is not obvious and the reason is a real mistake that used to be possible. When both kinds came out of one range, the numbers a program got for its own traps depended on what it had included: adding a line that included a file naming three services pushed every trap after it along by three, and a program that had *not* included that file was given the first number in the range — which was a service. Installing its own handler there would have quietly replaced one. Now numbers that must agree are written down, and numbers that need not agree come from somewhere nobody else is looking, so a program's own vectors are its own regardless of how it was built.
+
+The assembler will refuse a number outside the pinned range, two names given the same number, a number on `Boot`, `SoftReset` or `BadOpcode`, whose numbers are the machine's, and a number that contradicts one the same name was already given.
+
+Vectors 3 through 15 are held back for faults, most of which have not been defined yet. They have no names, so there is currently no way to write a handler for one, and none is needed: each will be given a name of its own as the fault it stands for is defined, the way GuardViolation and BankFault were. Since a number may only be written in the pinned range, there is no way to land on one of them by accident either.
 
 ## Including Other Files:
 

@@ -239,11 +239,22 @@ static uint16_t resolveHandler(intermediateElement *intermediateArray, int at, c
     return (uint16_t)address;
 }
 
+// Is anything already using this software vector number?
+static int vectorNumberTaken(uint8_t index) {
+    for (int i = 0; i < vectorArrayCount; i++) {
+        if (vectorArray[i].base == SOFTWARE_VECTOR_BASE && vectorArray[i].index == index) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 void populateVectorTable(intermediateElement *intermediateArray, int arraySize) {
-    // Software vectors a program names for itself are numbered in the order they are
-    // written, starting above the block held back for faults. A programmer never types
-    // one, so there is no way to land on a reserved vector by accident.
-    int nextFreeVector = VECTOR_FIRST_FREE;
+    // Software vectors a program names for itself and does not pin are numbered in the
+    // order they are written, from the automatic range. A programmer never types one of
+    // these, so there is no way to land on a reserved vector or on somebody else's
+    // agreed number by accident.
+    int nextFreeVector = VECTOR_FIRST_AUTO;
 
     int i = nextVectorToken(intermediateArray, arraySize, 0);
     while (i >= 0) {
@@ -264,13 +275,31 @@ void populateVectorTable(intermediateElement *intermediateArray, int arraySize) 
             continue;
         }
 
-        int handlerToken = nextVectorToken(intermediateArray, arraySize, i + 1);
+        // A number on the same line, between the name and any handler, PINS the vector.
+        // Nothing else can appear there: a label may not begin with a digit, so a value in
+        // this position is a number and can be nothing else.
+        int after = nextVectorToken(intermediateArray, arraySize, i + 1);
+        int pinned = -1;
+        if (sameLine(intermediateArray, i, after) && intermediateArray[after].type == VALUE) {
+            pinned = intermediateArray[after].byteValue;
+            after = nextVectorToken(intermediateArray, arraySize, after + 1);
+        }
+        int handlerToken = after;
         int hasHandler = sameLine(intermediateArray, i, handlerToken);
         int already = findVector(token);
 
         if (already >= 0) {
             // Met before. A handler now is somebody implementing what was declared
             // earlier, which is how one shared file can serve both sides.
+            //
+            // A number here has to be the one it was declared with. Saying it again is
+            // allowed, because an implementer repeating what it is implementing is
+            // harmless; saying a different one means the two sides disagree about which
+            // vector this is, which is the whole thing pinning exists to prevent.
+            if (pinned >= 0 && pinned != vectorArray[already].index) {
+                vectorError("That vector was already given a different number.",
+                            &intermediateArray[i]);
+            }
             if (!hasHandler) {
                 vectorError("That vector is declared more than once.", &intermediateArray[i]);
             }
@@ -292,7 +321,29 @@ void populateVectorTable(intermediateElement *intermediateArray, int arraySize) 
                 break;
             }
         }
-        if (!reserved) {
+        if (reserved && pinned >= 0) {
+            // Boot, SoftReset and BadOpcode are where the machine looks, not where a
+            // program says to look, so their numbers are not anybody's to choose.
+            vectorError("That vector's number is fixed by the machine and cannot be given.",
+                        &intermediateArray[i]);
+        }
+        if (!reserved && pinned >= 0) {
+            if (pinned < VECTOR_FIRST_PINNED || pinned >= VECTOR_FIRST_AUTO) {
+                fprintf(stderr, RED "Error: %d is not a vector number that can be given.\n"
+                                    " Numbers below %d belong to the machine, and %d and up are\n"
+                                    " handed out by the assembler. A vector two programs have to\n"
+                                    " agree about takes one from %d to %d.\n" RESET,
+                        pinned, VECTOR_FIRST_PINNED, VECTOR_FIRST_AUTO,
+                        VECTOR_FIRST_PINNED, VECTOR_FIRST_AUTO - 1);
+                printf("File: %s at line %d.\n",
+                       intermediateArray[i].fileName, intermediateArray[i].lineNumber);
+                exit(1);
+            }
+            if (vectorNumberTaken((uint8_t)pinned)) {
+                vectorError("Another vector already has that number.", &intermediateArray[i]);
+            }
+            index = (uint8_t)pinned;
+        } else if (!reserved) {
             if (nextFreeVector > 255) {
                 vectorError("There are no software vectors left to give this one.", &intermediateArray[i]);
             }

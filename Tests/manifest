@@ -130,6 +130,12 @@ interruptFlagTest    | testPrograms/interruptFlagTest.asm | run      | -        
 # These are the interrupt path end to end. Until #Vectors existed, none of them could
 # be written as a source file at all, because nothing could install a handler.
 vectorTest           | testPrograms/vectorTest.asm        | run      | -                  | -
+# Numbers written down and numbers handed out, in one program. A vector number only matters
+# where two separately assembled programs have to agree about it, so those are pinned by
+# hand from a range the assembler never allocates, and everything else is drawn from above
+# it. This pins both ends of that range and leaves a third to the assembler, then calls all
+# three by name: a number going astray shows up as the wrong word rather than as silence.
+pinnedVectorTest     | testPrograms/pinnedVectorTest.asm  | run      | -                  | -
 deviceTest           | testPrograms/deviceTest.asm        | run      | -                  | -
 faultResumeTest      | testPrograms/faultResumeTest.asm   | run      | -                  | -
 # The worked example out of the Assembler Manual, so the manual cannot go stale.
@@ -219,11 +225,18 @@ cosmosLife           | CosmOS/Source/cosmos.asm           | run      | cosmosLif
 # 54. The two together are what say the poll is reading the console rather than always
 # answering the same way.
 cosmosLifeKey        | CosmOS/Source/cosmos.asm           | run      | cosmosLifeKey.in   | -     | disks/cosmos.img
+# A whole game of Snake, played by a script. Life is watched; this is steered, and it is
+# the first program on this machine that reads the console without ever waiting for it.
+# One key is taken per frame, so twelve bytes in the pipe are twelve moves rather than
+# twelve moves at once: six turn it down the board and six take it left onto the food. So
+# what is recorded is a turn, a meal, a longer snake, and then a wall.
+cosmosSnake          | CosmOS/Source/cosmos.asm           | run      | cosmosSnake.in     | -     | disks/cosmos.img
 # The programs CosmOS loads, checked on their own so that a failure here reads as "the app
 # does not assemble" rather than as a broken disk image.
 app-greet            | CosmOS/Apps/greet.asm              | assemble | -                  | -
 app-hello            | CosmOS/Apps/hello.asm              | assemble | -                  | -
 app-Life             | CosmOS/Apps/Life.asm               | assemble | -                  | -
+app-Snake            | CosmOS/Apps/Snake.asm              | assemble | -                  | -
 
 # ---- Programs driven by console input ----
 inputTest            | inputTest.asm                      | run      | inputTest.in       | -
@@ -261,6 +274,11 @@ diagDuplicateLabel   | testPrograms/diagnostics/duplicateLabel.asm | xfail | -  
 diagBareInclude      | testPrograms/diagnostics/bareInclude.asm    | xfail | -       | -
 diagUnknownVector    | testPrograms/diagnostics/unknownVector.asm  | xfail | -       | -
 diagDuplicateVector  | testPrograms/diagnostics/duplicateVector.asm | xfail | -      | -
+# The two mistakes that pinning a number makes possible. Numbers the assembler hands out
+# cannot collide; numbers a person writes down can, and can also be written outside the
+# range set aside for them.
+diagPinnedRange      | testPrograms/diagnostics/pinnedVectorRange.asm | xfail | -    | -
+diagPinnedTaken      | testPrograms/diagnostics/pinnedVectorTaken.asm | xfail | -    | -
 diagBareSWI          | testPrograms/diagnostics/bareSWI.asm        | xfail | -       | -
 diagAlignOutside     | testPrograms/diagnostics/alignOutside.asm   | xfail | -       | -
 diagBareAlign        | testPrograms/diagnostics/bareAlign.asm      | xfail | -       | -

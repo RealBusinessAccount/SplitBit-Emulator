@@ -74,6 +74,12 @@ for i in 1 2 3 4 5 6 7 8; do "$TOOL" put "$DISKS/sbfs.img" "filler$i.txt" >/dev/
 "$ROOT/Assembler" -I "$ROOT/Programs/Libraries" -I "$ROOT/Programs/CosmOS/Source" \
     "$ROOT/Programs/CosmOS/Apps/Life.asm" -o "$WORK/Life.sbx" >/dev/null
 "$TOOL" put "$DISKS/cosmos.img" "$WORK/Life.sbx" >/dev/null
+# Snake.sbx is the one that is played rather than watched. It reads the console a key at a
+# time without ever waiting for one, so a script of moves drives it a move to a frame, and
+# what is recorded is a whole game: turning, eating, growing, and running into a wall.
+"$ROOT/Assembler" -I "$ROOT/Programs/Libraries" -I "$ROOT/Programs/CosmOS/Source" \
+    "$ROOT/Programs/CosmOS/Apps/Snake.asm" -o "$WORK/Snake.sbx" >/dev/null
+"$TOOL" put "$DISKS/cosmos.img" "$WORK/Snake.sbx" >/dev/null
 printf 'this is not a program' > notes.txt
 "$TOOL" put "$DISKS/cosmos.img" notes.txt >/dev/null
 

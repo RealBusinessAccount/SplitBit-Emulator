@@ -95,10 +95,13 @@
 // ask the console to be, it can also ask the console what it currently is.
 #define CONSOLE_STATUS_INTERRUPT 0x08
 
-// Puts the terminal back the way it was found. Registered with atexit and called from the
-// signal handlers, because a machine that stops in key mode and does not undo it leaves
-// the shell that started it unusable, which is a far worse failure than anything the
-// program was doing.
+// Puts the terminal back the way it was found. Registered with atexit and called from a
+// handler for every signal that can end this process and be caught, because a machine that
+// stops in key mode and does not undo it leaves the shell that started it unusable, which
+// is a far worse failure than anything the program was doing. atexit alone is not enough:
+// it does not run when a process is killed, and the ending that matters most is SIGHUP,
+// which is what arrives when whatever launched this machine dies and takes the terminal
+// with it.
 void consoleRestore(void);
 
 // One byte from the console, waiting if it has to. Everything that reads standard input

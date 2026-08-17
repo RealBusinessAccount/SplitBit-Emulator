@@ -28,13 +28,36 @@ static int consoleEnded = 0;
 static int consolePushback = -1;          // A byte already taken from the host, or -1.
 static int consoleInterrupts = 0;         // Whether an arriving byte puts the line up.
 static struct termios consoleSavedTerminal;
-static int consoleTerminalSaved = 0;
+static int consoleTerminalSaved = 0;      // There is a copy of how the terminal was found.
+static int consoleTerminalRaw = 0;        // The terminal is currently in this machine's mode.
+static int consoleGuardsInstalled = 0;    // The handlers below are in place.
+
+// Hands the terminal back exactly as it was found, WITHOUT forgetting what the program
+// asked for. Separate from consoleRestore because the two are wanted in different places:
+// a machine that is stopping wants both, and a machine that is being suspended wants only
+// this, since it is going to carry on wanting keys when it is resumed.
+static void consoleReleaseTerminal(void) {
+    if (consoleTerminalRaw) {
+        tcsetattr(STDIN_FILENO, TCSANOW, &consoleSavedTerminal);
+        consoleTerminalRaw = 0;
+    }
+}
+
+static void consoleTakeTerminal(void) {
+    if (consoleTerminalRaw || !consoleTerminalSaved) {
+        return;
+    }
+    struct termios raw = consoleSavedTerminal;
+    raw.c_lflag &= (tcflag_t)~(ICANON | ECHO);
+    raw.c_cc[VMIN] = 1;
+    raw.c_cc[VTIME] = 0;
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) == 0) {
+        consoleTerminalRaw = 1;
+    }
+}
 
 void consoleRestore(void) {
-    if (consoleTerminalSaved) {
-        tcsetattr(STDIN_FILENO, TCSANOW, &consoleSavedTerminal);
-        consoleTerminalSaved = 0;
-    }
+    consoleReleaseTerminal();
     consoleKeyMode = 0;
     // Whatever the console was in the middle of asking for is withdrawn along with the
     // mode. A line left standing here would be answered by whatever ran next, which had
@@ -43,12 +66,70 @@ void consoleRestore(void) {
     clearInterrupt(PORT_CONSOLE);
 }
 
-// Restores the terminal and then dies the way it would have died anyway, so that the
-// shell sees the signal it was expecting rather than a machine that exited quietly.
-static void consoleSignalHandler(int signalNumber) {
-    consoleRestore();
+// ---- Giving the terminal back whatever happens ----
+//
+// A machine that stops in key mode and does not undo it leaves the shell that started it
+// with no echo and no line editing, which is a far worse failure than anything the program
+// was doing, and one the user has no obvious way to connect to this program.
+//
+// atexit covers stopping on purpose and nothing else. It does NOT run when a process is
+// killed by a signal, so every way of dying that matters has to be caught and undone by
+// hand. The list below is every signal whose default action ends the process and which can
+// be caught at all - SIGKILL and SIGSTOP cannot, and nothing can be done about those.
+//
+// SIGHUP is on the list for a specific reason, learned the hard way: it is what arrives
+// when the terminal or the session that started this machine goes away, which is exactly
+// what happens when whatever launched it crashes. Handling INT and TERM and stopping there
+// covers the polite endings and misses the one that actually leaves a broken terminal
+// behind.
+
+// Puts the terminal back and then dies the way it would have died anyway, so that whatever
+// is waiting sees the signal it expected rather than a machine that exited quietly.
+static void consoleFatalSignal(int signalNumber) {
+    consoleReleaseTerminal();
     signal(signalNumber, SIG_DFL);
     raise(signalNumber);
+}
+
+static void consoleContinueSignal(int signalNumber);
+
+// Suspending is not dying, so the terminal goes back but the mode is remembered. Whoever
+// gets the terminal next is entitled to find it as they left it, and this machine is
+// entitled to have its keys again when it is resumed.
+static void consoleStopSignal(int signalNumber) {
+    consoleReleaseTerminal();
+    signal(SIGCONT, consoleContinueSignal);
+    signal(signalNumber, SIG_DFL);
+    raise(signalNumber);
+}
+
+static void consoleContinueSignal(int signalNumber) {
+    (void)signalNumber;
+    signal(SIGTSTP, consoleStopSignal);
+    signal(SIGCONT, consoleContinueSignal);
+    if (consoleKeyMode) {
+        consoleTakeTerminal();
+    }
+}
+
+static void consoleInstallGuards(void) {
+    if (consoleGuardsInstalled) {
+        return;
+    }
+    consoleGuardsInstalled = 1;
+    // Installed on the first use of key mode rather than at startup, so a run that never
+    // asks for it installs nothing at all.
+    atexit(consoleRestore);
+
+    static const int fatal[] = {
+        SIGHUP, SIGINT, SIGQUIT, SIGILL, SIGABRT, SIGFPE,
+        SIGBUS, SIGSEGV, SIGPIPE, SIGALRM, SIGTERM
+    };
+    for (size_t i = 0; i < sizeof(fatal) / sizeof(fatal[0]); i++) {
+        signal(fatal[i], consoleFatalSignal);
+    }
+    signal(SIGTSTP, consoleStopSignal);
+    signal(SIGCONT, consoleContinueSignal);
 }
 
 static void consoleSetMode(int wantKeys) {
@@ -71,17 +152,9 @@ static void consoleSetMode(int wantKeys) {
             return;
         }
         consoleTerminalSaved = 1;
-        // Registered on the first use rather than at startup, so a run that never asks
-        // for key mode installs nothing at all.
-        atexit(consoleRestore);
-        signal(SIGINT, consoleSignalHandler);
-        signal(SIGTERM, consoleSignalHandler);
     }
-    struct termios raw = consoleSavedTerminal;
-    raw.c_lflag &= (tcflag_t)~(ICANON | ECHO);
-    raw.c_cc[VMIN] = 1;
-    raw.c_cc[VTIME] = 0;
-    tcsetattr(STDIN_FILENO, TCSANOW, &raw);
+    consoleInstallGuards();
+    consoleTakeTerminal();
 }
 
 // Puts the line up if the console has something to say and has been asked to say it.

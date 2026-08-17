@@ -62,9 +62,12 @@ The software vectors are given out like this:
 | 3 | A device refused a write, because it landed inside a raised fence. GuardViolation. |
 | 4 | A bank was named that has nothing in it, or an access ran past its end. BankFault. |
 | 5 to 15 | Held back for faults not yet defined. |
-| 16 and up | A program's own, given out by the assembler in the order they are named. |
+| 16 to 63 | Pinned. Numbers that separately assembled programs have to agree about, written down rather than allocated. |
+| 64 and up | A program's own, given out by the assembler in the order they are named. |
 
-A programmer does not write vector numbers. Handlers are named in the Vector Segment of an assembly file and used by name, the same way every other address in SplitBit is worked out by the assembler rather than typed. See the SplitBit Assembler Manual.
+A programmer almost never writes a vector number. Handlers are named in the Vector Segment of an assembly file and used by name, the same way every other address in SplitBit is worked out by the assembler rather than typed.
+
+The exception is the range from 16 to 63, and it exists because the assembler only ever sees one program. A program calling `osExit` and the system implementing it are assembled separately, so nothing the assembler can look at ties the two together; the only thing that can is a number both sides write down. Those numbers come from that range, and the assembler never allocates one there, so a number agreed between two programs can never be handed to a third by accident. See the SplitBit Assembler Manual.
 
 The table holds two kinds of entry, and they behave differently when they are zero.
 

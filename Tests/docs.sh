@@ -103,6 +103,34 @@ else:
             problems.append("%s (0x%02X) is a device class and has no row in the Devices"
                             " table" % (name, value))
 
+# ---- The vector ranges the manuals quote are the ones the assembler uses ----
+#
+# Both manuals print the boundary between numbers a program may pin and numbers the
+# assembler hands out. Those are two constants in one header, and moving them without
+# touching the manuals would leave every programmer reading a range that no longer exists
+# and being refused a number the manual said was theirs.
+header = read("Source/Assembler/assembly.h")
+ranges = {name: int(value)
+          for name, value in re.findall(r'^#define (VECTOR_FIRST_[A-Z]+)\s+(\d+)$',
+                                        header, re.M)}
+if set(ranges) != {"VECTOR_FIRST_PINNED", "VECTOR_FIRST_AUTO"}:
+    problems.append("the vector range constants are not the two this check knows about: %s"
+                    % ", ".join(sorted(ranges)) if ranges else "none found")
+else:
+    pinnedFrom = ranges["VECTOR_FIRST_PINNED"]
+    autoFrom = ranges["VECTOR_FIRST_AUTO"]
+    said = "%d to %d" % (pinnedFrom, autoFrom - 1)
+    for manual, text in [("Programming Manual", pm), ("Assembler Manual", am)]:
+        if said not in text:
+            problems.append("the %s does not say the pinned vectors are %s"
+                            % (manual, said))
+    if "%d and up" % autoFrom not in pm:
+        problems.append("the Programming Manual does not say the automatic vectors start"
+                        " at %d" % autoFrom)
+    if "from vector %d upwards" % autoFrom not in am:
+        problems.append("the Assembler Manual does not say the automatic vectors start"
+                        " at %d" % autoFrom)
+
 # ---- Every console status bit is described ----
 #
 # The status port is read by writing a mask and testing it, so a program can only use a bit

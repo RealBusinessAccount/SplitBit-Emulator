@@ -5,15 +5,22 @@
 ; name, because a line with a name and nothing after it declares what a vector is called
 ; and what number it has without claiming to implement it.
 ;
-; The order here is what fixes the numbers, and it is fixed in one file, so the two sides
-; cannot disagree about them and nobody has to write a number down. Adding a service goes
-; at the end: putting one in the middle would renumber everything after it, and any
-; program already assembled against the old numbers would call the wrong thing.
+; THE NUMBERS ARE WRITTEN DOWN HERE, and that is the only place they are written. They
+; used to be decided by the order of the lines, which worked and was quietly fragile: a
+; service inserted in the middle renumbered everything after it, and a program already
+; assembled against the old numbers would go on calling the number rather than the name.
+; Worse, the numbers a program got for its OWN traps moved depending on whether it had
+; included this file, and a program that had not was given 16 - which is osPrintString.
+;
+; So these are pinned. They come from the range set aside for numbers that two separately
+; assembled programs have to agree about; everything a program names for itself is drawn
+; from higher up and cannot collide with these however it is built. Adding a service takes
+; the next free number here and disturbs nothing.
 ;
 ; Written by Anachronaut
 
 #Vectors
 
-  osPrintString         ; DP0 names a string. Prints it.
-  osReadLine            ; DP0 names somewhere to put a line read from the console.
-  osExit                ; Give the machine back to the system.
+  osPrintString  0d16   ; DP0 names a string. Prints it.
+  osReadLine     0d17   ; DP0 names somewhere to put a line read from the console.
+  osExit         0d18   ; Give the machine back to the system.
