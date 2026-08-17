@@ -1,0 +1,14 @@
+console test
+byte hex:  00 0F A5 FF
+word hex:  0000 03E8 FFFF
+byte dec:  0 7 42 100 255
+word dec:  0 9 10 255 1000 10001 65535
+spaces:    ||    |
+lines read:
+[hello] 5
+[] 0
+[SplitBit] 8
+[a line that is f] 16
+end of input
+Execution halted after 6064 cycles.
+[exit 0]

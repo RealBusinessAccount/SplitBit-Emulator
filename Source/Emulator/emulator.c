@@ -111,7 +111,10 @@ int main (int argc, char *argv[]) {
         if (options.debug) {
             // Wait before advancing, not after, so that a keypress is what moves the
             // machine on rather than something that happens once it already has.
-            getchar();
+            // Through the console rather than getchar, so that everything reading standard
+            // input reads it the same way and the console's pushback stays the only place
+            // a byte can be sitting.
+            consoleReadByte();
         }
         int cycles;
         if (options.debug) {

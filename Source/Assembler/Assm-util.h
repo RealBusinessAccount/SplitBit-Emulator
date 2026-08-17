@@ -40,6 +40,7 @@
 #define KEYWORD_VECTORS 4
 #define KEYWORD_ALIGN 5
 #define KEYWORD_RESERVE 6
+#define KEYWORD_BASE 7
 
 // Destination values.
 #define NOWHERE 0
@@ -85,5 +86,32 @@ int readToken(intermediateElement *currentElement, FILE *file, int *lineNumber);
 // rather than a single byte. #Align and #Reserve both take one, and neither number is
 // ever emitted as a byte, so there is no reason to hold them to a byte's range.
 uint16_t readCount(intermediateElement *currentElement, const char *what);
+
+// The same, but zero is allowed. #Base takes one of these: a segment deliberately based
+// at the bottom of memory is a thing a program is entitled to say, and saying it out loud
+// is how it is told apart from a segment nobody based at all.
+uint16_t readAddress(intermediateElement *currentElement, const char *what);
+
+// ---- Where a segment is based ----
+//
+// A program that says nothing about this is a boot image: both its segments begin at
+// zero, and the machine loads them there. A program that gives either segment a base is
+// meant to be loaded somewhere else, so it is written out as a loadable program instead,
+// with its addresses in front of it and none of the space below them in the file.
+//
+// Nothing relocates anything, so the base a program is assembled for has to be the one it
+// is loaded at.
+
+void setSegmentBase(int segment, uint16_t base);
+
+uint16_t segmentBase(int segment);
+
+// Whether this particular segment was given one. A segment left at zero because nobody
+// said otherwise cannot be told from one deliberately based at zero by its value alone,
+// and the difference is what the mismatch check below is about.
+int segmentBaseWasGiven(int segment);
+
+// Whether either segment was given one, which is what decides the kind of file written.
+int programIsLoadable(void);
 
 #endif

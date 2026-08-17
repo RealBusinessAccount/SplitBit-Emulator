@@ -4,9 +4,9 @@ SplitBit assembly syntax is similar to many other assembler syntaxes. Whitespace
 
 A semicolon, ';', denotes the start of a comment, anything beyond it on a line is disregarded by the assembler.
 
-Special Keywords are denoted with hash marks, '#'. The Keywords are #Include, #Program, #Data, #Vectors, #Align, and #Reserve.
+Special Keywords are denoted with hash marks, '#'. The Keywords are #Include, #Program, #Data, #Vectors, #Base, #Align, and #Reserve.
 
-The first four say what kind of thing follows them. #Align and #Reserve are instructions to the assembler in the middle of a segment, and are described under Moving The Cursor Along.
+The first four say what kind of thing follows them. #Base says where a segment is loaded, and is described under Programs Meant To Be Loaded. #Align and #Reserve are instructions to the assembler in the middle of a segment, and are described under Moving The Cursor Along.
 
 SplitBit programs must have a Program Segment. You define the start of a program with the #Program Keyword.
 SplitBit programs may have a Data Segment. You may define the start of the data with the #Data Keyword.
@@ -124,6 +124,53 @@ Both take a number written the way literals are, prefaced with 0x or 0d, but the
 
 Both work in the Program Segment as well as the Data Segment, and both are an error anywhere else, because outside a segment there is no cursor to move.
 
+## Programs Meant To Be Loaded:
+
+A program assembled without saying anything about where it goes is a boot image. Both its segments begin at zero, which is where the machine puts them, and it is written out in the format the emulator loads.
+
+A program that will be loaded by something else has to say where it belongs, because nothing relocates it. `#Base` says so, and it has to be the first thing in its segment:
+
+```
+#Program
+  #Base 0x2000        ; This program's code lives from 0x2000.
+start:
+  ...
+
+#Data
+  #Base 0x1000        ; And its data from 0x1000.
+Message:
+"..."
+```
+
+Every label inside is then already the address it will have once the program is loaded, so a branch or a SETD written in it points at the right place. Giving either segment a base makes the whole program a loadable one, and the assembler writes it out with a header saying where its two pieces go, followed by the pieces themselves. The space below each base is not in the file: the header says where the bytes belong and the loader puts them there.
+
+A program starts at its code base. One that wants to begin somewhere else puts a branch at its first instruction, which costs three bytes and needs nothing from the format.
+
+The address a program is assembled for has to be the address it is loaded at. Nothing checks that, and nothing can fix it: a program put anywhere else has every branch and every SETD inside it pointing somewhere wrong.
+
+### Both Segments Or Neither:
+
+Base one segment and the assembler expects a base on the other, if the other holds anything. Forgetting the second one is refused:
+
+```
+Error: The Program Segment is based at 0x2000, but the Data Segment
+ has 3 bytes at 0x0000 and was never given a #Base.
+ Half a program loaded at zero lands on whatever is already there.
+```
+
+This is worth refusing rather than allowing, because the result runs. The unbased half keeps the addresses it was given, which count up from zero, and the loader puts it exactly there, on top of whatever the system keeps at the bottom of memory. Nothing fails at load and nothing fails at the jump. It fails later, somewhere else, as corruption of something that never went near the program that caused it.
+
+It is easy to do by accident. A segment can come from an included library rather than from the program itself, and a `#Data` that arrives with `#Include print.asm` is just as unbased as one you wrote, while being much harder to notice missing.
+
+A program that genuinely wants a segment at the bottom of memory says so:
+
+```
+#Data
+  #Base 0x0000        ; Meant, not forgotten.
+```
+
+`#Base` is the one directive that takes zero. `#Align` and `#Reserve` are counts, and a count of nothing is a typo, so they still require at least one.
+
 ## The Vector Segment:
 
 A vector says where to go when something happens: the machine starting up, a program asking for a service, a device wanting attention, or the CPU meeting a byte it cannot decode. The Vector Segment says which of your routines belongs to which vector, and the assembler works out the rest.
@@ -140,6 +187,17 @@ Every line names a vector and then the label of the routine that handles it.
   openFile    openFileHandler
   Device 0x10 diskReady
 ```
+
+A line with a name and nothing after it declares the name and its number without installing anything. That is what lets one file be included by both the program that provides a service and the program that calls it: the shared file names them, the provider follows it with handlers, and a program that only calls them says them by name without pretending to implement them.
+
+```
+; services.asm, included by both sides
+#Vectors
+  osPrint
+  osExit
+```
+
+Because the order is fixed in that one file, both sides give them the same numbers, and neither has to write a number down.
 
 Five names already mean something:
 

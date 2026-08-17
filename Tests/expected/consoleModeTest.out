@@ -1,0 +1,10 @@
+console mode ports
+at start:   01 ready 
+key mode:   05 ready keys 
+what came in:
+hi
+
+at the end: 06 ended keys 
+line mode:  02 ended 
+Execution halted after 891 cycles.
+[exit 0]

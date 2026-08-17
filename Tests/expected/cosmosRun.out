@@ -1,0 +1,20 @@
+CosmOS
+> nothing is loaded
+> greet.sbx               210
+hello.sbx               52
+Life.sbx                1411
+notes.txt               21
+4 files
+> load what?
+> no such file
+> not a program
+> loaded, starting at 2000
+> a program, loaded off a disk, running on the system that loaded it
+what should I call you? hello, Anachronaut. that is all I do.
+finished
+> a program, loaded off a disk, running on the system that loaded it
+what should I call you? hello, Claude. that is all I do.
+finished
+> halted
+Execution halted after 11647 cycles.
+[exit 0]

@@ -76,6 +76,7 @@ Instruction instruction_set[] = {
     {0x4A, "LDD"},
     {0x4B, "STD"},
     {0x4C, "MVSD"},
+    {0x4D, "MVDS"},
     // Output Operations:
     {0xD0, "OUTQ"},
     {0xD1, "OUTA"},
@@ -121,6 +122,7 @@ int dataPointerOperands(uint8_t opcode) {
         case 0x48: // DPUP
         case 0x49: // DPDN
         case 0x4C: // MVSD
+        case 0x4D: // MVDS
             return 1;
         default:
             return 0;

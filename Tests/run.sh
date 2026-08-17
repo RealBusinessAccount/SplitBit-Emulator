@@ -111,11 +111,13 @@ check() {
 
 assemble() {
     # assemble <name> <source>; echoes the built binary path on success.
-    # Everything builds from Programs/ with Libraries/ on the include path, and the
-    # binary goes to Tests/build, so the source tree is never written to.
+    # Everything builds from Programs/ with Libraries/ and CosmOS/ on the include path,
+    # and the binary goes to Tests/build, so the source tree is never written to.
+    # CosmOS is there because it owns the filesystem library and the service names, which
+    # test programs outside it include.
     local name="$1" src="$2"
     local bin="$BUILD/$name.bin"
-    if ( cd "$PROGRAMS" && "$ASSEMBLER" -I Libraries -o "$bin" "$src" ) >"$BUILD/.assemble.log" 2>&1; then
+    if ( cd "$PROGRAMS" && "$ASSEMBLER" -I Libraries -I CosmOS/Source -o "$bin" "$src" ) >"$BUILD/.assemble.log" 2>&1; then
         echo "$bin"
         return 0
     fi

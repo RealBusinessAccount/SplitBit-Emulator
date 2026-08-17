@@ -1,0 +1,4 @@
+load hello.sbx
+run
+run
+exit

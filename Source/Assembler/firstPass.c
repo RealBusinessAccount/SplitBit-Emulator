@@ -155,6 +155,9 @@ int loadFile(intermediateElement **intermediateArray, char *fileName, int *inter
     // fileName is a path already resolved and recorded by the caller, and the copy
     // the include list owns, so element fileNames can safely point at it.
     int status = NOWHERE;
+    // A base has to come before anything else in its segment, so this remembers whether
+    // that segment has had anything put in it yet.
+    static int segmentUsed[3] = {0, 0, 0};
     int lineNumber = 1; // Line numbers start at 1.
     // Open the file.
     FILE *file = fopen(fileName, "r");
@@ -229,6 +232,34 @@ int loadFile(intermediateElement **intermediateArray, char *fileName, int *inter
                     // Set the state to DATA so we mark additional tokens for inclusion into Data Memory.
                     status = DATA;
                 break;
+                case KEYWORD_BASE: {
+                    if (status != PROGRAM && status != DATA) {
+                        fprintf(stderr, RED "Error: #Base outside the Program or Data Segment.\n There is no segment for it to be the base of.\n" RESET);
+                        printf(" File: %s at line %d.\n", fileName, lineNumber);
+                        exit(1);
+                    }
+                    if (segmentUsed[status]) {
+                        fprintf(stderr, RED "Error: #Base after something is already in the segment.\n"
+                                            " A base says where the whole segment begins, so it has to come first.\n" RESET);
+                        printf(" File: %s at line %d.\n", fileName, lineNumber);
+                        exit(1);
+                    }
+                    (*intermediateIndex)++;
+                    if (!readToken(&(*intermediateArray)[*intermediateIndex], file, &lineNumber)) {
+                        fprintf(stderr, RED "Error: #Base without an address.\n" RESET);
+                        exit(1);
+                    }
+                    (*intermediateArray)[*intermediateIndex].fileName = fileName;
+                    (*intermediateArray)[*intermediateIndex].lineNumber = lineNumber;
+                    setSegmentBase(status, readAddress(&(*intermediateArray)[*intermediateIndex], "#Base"));
+                    (*intermediateArray)[*intermediateIndex].type = KEYWORD;
+                    (*intermediateArray)[*intermediateIndex].byteLength = 0;
+                    (*intermediateArray)[*intermediateIndex].destination = NOWHERE;
+                    (*intermediateArray)[*intermediateIndex - 1].destination = NOWHERE;
+                    (*intermediateArray)[*intermediateIndex - 1].byteLength = 0;
+                    (*intermediateIndex)++;
+                    continue;
+                }
                 case KEYWORD_ALIGN:
                 case KEYWORD_RESERVE: {
                     // Both take a count, and both only make sense somewhere that has a
@@ -288,8 +319,11 @@ int loadFile(intermediateElement **intermediateArray, char *fileName, int *inter
                 printf(" File: %s at line %d.\n", fileName, lineNumber);
                 exit(1);
             }
-        // Next, check if it's a literal value.
-        } else if (checkIfLiteralValue(&(*intermediateArray)[*intermediateIndex])) {
+        // Next, check if it's a literal value. A string is never one, however it begins:
+        // the quotes are gone by now, so a string starting with a zero looks exactly like
+        // a malformed literal and used to be rejected as one.
+        } else if ((*intermediateArray)[*intermediateIndex].type != STRING
+                   && checkIfLiteralValue(&(*intermediateArray)[*intermediateIndex])) {
             // We should check to make sure we have a destination for it.
             if (status == NOWHERE) {
                 fprintf(stderr, RED "Error: Attempting to write a value to nowhere!\n Did you forget to use the #Program or #Data keyword?\n" RESET);
@@ -320,6 +354,10 @@ int loadFile(intermediateElement **intermediateArray, char *fileName, int *inter
             }
         }
         (*intermediateArray)[*intermediateIndex].destination = status;
+        if ((status == PROGRAM || status == DATA)
+            && (*intermediateArray)[*intermediateIndex].type != KEYWORD) {
+            segmentUsed[status] = 1;
+        }
         (*intermediateIndex)++;
     }
     return 0;

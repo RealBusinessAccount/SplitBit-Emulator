@@ -1,0 +1,8 @@
+split: [dump] [program 2000]
+split: [dir] []
+same: yes no no no 
+hex: 2000 00FF 00FF BEEF FFFF 0000 
+0 is a fine way to begin a string
+no number here
+Execution halted after 2730 cycles.
+[exit 0]

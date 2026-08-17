@@ -26,6 +26,7 @@ typedef struct {
     uint8_t index;     // Which vector in its table.
     uint16_t base;     // Which table: software or hardware.
     uint16_t handler;  // Where the handler ended up.
+    int declaredOnly;  // Named and numbered, with nobody implementing it here.
 } VectorEntry;
 
 void freeLabelList();

@@ -69,6 +69,10 @@ blitTest             | testPrograms/blitTest.asm          | run      | -        
 # Reading a filesystem that the host tool wrote. The two are separate implementations of
 # one written format, so this is where any drift between them would show.
 sbfsReadTest         | testPrograms/sbfsReadTest.asm      | run      | -                  | -     | disks/sbfs.img
+# Walking the directory rather than searching it, which is what listing a disk needs.
+# Twelve files is more than the eight an entry block holds, so the walk has to cross into
+# the second directory block to see them all.
+sbfsWalkTest         | testPrograms/sbfsWalkTest.asm      | run      | -                  | -     | disks/sbfs.img
 
 # Writing a filesystem, then reading back what was written. The disk starts with a file
 # on it, so allocation has to find room rather than start at the beginning.
@@ -110,8 +114,12 @@ registryTest         | testPrograms/registryTest.asm      | run      | -        
 # ---- Moving the cursor along ----
 paddingTest          | testPrograms/paddingTest.asm       | run      | -                  | -
 
-# ---- Finding the Stack ----
+# ---- Finding the Stack, and moving it ----
 stackPointerTest     | testPrograms/stackPointerTest.asm  | run      | -                  | -
+# MVDS, the dangerous one: a system taking its Stack back from a program that stopped
+# without unwinding. The sequence is the one the Programming Manual prints under "The
+# Stack Pointer, Set By Hand", so the manual's example cannot quietly stop working.
+stackReclaimTest     | testPrograms/stackReclaimTest.asm  | run      | -                  | -
 
 # ---- The Interrupt Flag ----
 # Nothing reads the flag yet. This checks that setting and clearing it leaves
@@ -144,6 +152,73 @@ swiFaultTest         | testPrograms/swiFaultTest.asm      | run      | -        
 # where, and exits non zero, rather than stepping over it and carrying on.
 faultTest            | testPrograms/faultTest.asm         | run      | -                  | -
 
+# ---- The modern console library ----
+# Every routine in console.asm, called with the cases that are easy to get wrong: a zero,
+# the largest thing that fits, and a leading zero that should not print. The reading half
+# is given a line longer than its buffer, so truncation and the swallowing of the rest
+# are shown rather than assumed.
+consoleTest          | testPrograms/consoleTest.asm       | run      | consoleTest.in     | -
+# The console's status and control ports. Input here is a file rather than a terminal, so
+# key mode has no terminal to change and only the mode bit moves: that is deliberate, since
+# a program has to behave the same either way and a test needing a terminal could not run.
+# What it pins down is that READY is clear at the end of input while ENDED is set, so a
+# loop reading while READY stops on its own instead of taking imaginary bytes forever.
+consoleModeTest      | testPrograms/consoleModeTest.asm   | run      | consoleModeTest.in | -
+# Picking a typed line apart, which is how the shell understands anything. Includes a
+# string beginning with a zero: the assembler strips the quotes before deciding what a
+# token is, so such a string looked like a malformed literal and was refused.
+textTest             | testPrograms/textTest.asm          | run      | -                  | -
+
+# ---- CosmOS ----
+# The system and its shell, driven by a script of commands. This is the first thing that
+# uses the machine as a machine rather than exercising one part of it: it boots, mounts a
+# disk written by the host tool, reads lines, and walks a directory to answer 'dir'.
+cosmos               | CosmOS/Source/cosmos.asm           | run      | cosmos.in          | -     | disks/sbfs.img
+# The same with nothing attached. A shell that only works with a disk in the drive is not
+# finished, so the empty machine is a case in its own right rather than an accident.
+cosmosNoDisk         | CosmOS/Source/cosmos.asm           | run      | cosmosNoDisk.in    | -
+# Loading a program and running it, which is the whole machine at once: the filesystem
+# finds it, the controller writes it into Program Memory, the vector table carries its
+# requests back to the system, and MVDS takes the Stack back when it stops. Every way
+# load can refuse is tried first, and run is asked for twice, so the Stack being reclaimed
+# rather than merely abandoned is what makes the second one work.
+cosmosRun            | CosmOS/Source/cosmos.asm           | run      | cosmosRun.in       | -     | disks/cosmos.img
+# The monitor. It reads Program Memory, which the instruction set cannot do at all, so it
+# works only through the controller. The targets are chosen to be stable: a loaded
+# program's code and data, and the bank table, rather than the system's own code, which
+# would churn whenever any library changed.
+#
+# Dumping the bank table is worth having on its own. It is the machine describing itself,
+# and it shows the disk buffer that sbfsMount registered as bank 3 at boot.
+cosmosDump           | CosmOS/Source/cosmos.asm           | run      | cosmosDump.in      | -     | disks/cosmos.img
+# The original hello.asm, brought over as an application. It is not much of a program,
+# but it is the one that talks to the hardware directly: it writes to port 0x00 instead
+# of calling osPrintString, so it is the case where a program reaches past the system and
+# the system has to get control back anyway. run is asked for twice for the same reason
+# it is in cosmosRun, and here it also says the Stack comes back from a program that never
+# entered a service handler at all.
+cosmosHello          | CosmOS/Source/cosmos.asm           | run      | cosmosHello.in     | -     | disks/cosmos.img
+# Life, which is the one program that had no end state to reach. It stops when the board
+# settles, and the glider does settle: it crosses the field, hits the dead border, and
+# collapses into a block at generation 54. NO CYCLE LIMIT ON PURPOSE. Whether it stops on
+# its own is the whole point of the port, and a limit would answer that question for it.
+#
+# NOTHING IS TYPED AFTER run, and that is load bearing rather than tidy. Life polls the
+# console between generations, and a byte sitting in the pipe is a byte waiting on the
+# console as far as the machine is concerned - exactly as typing ahead at a terminal
+# would be. An "exit" on the next line stops it at generation 1 and gets eaten. The shell
+# ends the run by reaching the end of input instead, the way cosmosNoDisk does.
+cosmosLife           | CosmOS/Source/cosmos.asm           | run      | cosmosLife.in      | -     | disks/cosmos.img
+# The other half of that: a key IS waiting, so it stops at once instead of at generation
+# 54. The two together are what say the poll is reading the console rather than always
+# answering the same way.
+cosmosLifeKey        | CosmOS/Source/cosmos.asm           | run      | cosmosLifeKey.in   | -     | disks/cosmos.img
+# The programs CosmOS loads, checked on their own so that a failure here reads as "the app
+# does not assemble" rather than as a broken disk image.
+app-greet            | CosmOS/Apps/greet.asm              | assemble | -                  | -
+app-hello            | CosmOS/Apps/hello.asm              | assemble | -                  | -
+app-Life             | CosmOS/Apps/Life.asm               | assemble | -                  | -
+
 # ---- Programs driven by console input ----
 inputTest            | inputTest.asm                      | run      | inputTest.in       | -
 inputTestOld         | testPrograms/inputTest.asm         | run      | inputTest.in       | -
@@ -161,6 +236,12 @@ replCalculator       | replCalculator.asm                 | run      | replCalcu
 16x16LifeModern      | gameOfLife/16x16LifeModern.asm     | run      | -                  | 3000000
 
 # ---- Libraries: no entry point, so only check that they assemble ----
+# The CosmOS libraries assemble on their own, unlike print.asm below, which cannot: it
+# begins with a branch to a label only the including program defines. That difference is
+# the point of the rewrite, so both halves of it are recorded here.
+lib-console          | CosmOS/Source/console.asm                 | assemble | -                  | -
+lib-text             | CosmOS/Source/text.asm                    | assemble | -                  | -
+lib-sbfs             | CosmOS/Source/sbfs.asm                    | assemble | -                  | -
 lib-int8             | Libraries/int8.asm                 | assemble | -                  | -
 lib-int16            | Libraries/int16.asm                | assemble | -                  | -
 lib-int32            | Libraries/int32.asm                | assemble | -                  | -
@@ -177,6 +258,10 @@ diagDuplicateVector  | testPrograms/diagnostics/duplicateVector.asm | xfail | - 
 diagBareSWI          | testPrograms/diagnostics/bareSWI.asm        | xfail | -       | -
 diagAlignOutside     | testPrograms/diagnostics/alignOutside.asm   | xfail | -       | -
 diagBareAlign        | testPrograms/diagnostics/bareAlign.asm      | xfail | -       | -
+# One segment based and the other forgotten, which is how the ported Fib-8 put its data
+# on top of the console's variables. It assembled and it ran, so nothing but the assembler
+# was ever going to catch it.
+diagUnbasedSegment   | testPrograms/diagnostics/unbasedSegment.asm | xfail | -       | -
 
 # ---- Known breakages, recorded rather than ignored ----
 # print.asm branches to 'start', which only the including program defines.

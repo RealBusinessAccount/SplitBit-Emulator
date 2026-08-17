@@ -1,0 +1,8 @@
+dump nonsense
+dump 9 0000
+load greet.sbx
+dump program 2000
+dump
+dump data 1000
+dump 2 0000
+exit

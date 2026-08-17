@@ -63,15 +63,65 @@ for m in re.finditer(r'^### (.+?) Operations: (\d+) Instructions?$', pm, re.M):
         problems.append("the manual says %s has %d instructions, and it has %d"
                         % (name, claimed, match[0]))
 
+# ---- How many instructions carry a Data Pointer selector ----
+#
+# The manual says this as a word rather than a figure, and it is the sort of number that
+# goes stale quietly: adding an instruction that takes a selector leaves the sentence
+# looking perfectly reasonable and wrong. dataPointerOperands is the list, so it is the
+# one to believe.
+words = {12: "Twelve", 13: "Thirteen", 14: "Fourteen", 15: "Fifteen", 16: "Sixteen",
+         17: "Seventeen", 18: "Eighteen", 19: "Nineteen", 20: "Twenty"}
+selectors = asmc[asmc.index("int dataPointerOperands"):asmc.index("uint8_t getOpcode")]
+taking = len(re.findall(r'^\s*case 0x[0-9A-Fa-f]{2}:', selectors, re.M))
+said = re.search(r'^([A-Z][a-z]+) instructions work through a Data Pointer\.', pm, re.M)
+if not said:
+    problems.append("the manual no longer says how many instructions take a Data Pointer")
+elif said.group(1) != words.get(taking):
+    problems.append("the manual says %s instructions work through a Data Pointer, and %d do"
+                    % (said.group(1).lower(), taking))
+
+# ---- Every device class in the header has a row in the Devices table ----
+#
+# The table says which ports a device answers on and what class it reports. Adding a
+# device, or widening one from a single port to a block, leaves the table looking perfectly
+# reasonable and describing a machine that no longer exists. The classes are the part that
+# can be checked against the source without teaching this script how ports are laid out:
+# every class the header defines except DEVICE_NONE is something a program can find on the
+# bus, so every one of them has to be findable in the manual too.
+ioh = read("Source/Emulator/io.h")
+classes = {name: int(value, 16)
+           for name, value in re.findall(r'^#define (DEVICE_[A-Z_]+)\s+(0x[0-9A-Fa-f]{2})$',
+                                         ioh, re.M)
+           if name not in ("DEVICE_NONE",)}
+if "## Devices:" not in pm:
+    problems.append("the Programming Manual has lost its Devices table")
+else:
+    table = pm.split("## Devices:")[1].split("\n## ")[0]
+    listed = {int(m, 16) for m in re.findall(r'\|\s*(0x[0-9A-Fa-f]{2})\s*\|\s*$', table, re.M)}
+    for name, value in sorted(classes.items(), key=lambda pair: pair[1]):
+        if value not in listed:
+            problems.append("%s (0x%02X) is a device class and has no row in the Devices"
+                            " table" % (name, value))
+
 # ---- Every directive the assembler knows is written down ----
 for directive in sorted(set(re.findall(r'"(#[A-Za-z]+)"', util))):
     if directive not in am:
         problems.append("%s is a directive and is not in the Assembler Manual" % directive)
 
 # ---- Every routine the manual promises exists ----
-for library, names in [("Programs/Libraries/sbfs.asm", re.findall(r'\| (sbfs[A-Za-z]+) \|', pm))]:
+#
+# The first column of the table in each of these sections names something the library has
+# to define. A routine renamed in the source and not in the manual is caught here, which
+# is what keeps the tables a description rather than a memory.
+for heading, library in [("## Reading The Filesystem:", "Programs/CosmOS/Source/sbfs.asm"),
+                         ("## The Console Library:", "Programs/CosmOS/Source/console.asm")]:
+    if heading not in pm:
+        problems.append("the Programming Manual has lost its \"%s\" section"
+                        % heading.strip("# :"))
+        continue
+    section = pm.split(heading)[1].split("\n## ")[0]
     defined = set(re.findall(r'^([a-zA-Z][A-Za-z0-9]*):', read(library), re.M))
-    for name in names:
+    for name in re.findall(r'^\| ([a-z][A-Za-z0-9]*) \|', section, re.M):
         if name not in defined:
             problems.append("the manual lists %s, which %s does not define" % (name, library))
 
@@ -111,7 +161,8 @@ for heading in ["## An Example SplitBit Assembly Program:",
     with tempfile.TemporaryDirectory() as work:
         asm = os.path.join(work, "example.asm")
         open(asm, "w").write(example)
-        built = subprocess.run(["./Assembler", "-I", "Programs/Libraries", asm,
+        built = subprocess.run(["./Assembler", "-I", "Programs/Libraries",
+                                "-I", "Programs/CosmOS/Source", asm,
                                 "-o", os.path.join(work, "example.bin")],
                                capture_output=True)
         if built.returncode != 0:

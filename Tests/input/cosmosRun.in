@@ -1,0 +1,11 @@
+run
+dir
+load
+load nosuch.sbx
+load notes.txt
+load greet.sbx
+run
+Anachronaut
+run
+Claude
+exit

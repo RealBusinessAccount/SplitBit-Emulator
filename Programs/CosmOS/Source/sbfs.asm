@@ -1,6 +1,10 @@
 ; sbfs.asm
 ; Reading the SplitBit Filesystem.
 ;
+; This belongs to CosmOS, which is the thing that needs it. Programs outside CosmOS may
+; include it, and the test programs do, but when CosmOS becomes a repository of its own
+; this file goes with it and anything left behind takes a copy.
+;
 ; The other implementation of this format is SplitDisk on the host. Nothing is shared
 ; between them but the written specification, so anything that changes here has to change
 ; there in the same breath.
@@ -180,6 +184,167 @@ sbfsFindFound:
   RSTB
   CCF
   ADD                   ; Q is zero: found.
+  RET
+
+; ---- Walking the directory ----
+;
+; sbfsFind answers a question about one name. Listing what is on a disk is a different
+; job: it needs the directory walked rather than searched. sbfsFirst starts a walk and
+; sbfsNext steps it, and each of them stops on an entry that is in use, skipping the free
+; ones on the way past.
+;
+; Q is zero while there is an entry to look at. When it is, SbfsName holds the name with
+; a zero byte after it, and SbfsFileStart, SbfsFileBlocks and SbfsFileTail describe the
+; file exactly the way sbfsFind leaves them. Q is something else when the directory is
+; finished, and also when a block could not be read, which are the same answer to the
+; question "is there another one" and different answers to "why not".
+;
+; A walk keeps a directory block in SbfsBuffer between calls, so anything else that goes
+; to the disk in the middle of one ends it. Take what is wanted out of an entry before
+; asking the disk for anything else.
+
+sbfsFirst:
+  SETD.0 SbfsDirStart
+  SETD.1 SbfsWalkBlock
+  CALL sbfsCopyWord
+  SETD.0 SbfsDirBlocks
+  DPUP.0 0d01
+  LDA.0
+  SETD.1 SbfsWalkLeft
+  STA.1                 ; Only the low byte, the same as sbfsFind.
+
+  ; Nothing is loaded yet. Saying the block in hand is empty makes the scan fetch the
+  ; first one, so there is one way into a block rather than two.
+  RSTA
+  SETD.0 SbfsWalkCount
+  STA.0
+  BRI sbfsWalkScan
+
+sbfsNext:
+  ; The pointer and the count were stepped when the last entry was handed out, so there
+  ; is nothing to do here but carry on looking.
+  BRI sbfsWalkScan
+
+sbfsWalkScan:
+  ; Anything left in the block in hand?
+  SETD.0 SbfsWalkCount
+  LDA.0
+  BNA sbfsWalkEntry
+
+  ; No. Take the next directory block, if the directory has one.
+  SETD.0 SbfsWalkLeft
+  LDA.0
+  BRA sbfsWalkEnd
+  DECA
+  STA.0
+
+  SETD.0 SbfsWalkBlock
+  SETD.1 SbfsBlock
+  CALL sbfsCopyWord
+  CALL sbfsReadBlock
+  BRQ sbfsWalkLoaded
+  RET                   ; The read failed, and Q says so.
+sbfsWalkLoaded:
+  SETD.1 SbfsBuffer
+  CALL sbfsBufferOut
+
+  ; That one is in hand now, so the walk's block number moves on to the following one.
+  SETD.0 SbfsWalkBlock
+  CALL sbfsStepWord
+
+  ; Eight entries to a block, starting at the top of the buffer.
+  SETD.0 SbfsBuffer
+  SETD.1 SbfsWalkPointer
+  STD.0.1
+  INIA 0d8
+  SETD.0 SbfsWalkCount
+  STA.0
+  BRI sbfsWalkScan
+
+sbfsWalkEntry:
+  ; Where this entry is. Kept in memory rather than in DP3, so that a walk does not
+  ; quietly take the one pointer a caller can carry things across a call in.
+  SETD.1 SbfsWalkPointer
+  LDD.2.1
+  SETD.1 SbfsWalkAt
+  STD.2.1
+
+  ; Step past it now, so that the walk has moved on whether this one is taken or skipped.
+  ; Getting that wrong in only one of the two paths is how a walk repeats an entry
+  ; forever, and it repeats the interesting ones rather than the boring ones.
+  SETD.0 SbfsWalkCount
+  LDA.0
+  DECA
+  STA.0
+  PSHD.2
+  POPD.0
+  DPUP.0 0d32
+  SETD.1 SbfsWalkPointer
+  STD.0.1
+
+  ; Is it a file? A free entry is not one, and there can be free entries in the middle of
+  ; a directory, so this is a skip rather than a stop.
+  LDA.2
+  INIB 0x01
+  AND
+  BRQ sbfsWalkScan
+
+  CALL sbfsWalkTake
+  RSTA
+  RSTB
+  CCF
+  ADD                   ; Q is zero: here is an entry.
+  RET
+
+sbfsWalkEnd:
+  RSTA
+  INIB 0d1
+  CCF
+  ADD                   ; Q is one: the directory is finished.
+  RET
+
+; Takes the pieces out of the entry the walk stopped on. Everything lands in memory,
+; because that is the only place a subroutine can leave anything.
+sbfsWalkTake:
+  SETD.1 SbfsWalkAt
+  LDD.0.1
+  DPUP.0 0d01
+  SETD.1 SbfsFileStart
+  CALL sbfsCopyWord
+
+  SETD.1 SbfsWalkAt
+  LDD.0.1
+  DPUP.0 0d03
+  SETD.1 SbfsFileBlocks
+  CALL sbfsCopyWord
+
+  SETD.1 SbfsWalkAt
+  LDD.0.1
+  DPUP.0 0d05
+  LDA.0
+  SETD.1 SbfsFileTail
+  STA.1
+
+  ; The name. Twenty two bytes of it, padded with zeroes rather than terminated, so it is
+  ; copied into a buffer with a twenty third byte that nothing ever writes. That byte is
+  ; what makes a name that fills the field into a string that can be printed.
+  SETD.1 SbfsWalkAt
+  LDD.0.1
+  DPUP.0 0d06
+  SETD.1 SbfsName
+  INIA 0d22
+  SETD.2 SbfsCount
+  STA.2
+sbfsWalkName:
+  LDA.0
+  STA.1
+  INCD.0
+  INCD.1
+  SETD.2 SbfsCount
+  LDA.2
+  DECA
+  STA.2
+  BNA sbfsWalkName
   RET
 
 ; Compares the name in the entry at DP2 with the one kept in SbfsWanted. Q is zero if
@@ -863,6 +1028,24 @@ SbfsCount:
   0x00
 SbfsLeft:
   0x00
+
+; ---- What a walk through the directory keeps between calls ----
+
+SbfsWalkBlock:
+  0x00 0x00
+SbfsWalkLeft:
+  0x00
+SbfsWalkCount:
+  0x00
+SbfsWalkPointer:
+  0x00 0x00
+SbfsWalkAt:
+  0x00 0x00
+
+; Twenty three bytes for a name of twenty two, so that the last one is a zero nothing
+; ever writes over and the name is always a string.
+SbfsName:
+  #Reserve 0d23
 
 SbfsWanted:
   #Reserve 0d22

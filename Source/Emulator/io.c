@@ -7,7 +7,167 @@
 #include "../Assembler/assembly.h" // For the fault vector numbers.
 #include "controller.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <signal.h>
+#include <errno.h>
+#include <termios.h>
+#include <unistd.h>
+#include <poll.h>
+
+// ---- The console ----
+//
+// The console owns its own reading rather than going through getchar. stdio keeps a
+// buffer, and the status port asks the operating system what is waiting; those two
+// disagree the moment stdio has read ahead, and the status port would then swear nothing
+// was there while a read returned instantly. One byte of pushback here is enough, because
+// nothing needs to look further ahead than the byte it is about to take.
+
+static int consoleKeyMode = 0;
+static int consoleEnded = 0;
+static int consolePushback = -1;          // A byte already taken from the host, or -1.
+static struct termios consoleSavedTerminal;
+static int consoleTerminalSaved = 0;
+
+void consoleRestore(void) {
+    if (consoleTerminalSaved) {
+        tcsetattr(STDIN_FILENO, TCSANOW, &consoleSavedTerminal);
+        consoleTerminalSaved = 0;
+    }
+    consoleKeyMode = 0;
+}
+
+// Restores the terminal and then dies the way it would have died anyway, so that the
+// shell sees the signal it was expecting rather than a machine that exited quietly.
+static void consoleSignalHandler(int signalNumber) {
+    consoleRestore();
+    signal(signalNumber, SIG_DFL);
+    raise(signalNumber);
+}
+
+static void consoleSetMode(uint8_t mode) {
+    int wantKeys = (mode & CONSOLE_MODE_KEY) != 0;
+    if (wantKeys == consoleKeyMode) {
+        return;
+    }
+    if (!wantKeys) {
+        consoleRestore();
+        return;
+    }
+    // Nothing to configure when input is not a terminal, but the mode is still recorded:
+    // a program asking the status port what mode it is in should be told what it asked
+    // for, whether or not there was a terminal to carry it out on.
+    consoleKeyMode = 1;
+    if (!isatty(STDIN_FILENO)) {
+        return;
+    }
+    if (!consoleTerminalSaved) {
+        if (tcgetattr(STDIN_FILENO, &consoleSavedTerminal) != 0) {
+            return;
+        }
+        consoleTerminalSaved = 1;
+        // Registered on the first use rather than at startup, so a run that never asks
+        // for key mode installs nothing at all.
+        atexit(consoleRestore);
+        signal(SIGINT, consoleSignalHandler);
+        signal(SIGTERM, consoleSignalHandler);
+    }
+    struct termios raw = consoleSavedTerminal;
+    raw.c_lflag &= (tcflag_t)~(ICANON | ECHO);
+    raw.c_cc[VMIN] = 1;
+    raw.c_cc[VTIME] = 0;
+    tcsetattr(STDIN_FILENO, TCSANOW, &raw);
+}
+
+// Everything already written is put where it can be seen before the machine asks the host
+// anything. Standard output is line buffered on a terminal, so a prompt with no newline
+// after it - "> " is exactly that, and exactly why this matters - would sit in the buffer
+// while the machine waited for an answer to a question nobody had been shown.
+//
+// getchar used to do this by accident, because reading through stdio flushes the line
+// buffered streams first. Reading with read() does not, so what was a side effect of the
+// old way is done deliberately here.
+static void consoleShowWhatIsWritten(void) {
+    fflush(stdout);
+}
+
+uint8_t consoleReadByte(void) {
+    if (consolePushback >= 0) {
+        uint8_t byte = (uint8_t)consolePushback;
+        consolePushback = -1;
+        return byte;
+    }
+    consoleShowWhatIsWritten();
+    unsigned char byte;
+    for (;;) {
+        ssize_t got = read(STDIN_FILENO, &byte, 1);
+        if (got == 1) {
+            return byte;
+        }
+        if (got == 0) {
+            // End of input. Still 0xFF, which is what getchar's EOF became when this was
+            // the only answer available, so nothing written against the old behaviour
+            // changes. The ENDED bit is the new way to know it was not a real byte.
+            consoleEnded = 1;
+            return 0xFF;
+        }
+        if (errno != EINTR) {
+            consoleEnded = 1;
+            return 0xFF;
+        }
+        // Interrupted before anything arrived, so ask again.
+    }
+}
+
+// Asking the host whether anything is waiting, and TAKING IT IF THERE IS. The byte goes
+// into the pushback and the next read of the data port hands it over, so nothing is lost
+// and no program can tell that it was fetched early.
+//
+// Fetching it early is what makes the answer worth having. The operating system will say a
+// pipe is readable when what is waiting is the end of it, so asking without reading can
+// only report that SOMETHING is there. Reading settles which: a byte, or the end. Without
+// this, ENDED could not go up until a program had already read the 0xFF that stands for
+// it, and every program would have to swallow one imaginary byte to find out there were
+// none.
+static void consoleFetch(void) {
+    if (consolePushback >= 0 || consoleEnded) {
+        return;
+    }
+    // Flushed here too. A program that draws something and then polls rather than reads is
+    // just as entitled to have the drawing appear, and it never reaches the read that
+    // would otherwise have flushed for it.
+    consoleShowWhatIsWritten();
+    struct pollfd waiting = { .fd = STDIN_FILENO, .events = POLLIN, .revents = 0 };
+    if (poll(&waiting, 1, 0) <= 0 || (waiting.revents & (POLLIN | POLLHUP)) == 0) {
+        return;
+    }
+    unsigned char byte;
+    ssize_t got = read(STDIN_FILENO, &byte, 1);
+    if (got == 1) {
+        consolePushback = byte;
+    } else if (got == 0) {
+        consoleEnded = 1;
+    }
+    // A read that failed for any other reason is left alone: the next attempt asks again,
+    // and an interrupted poll is not news.
+}
+
+static uint8_t consoleStatus(void) {
+    uint8_t status = consoleKeyMode ? CONSOLE_STATUS_KEYMODE : 0;
+    consoleFetch();
+    if (consoleEnded) {
+        // READY IS NOT SET HERE, although a read would answer immediately. The bit means
+        // "there is a byte to be had", and at the end of input there is not; what a read
+        // returns then is 0xFF standing in for nothing. A program looping while READY
+        // stops on its own at the end, which is the behaviour worth having, and one that
+        // wants to know why asks ENDED.
+        return status | CONSOLE_STATUS_ENDED;
+    }
+    if (consolePushback >= 0) {
+        status |= CONSOLE_STATUS_READY;
+    }
+    return status;
+}
 
 // One bit per port, so a device can ask for attention without anything having to poll
 // it. Eight ports to the byte, low bit first.
@@ -233,6 +393,11 @@ static const DeviceRecord *deviceOnPort(uint8_t port) {
     if (port >= CONTROLLER_PORT_BASE && port <= CONTROLLER_PORT_TOP) {
         return &controllerRecord;
     }
+    if (port > PORT_CONSOLE && port <= PORT_CONSOLE_TOP) {
+        // The status and control ports are the same device as the data port, which is the
+        // one in the table and the one that would raise a line if the console ever did.
+        return deviceOnPort(PORT_CONSOLE);
+    }
     if (port > PORT_DISK && port <= PORT_DISK_TOP) {
         // The base port is in the table proper, since that is the one that owns the
         // memory and raises the line. The rest of the block reports the same device.
@@ -269,11 +434,16 @@ uint8_t OutputHandler(uint8_t DataByte, uint8_t Address) {
     }
     // This function sends the DataByte to the appropriate place based on the Port Address.
     switch(Address) {
-        case PORT_CONSOLE:
+        case CONSOLE_DATA:
             // If data is sent here, it should be written to STDOUT.
             // For now, I'll implement this so it simply writes each byte out as it comes in.
             // Later, I'll want to use a buffer for this for performance, probably.
             putchar(DataByte);
+        break;
+        case CONSOLE_CONTROL: consoleSetMode(DataByte); break;
+        case CONSOLE_STATUS:
+            // Read only. A device saying how it is does not take instructions through the
+            // same hole, so a write here is ignored rather than meaning something.
         break;
         case DISK_BLOCK_HIGH: diskBlock = (uint16_t)(DataByte << 8) | (diskBlock & 0x00FF); break;
         case DISK_BLOCK_LOW:  diskBlock = (diskBlock & 0xFF00) | DataByte; break;
@@ -319,9 +489,15 @@ uint8_t InputHandler(uint8_t Address) {
         return controllerRead(Address);
     }
     switch(Address) {
-        case PORT_CONSOLE:
+        case CONSOLE_DATA:
             // If data is sent here, it should be read from STDIN.
-            return getchar();
+            return consoleReadByte();
+        break;
+        case CONSOLE_STATUS: return consoleStatus();
+        case CONSOLE_CONTROL:
+            // Write only. Reading it gives zero rather than the mode, because the mode is
+            // a bit in the status port and one fact wants one place to live.
+            return 0;
         break;
         case DISK_BLOCK_HIGH: return (uint8_t)(diskBlock >> 8);
         case DISK_BLOCK_LOW:  return (uint8_t)(diskBlock & 0xFF);

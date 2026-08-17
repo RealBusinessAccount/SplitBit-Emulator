@@ -119,6 +119,45 @@ void writeDependencyFile(const char *dependencyPath, const char *outputPath) {
     fclose(file);
 }
 
+// A program that bases one segment and not the other is a mistake the assembler is the
+// last place to catch. Nothing relocates, so the unbased half keeps the addresses it was
+// given, which are addresses from zero up, and the loader puts it there: on top of
+// whatever the system keeps at the bottom of memory. It does not fail at load time and it
+// does not fail at the jump. It fails later, somewhere else, as corruption.
+//
+// Only a segment with something in it can land on anything, so an empty one says nothing.
+// A base of zero that was actually asked for is left alone, which is how a program says
+// it meant it.
+void checkSegmentBases(const char *fileName) {
+    if (!programIsLoadable()) {
+        return; // A boot image. Both segments begin at zero because that is where they go.
+    }
+
+    const char *segmentName[3];
+    segmentName[PROGRAM] = "Program";
+    segmentName[DATA] = "Data";
+    int segmentEnd[3];
+    segmentEnd[PROGRAM] = programLength;
+    segmentEnd[DATA] = dataLength;
+
+    const int segments[2] = { PROGRAM, DATA };
+    for (int i = 0; i < 2; i++) {
+        int mine = segments[i], other = segments[1 - i];
+        int content = segmentEnd[mine] - segmentBase(mine);
+        if (segmentBaseWasGiven(mine) || content <= 0 || !segmentBaseWasGiven(other)) {
+            continue;
+        }
+        fprintf(stderr, RED "Error: The %s Segment is based at 0x%04X, but the %s Segment\n"
+                            " has %d byte%s at 0x0000 and was never given a #Base.\n"
+                            " Half a program loaded at zero lands on whatever is already there.\n" RESET,
+                segmentName[other], segmentBase(other), segmentName[mine],
+                content, content == 1 ? "" : "s");
+        printf(" File: %s\n", fileName);
+        printf(" Say \"#Base 0x0000\" in the %s Segment if that is what you meant.\n", segmentName[mine]);
+        exit(1);
+    }
+}
+
 int main(int argc, char *argv[]) {
     static struct option long_options[] = {
         {"output",  required_argument, 0, 'o'},
@@ -185,7 +224,15 @@ int main(int argc, char *argv[]) {
     // the buffers are filled, because SWI needs the number its vector was given.
     populateVectorTable(intermediateArray, index);
     fillInVectorReferences(intermediateArray, index);
+    // The buffers are filled from wherever each segment is based, so that a byte's place
+    // in the buffer is the address it will have. For a boot image both bases are zero and
+    // this changes nothing.
+    programLength = segmentBase(PROGRAM);
+    dataLength = segmentBase(DATA);
     populateOutputBuffers(intermediateArray, index, Program, &programLength, Data, &dataLength);
+    // After the buffers, because how much a segment actually holds is not known until it
+    // has been filled, and an empty segment is not a mistake.
+    checkSegmentBases(fileName);
     if (!outputFileName) {
         outputFileName = createOutputFileName(fileName);
     }

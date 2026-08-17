@@ -28,7 +28,7 @@ It has ten registers:
 
  - The Stack Pointer is a 16 bit pointer into the Data Memory.
  	 - The SP points to the next free slot, not to the last thing pushed. It initializes at location 0xFFFF, so the first push writes there and the byte pushed last always sits one above the SP.
- 	 - The SP value is only modified by the push and pop instructions, by CALL and RET, and by an interrupt arriving or returning. It cannot be set by the programmer. MVSD copies it out without moving it.
+ 	 - The SP is moved by the push and pop instructions, by CALL and RET, and by an interrupt arriving or returning. MVSD copies it out without moving it, and MVDS sets it outright. See The Stack Pointer, Set By Hand below before using MVDS.
  	 - The Stack lives in Data Memory, so a Data Pointer can be aimed at it and used to read what is on it. MVSD is how a program finds out where to aim.
 
  - The Status register is an 8 bit register whose various bits are used as flags. Only four of these flags are used in the current implementation.
@@ -130,7 +130,7 @@ If a device interrupts and its vector is empty, that is a fault: the machine sto
 
 | Port | Device | Class |
 | --- | --- | --- |
-| 0x00 | The console. Writing sends a byte to standard output, reading takes one from standard input. | 0x02 |
+| 0x00 - 0x02 | The console. See The Console below. Writing to 0x00 sends a byte to standard output, reading takes one from standard input. | 0x02 |
 | 0x10 | A test device. Writing anything to it puts its own line up, so that interrupt handling can be exercised without waiting on anything. The byte written is ignored. | 0x10 |
 | 0x11 | A device that refuses everything, in both directions, so that refusal can be exercised without the memory controller. | 0x11 |
 | 0x20 - 0x23 | The disk. See Storage below. It interrupts on 0x20, its base port. | 0x13 |
@@ -338,6 +338,44 @@ A write the controller will not perform is a GuardViolation. There are two reaso
 
 Both arrive at the instruction that asked, so a handler sees which one it was. A handler that means to carry on past it steps the saved address on by two, since the input and output instructions are an opcode and a port.
 
+## The Console:
+
+Port 0x00 is the oldest thing on this machine and it has not changed: writing sends a byte out, reading takes one in and waits until there is one. Every program ever written for SplitBit uses it that way and still does. What is new is that a program can now ask whether a read would have to wait, and can say what it wants a keypress to mean.
+
+| Port | Register |
+| --- | --- |
+| 0x00 | Data. Writing sends a byte out, reading takes one in and waits for it. |
+| 0x01 | Status. Bit 0 a byte is waiting, bit 1 input has ended, bit 2 the console is in key mode. |
+| 0x02 | Mode. Writing 0x00 asks for line mode, 0x01 for key mode. |
+
+### Two Kinds Of Input:
+
+In **line mode**, which is how the machine starts, the terminal holds what is typed until Return and does the echoing and the backspacing on the way. A program reading the data port gets a finished line, one byte at a time. This is what the machine has always done and what a shell wants.
+
+In **key mode** the terminal stops holding the line. Keys arrive as they are pressed, and nothing echoes them, so a program that wants them seen has to send them back out itself. The editing goes with the echo: there is no backspace, because backspace was the terminal's doing and the terminal is no longer involved. That is not a choice this machine makes, it is what asking for keys means, and a program that wants keys is expected to want it.
+
+A program is expected to put the console back in line mode before it finishes. CosmOS also does it whenever a program returns, because a program that stops early would otherwise hand back a shell with no echo, and a shell has no way to find out that happened.
+
+### Reading Without Waiting:
+
+Reading the data port waits in **both** modes. The status port is how a program declines to wait, and keeping that in one place is deliberate: a read that sometimes blocked and sometimes did not, depending on a mode set somewhere else, would be a program that works until it does not.
+
+So a simulation that should stop when somebody presses a key asks the status port between steps, and only reads the data port once it knows there is something to read:
+
+```
+  INA 0x01
+  INIB 0x01                 ; Bit 0: is a byte waiting?
+  AND
+  BRQ nobodyPressedAnything
+  INA 0x00                  ; There is one, so this will not wait.
+```
+
+### The End Of Input:
+
+Reading the data port when input has run out gives 0xFF, which is what it has always given and what programs written before any of this expect. But 0xFF is also an ordinary byte, and nothing could tell the two apart. Bit 1 of the status port is what tells them apart now.
+
+Bit 0 is **not** set once input has ended, even though a read would answer immediately. The bit means a byte is there to be had, and at the end of input there is not. That way a loop that reads while bit 0 is set stops when the input does, instead of taking imaginary bytes forever.
+
 ## Storage:
 
 The disk is a block device. It knows numbered blocks of 256 bytes and has never heard of a file. A filesystem is software this machine runs, not something done on its behalf: a disk that understood filenames would be the emulator doing the work while the machine pretended it had.
@@ -381,15 +419,19 @@ A disk error is not a fault. Faults on this machine mean it cannot continue, and
 
 ## Reading The Filesystem:
 
-The disk knows blocks and nothing else, so a filesystem is software. Programs/Libraries/sbfs.asm reads one.
+The disk knows blocks and nothing else, so a filesystem is software. Programs/CosmOS/Source/sbfs.asm reads one.
 
 | Routine | Does |
 | --- | --- |
 | sbfsMount | Registers the disk's buffer as bank 3, reads the superblock, and checks the disk is one of ours. Q is zero if it is. |
 | sbfsFind | DP0 names a file, ending in a zero byte. Q is zero if it was found, and then SbfsFileStart, SbfsFileBlocks and SbfsFileTail describe it. |
 | sbfsRead | Reads the file that was found into Data Memory at DP1. Q is zero if it worked. |
+| sbfsFirst | Starts a walk through the directory. Q is zero if there is an entry, and then SbfsName holds its name and the SbfsFile fields describe it. |
+| sbfsNext | Steps the walk to the next entry in use. Q is zero if there was one. |
 | sbfsCreate | Makes a file. DP0 names it, and SbfsFileBlocks with SbfsFileTail say how big it is. Q is zero if it was made, and then SbfsFileStart says where it went. |
 | sbfsWriteFile | Writes the file that was made, from Data Memory at DP1. |
+
+Finding a file and listing what is there are different jobs. sbfsFind searches for one name; sbfsFirst and sbfsNext walk the whole directory, stopping on each entry that is in use and stepping over the free ones. A walk keeps a directory block in SbfsBuffer between calls, so anything else that goes to the disk in the middle of one ends it: take what is wanted out of an entry before asking the disk for anything else.
 
 A file's size is settled when it is made, because nothing can grow one afterwards. Files are laid down contiguously, so the block after a file usually belongs to somebody else. A program that does not know how much it will write has to guess high and accept the slack, or build its output elsewhere and make the file once the size is known.
 
@@ -415,6 +457,31 @@ The same rule cuts the other way, which is easier to miss. Because DP3 is not pu
 
 A label may only be defined once across a program and everything it includes, so a routine in one library cannot use a name that another has already taken.
 
+## The Console Library:
+
+Programs/CosmOS/Source/console.asm is the console library. It replaces print.asm, which was written for a machine with one Data Pointer and no vector table, and which is still there because the programs that include it still work.
+
+| Routine | Does |
+| --- | --- |
+| newLine | Prints a line feed. |
+| printString | DP0 names a string ending in a zero byte. Prints it. |
+| printSpaces | A holds how many spaces to print. None is a fair answer, and prints nothing. |
+| printByteHex | A holds a byte. Prints it as two hexadecimal digits. |
+| printWordHex | DP0 names two bytes, most significant first. Prints them as four hexadecimal digits. |
+| printHexDigit | A holds a nybble. Prints the one character that stands for it. |
+| printDecimalDigit | A holds a digit from zero to nine. Prints it. |
+| printByteDecimal | A holds a byte. Prints it in decimal, without leading zeroes. |
+| printWordDecimal | DP0 names two bytes, most significant first. Prints them in decimal, without leading zeroes. |
+| readLine | DP0 names a buffer and B says how many characters it holds. Reads a line into it. Q is how long the line turned out to be. |
+
+Two things about it are different from the old library, and both are deliberate.
+
+There is no branch at the top. print.asm begins with a BRI to a label called start, so that a program including it arrives at its own entry point rather than falling into the library. That was the only way to do it before the Vector Table existed, and it is why print.asm cannot be assembled on its own: the label it branches to is one only the including program defines. A program including console.asm says where it begins in its own Vector Segment instead, with a Boot line, and the library assembles by itself.
+
+Every routine names the Data Pointer it works through rather than assuming there is only one. A pointer handed in is DP0, and nothing in the library disturbs DP3.
+
+readLine cuts a line short if it is longer than the buffer, and then reads the rest of it and throws it away, so that what is left over does not turn up as the next line. ConsoleEndOfInput is set if the console ran out instead of ending a line, and it is cleared at the start of every call, so it always describes the last line read. That is a different thing from an empty line, and a program reading until there is no more has to be able to tell the two apart.
+
 ## Loading A Program From A Disk:
 
 A program that was not the one the machine booted from carries sixteen bytes in front of it saying where it belongs.
@@ -431,7 +498,7 @@ A program that was not the one the machine booted from carries sixteen bytes in 
 | 14 | 2 | How many bytes of data there are. |
 | 16 | | The code, and then the data. |
 
-Programs/loader.asm reads one off a disk, puts the two pieces where the header asks, and jumps to the entry with BRD. Every part of that already existed: the filesystem finds the file, the memory controller writes Program Memory, and BRD turns an address worked out at run time into somewhere to go. The header is the only new thing.
+Programs/loader.asm reads one off a disk, puts the two pieces where the header asks, and jumps to the entry with BRD. Every part of that already existed: the filesystem finds the file, the memory controller writes Program Memory, and BRD turns an address worked out at run time into somewhere to go. The header is the only new thing. Programs/CosmOS does the same as one of its commands, and then takes the machine back afterwards, which the standalone loader has no way to do.
 
 The magic matters for the same reason it does everywhere else on this machine. Without it, loading a text file would put nonsense into Program Memory and then jump into it.
 
@@ -439,18 +506,21 @@ The magic matters for the same reason it does everywhere else on this machine. W
 
 **Nothing relocates anything.** A program is put exactly where its header asks, and that has to be the address it was assembled for, or every branch and every SETD inside it points somewhere wrong.
 
-A program is assembled for its address by reserving the front of each segment. #Reserve at the top of the Program Segment puts the first instruction after it at a known address, and the same in the Data Segment does it for the data, so every label inside is already right.
+A program says where it lives with #Base, at the top of each segment. Every label inside is then resolved from there, so the addresses in the program and the addresses in its header say the same thing. Giving either segment a base is also what makes the assembler write the program out as a loadable one rather than as a boot image, carrying none of the empty space below it.
 
 ```
 #Program
-  #Reserve 0x2000       ; This program's code lives from 0x2000.
+  #Base 0x2000          ; This program's code lives from 0x2000.
 hello:
   ...
+
+#Data
+  #Base 0x1000          ; And its data from 0x1000.
 ```
 
-That is not general placement, since only the first thing in a segment can be put anywhere. It is exactly enough for a program that wants to live at one address, which is what a loadable program is.
+That is not general placement: a base applies to a whole segment, and only the first thing in one can set it. It is exactly enough for a program that wants to live at one address, which is what a loadable program is. See the Assembler Manual.
 
-The loader keeps its own code and data below the addresses the loaded program claims. That is an arrangement between the two of them rather than anything the machine enforces, and it is the part that a real operating system would have to do properly.
+Whoever does the loading keeps its own code and data below the addresses the loaded program claims. That is an arrangement between the two of them rather than anything the machine enforces. Programs/CosmOS is where that arrangement is written down as a memory map and kept to.
 
 ## Refusing:
 
@@ -474,9 +544,63 @@ If nothing is installed at Vector 2, the CPU sets the Fault Flag and the Halt Fl
 
 Stopping matters because the alternative is worse. A byte that means nothing is almost always a sign that execution has wandered into data, or that a program was built for a machine with instructions this one does not have. Stepping over it and carrying on turns a clear failure into a program that appears to run and quietly does the wrong thing.
 
+## The Stack Pointer, Set By Hand:
+
+MVDS copies a Data Pointer into the Stack Pointer. It is the most dangerous instruction on this machine, and it is here for one job.
+
+Everything a program is in the middle of doing lives on the Stack. Moving the Stack Pointer does not move any of it, and does not destroy any of it either: it steps away from it. Every return address, every saved register and every interrupt frame stays exactly where it was in Data Memory, and the Stack Pointer is simply no longer looking at it. A RET taken while the Stack Pointer is somewhere else does not go back to whoever called: it reads two bytes from wherever the Stack Pointer now points and branches there. If those bytes are a string, execution lands in the middle of it.
+
+That is not a bug to be worked around. It is what moving the Stack means, and it is why nothing else on this machine can do it.
+
+The job it is here for is reclaiming the Stack from a program that has stopped running. A system that loads other programs and takes the machine back afterwards has a problem without it. A program that gives up part way through leaves everything it pushed behind, and the interrupt frame carrying its request to stop is on there too. Nothing unwinds any of that, because the program is not going to return. Without MVDS the Stack only ever moves downward, a little more with every program run, and a shell cannot outlive many of them.
+
+The pattern is to write the Stack Pointer down before giving the machine away and put it back afterwards:
+
+```
+  ; Before handing control to a program, remember where the Stack was.
+  MVSD.0
+  SETD.1 SavedStack
+  STD.0.1
+
+  ; ... the program runs, and eventually asks to stop ...
+
+  ; Taking the machine back. The Stack is ours again, and everything the
+  ; program left on it is gone.
+  SETD.1 SavedStack
+  LDD.0.1
+  MVDS.0
+```
+
+### Coming Back From It:
+
+A routine that moves the Stack and then puts the Stack Pointer back exactly where it found it can return in the ordinary way. The return address and the frame were never destroyed, only stepped away from, and RET or RETI finds them precisely as they were. Nothing special is needed for this to work, but one thing is required for it to keep working: nothing done while the Stack was elsewhere may reach back over those bytes. A borrowed Stack has to be somewhere the old one is not, and it has to be far enough away that pushing on it cannot walk into the old one.
+
+A routine that moves the Stack and **leaves it moved** is the other case, and that one cannot return at all, because its return address is on the Stack it walked away from. This is not a limitation to work around either. It is the entire point when the reason for moving is that whoever owned that Stack is not coming back. A handler for a service meaning "give the machine back" restores the system's Stack and then branches to the prompt, because there is nowhere left to return to.
+
+### Where To Keep The Old One:
+
+This is the awkward part. A fixed location in Data Memory is the obvious place to write the old Stack Pointer down, and it works until two routines that do this are nested. The inner one overwrites the outer one's copy, the outer one restores the inner one's Stack, and it never gets home. Nothing about that failure points back at the cause.
+
+The answer that nests is to keep the old Stack Pointer on the borrowed Stack itself. Move first, then push it, and pop it back before returning. Each nesting keeps its own copy, on its own Stack, and no two of them can collide:
+
+```
+  MVSD.3                ; Where the Stack is now.
+  SETD.0 BorrowedTop    ; The highest address of somewhere a Stack can live,
+  MVDS.0                ; because the Stack grows downward from here.
+  PSHD.3                ; The old Stack Pointer, kept on the borrowed Stack.
+
+  ; ... work, with the borrowed Stack under us ...
+
+  POPD.3
+  MVDS.3                ; And put it back.
+  RET                   ; Which now finds the frame exactly as it was left.
+```
+
+One last thing. An interrupt arriving while the Stack Pointer is somewhere unusual builds its frame there, so anywhere it is set has to be somewhere a Stack can actually live. And a system holding a saved Stack Pointer for a program it is running has to keep it somewhere that program cannot reach, or a program that scribbles over it takes the machine down with it on the way out.
+
 ## Naming a Data Pointer:
 
-Sixteen instructions work through a Data Pointer. Each of them carries a selector byte immediately after its opcode, naming which Data Pointer it means. LDD and STD move a pointer through a pointer, so they carry two selectors, the first naming the pointer being moved and the second naming the pointer that addresses it.
+Seventeen instructions work through a Data Pointer. Each of them carries a selector byte immediately after its opcode, naming which Data Pointer it means. LDD and STD move a pointer through a pointer, so they carry two selectors, the first naming the pointer being moved and the second naming the pointer that addresses it.
 
 The selector is a full byte, but only enough of it is read to choose among the Data Pointers the machine has. A selector larger than the highest numbered pointer wraps around rather than being rejected, so it is the assembler's job to refuse to write one.
 
@@ -547,7 +671,7 @@ Q is where every ALU result lands, and Q is not itself an ALU operand, so MVQA a
 | 35 | POPB | 1 | Reads the location referenced by the Stack Pointer from Data Memory into B then increments the Stack Pointer. |
 | 36 | POPD | 2 | Restores the named Data Pointer from the stack, increments the Stack Pointer by two. |
 
-### Data Operations: 13 Instructions
+### Data Operations: 14 Instructions
 | Hex Code | Mnemonic | Bytes | Description |
 | -- | ---- | -- | -- |
 | 40 | INCD | 2 | Increments the named Data Pointer. |
@@ -562,7 +686,8 @@ Q is where every ALU result lands, and Q is not itself an ALU operand, so MVQA a
 | 49 | DPDN | 3 | Offsets the named Data Pointer down by the value of the byte following the selector. |
 | 4A | LDD  | 3 | Loads the first named Data Pointer from the two bytes of Data Memory addressed by the second, most significant byte first. |
 | 4B | STD  | 3 | Stores the first named Data Pointer into the two bytes of Data Memory addressed by the second, most significant byte first. |
-| 4C | MVSD | 2 | Copies the Stack Pointer into the named Data Pointer. The Stack Pointer itself is unchanged and still cannot be written. |
+| 4C | MVSD | 2 | Copies the Stack Pointer into the named Data Pointer. The Stack Pointer itself is unchanged. |
+| 4D | MVDS | 2 | Copies the named Data Pointer into the Stack Pointer, moving the Stack. Read The Stack Pointer, Set By Hand before using it. |
 
 BRD is the only branch whose destination is not written into the program. Every other branch carries the address it goes to, fixed when the program was assembled; BRD takes it from a Data Pointer, which is what makes a table of addresses something a program can dispatch through rather than only read. Together with LDD it turns the Data Segment into somewhere a program can keep a list of places to go.
 
@@ -589,7 +714,7 @@ LDD and STD are how a program follows an address it has stored, rather than one 
 
 ## Input and Output In the Emulator:
 
-Port 0 is the console: writing sends a byte to standard output and reading takes one from standard input. Everything else this machine has is listed under Devices above, and a program that wants to know what is actually there asks the bus registry rather than assuming.
+Port 0 is the console: writing sends a byte to standard output and reading takes one from standard input. It answers on two more ports than that, which are described under The Console above and which a program can ignore entirely if all it wants is to read and write bytes. Everything else this machine has is listed under Devices above, and a program that wants to know what is actually there asks the bus registry rather than assuming.
 
 ### Example Program: Hello World
 ```

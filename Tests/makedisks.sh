@@ -45,9 +45,37 @@ for i in 1 2 3 4 5 6 7 8; do "$TOOL" put "$DISKS/sbfs.img" "filler$i.txt" >/dev/
 # A disk with a loadable program on it. The program is assembled here rather than kept as
 # bytes, so that what gets loaded is always built from the source beside it.
 "$TOOL" format "$DISKS/load.img" 64 2 >/dev/null
-"$ROOT/Assembler" "$ROOT/Programs/loadable/hello.asm" -o "$WORK/hello.bin" >/dev/null
-python3 "$ROOT/Source/DiskTool/wrap.py" "$WORK/hello.bin" "$WORK/hello.sbx" 0x2000 0x1000 0x2000 >/dev/null
+# The assembler writes a loadable program itself, because the source says where it goes.
+"$ROOT/Assembler" "$ROOT/Programs/loadable/hello.asm" -o "$WORK/hello.sbx" >/dev/null
 "$TOOL" put "$DISKS/load.img" "$WORK/hello.sbx" >/dev/null
+
+# A disk for CosmOS. greet.sbx asks the system for everything it does rather than talking
+# to the hardware itself, so loading and running it exercises the whole path: the loader,
+# the vector table, the service handlers, and giving the machine back at the end.
+#
+# hello.sbx is the opposite case, and that is why it is here: it is the original
+# hello.asm, written before any of this existed, and it still writes straight to port
+# 0x00 rather than calling osPrintString. A program is allowed to reach past the system
+# to the hardware, so something has to check that one still gives the machine back.
+#
+# notes.txt is there so that loading something that is not a program can be tried too.
+"$TOOL" format "$DISKS/cosmos.img" 32 1 >/dev/null
+"$ROOT/Assembler" -I "$ROOT/Programs/CosmOS/Source" \
+    "$ROOT/Programs/CosmOS/Apps/greet.asm" -o "$WORK/greet.sbx" >/dev/null
+"$TOOL" put "$DISKS/cosmos.img" "$WORK/greet.sbx" >/dev/null
+# Assembled to a different working name so it cannot tread on load.img's hello.sbx above,
+# then put under the name the shell asks for.
+"$ROOT/Assembler" -I "$ROOT/Programs/CosmOS/Source" \
+    "$ROOT/Programs/CosmOS/Apps/hello.asm" -o "$WORK/appHello.sbx" >/dev/null
+"$TOOL" put "$DISKS/cosmos.img" "$WORK/appHello.sbx" hello.sbx >/dev/null
+# Life.sbx is the one that had to be taught to stop. It runs to a still life and returns
+# on its own, so the test needs no cycle limit: whether it ends is the thing being checked
+# and a limit would hide the answer by supplying one.
+"$ROOT/Assembler" -I "$ROOT/Programs/Libraries" -I "$ROOT/Programs/CosmOS/Source" \
+    "$ROOT/Programs/CosmOS/Apps/Life.asm" -o "$WORK/Life.sbx" >/dev/null
+"$TOOL" put "$DISKS/cosmos.img" "$WORK/Life.sbx" >/dev/null
+printf 'this is not a program' > notes.txt
+"$TOOL" put "$DISKS/cosmos.img" notes.txt >/dev/null
 
 # A disk of its own for the writing test, with one file already on it so that what it
 # writes has to be placed somewhere that does not tread on what is there.

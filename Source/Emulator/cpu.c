@@ -592,6 +592,23 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
             *target = cpu->StackPointer;
         }
         break;
+        case 0x4D: {
+            // MVDS - Copy the selected Data Pointer into the Stack Pointer.
+            //
+            // This one is dangerous and is meant to be used rarely. Moving the Stack
+            // under a running program abandons every return address on it, so a RET
+            // after this goes wherever the new Stack happens to say.
+            //
+            // It exists because a system that runs other programs has no other way to
+            // get its Stack back. A program that gives up part way through leaves
+            // whatever it pushed behind, and the interrupt frame that carried the
+            // request to stop is on there too. Without this the Stack only ever grows
+            // downward, one abandoned program at a time, and a shell cannot outlive
+            // many of them.
+            uint16_t *source = selectDataPointer(cpu);
+            cpu->StackPointer = *source;
+        }
+        break;
         //
         // Dx - Output Operations:
         //

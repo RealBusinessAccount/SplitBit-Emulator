@@ -14,7 +14,15 @@
 // Which port a device answers on is a property of the machine rather than of any
 // program, so the numbers live here and everything else refers to them by name.
 
-#define PORT_CONSOLE  0x00
+// The console answers on three ports. The data port is the machine's oldest promise and
+// does not change: writing sends a byte, reading takes one and waits for it. The other two
+// are additions, so a program written before they existed cannot notice them.
+#define PORT_CONSOLE      0x00
+#define PORT_CONSOLE_TOP  0x02
+#define CONSOLE_DATA      0x00
+#define CONSOLE_STATUS    0x01
+#define CONSOLE_CONTROL   0x02
+
 #define PORT_TEST     0x10
 #define PORT_REFUSE   0x11
 #define PORT_MEMORY   0x12
@@ -29,6 +37,54 @@
 #define DISK_COMMAND     0x22
 #define DISK_STATUS      0x23
 #define PORT_REGISTRY 0xFF
+
+// ---- The console ----
+//
+// Two modes, chosen by the program through the control port. The console starts in LINE
+// mode, which is what the machine has always done: the terminal holds what is typed until
+// Return, and does the echoing and the backspacing on the way. Reading the data port waits
+// for a whole line to be finished somewhere else and then hands it over a byte at a time.
+//
+// KEY mode turns that off. Keys arrive as they are pressed, and nothing echoes them, so a
+// program that wants them seen has to send them back out itself. That is not a choice this
+// machine is making; it is what asking the terminal to stop holding a line means, and the
+// editing goes away with it. A program that wants keys is expected to want that.
+//
+// READING THE DATA PORT WAITS IN BOTH MODES. The status port is how a program declines to
+// wait, and keeping that in one place means the data port means one thing everywhere. A
+// read that sometimes blocked and sometimes did not, depending on state set somewhere
+// else, is the kind of thing that works until it does not.
+//
+// KEY MODE ONLY REACHES THE TERMINAL when there is one. With input coming from a pipe
+// there is nothing to put into another mode, and the status port answers by asking the
+// operating system whether anything is waiting, which is true of a pipe with bytes in it.
+
+#define CONSOLE_MODE_LINE 0x00
+#define CONSOLE_MODE_KEY  0x01
+
+// Set when there is a byte to be had. NOT set at the end of input, although a read would
+// answer at once there: what it answers is 0xFF standing in for nothing, and calling that
+// ready would make a loop that reads while READY spin on imaginary bytes forever. A loop
+// like that now stops when the input does, which is what anybody writing one intends.
+#define CONSOLE_STATUS_READY   0x01
+// Set once input has run out for good. The data port still answers 0xFF, which is what it
+// always did and what every program written before this expects, but 0xFF is also an
+// ordinary byte and this bit is the only thing that can tell the difference.
+#define CONSOLE_STATUS_ENDED   0x02
+// Which mode the console is in, so that a program can put it back the way it found it
+// rather than assuming it knows.
+#define CONSOLE_STATUS_KEYMODE 0x04
+
+// Puts the terminal back the way it was found. Registered with atexit and called from the
+// signal handlers, because a machine that stops in key mode and does not undo it leaves
+// the shell that started it unusable, which is a far worse failure than anything the
+// program was doing.
+void consoleRestore(void);
+
+// One byte from the console, waiting if it has to. Everything that reads standard input
+// goes through here: the emulator owns one byte of pushback, and stdio holding a buffer
+// of its own behind that would make the status port lie about what is waiting.
+uint8_t consoleReadByte(void);
 
 // ---- Device classes ----
 //

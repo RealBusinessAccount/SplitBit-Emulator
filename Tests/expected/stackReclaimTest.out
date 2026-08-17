@@ -1,0 +1,9 @@
+stack reclaim test
+at start:  FFFF
+spent:     FFF7
+reclaimed: FFFF
+still good: 33
+borrowed:  7 and 9
+back home: FFFF
+Execution halted after 1054 cycles.
+[exit 0]

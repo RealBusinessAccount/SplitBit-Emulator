@@ -13,6 +13,30 @@
 
 int debug = 0;
 
+static uint16_t segmentBases[3];
+static int basesGiven = 0;
+// Per segment, because a base of zero that was asked for and a base of zero that was
+// never mentioned are different things, and only the second one is likely a mistake.
+static int baseGiven[3];
+
+void setSegmentBase(int segment, uint16_t base) {
+    segmentBases[segment] = base;
+    baseGiven[segment] = 1;
+    basesGiven = 1;
+}
+
+uint16_t segmentBase(int segment) {
+    return segmentBases[segment];
+}
+
+int segmentBaseWasGiven(int segment) {
+    return baseGiven[segment];
+}
+
+int programIsLoadable(void) {
+    return basesGiven;
+}
+
 void toUppercase(char *str) {
     for (int i = 0; str[i]; i++) {
         str[i] = toupper(str[i]);
@@ -37,6 +61,10 @@ int checkIfKeyword(intermediateElement *currentElement) {
             // the number that follows. The file that needs the boundary is then the
             // file that asks for it, rather than relying on whatever came before.
             return KEYWORD_ALIGN;
+        } else if (strcmp(currentElement->token, "#Base") == 0) {
+            // Says where this segment is loaded, which makes the program a loadable one
+            // rather than a boot image.
+            return KEYWORD_BASE;
         } else if (strcmp(currentElement->token, "#Reserve") == 0) {
             // Puts down the number of zero bytes that follows, so that a label can
             // stand for a region rather than just its first byte.
@@ -172,7 +200,9 @@ int checkIfLiteralValue(intermediateElement *currentElement) {
     return 1;
 }
 
-uint16_t readCount(intermediateElement *currentElement, const char *what) {
+// Shared by readCount and readAddress, which differ only in whether zero is an answer.
+// A count of nothing is a typo; an address of zero is the bottom of memory.
+static uint16_t readNumber(intermediateElement *currentElement, const char *what, long least) {
     const char *token = currentElement->token;
     int base;
     const char *baseName;
@@ -202,12 +232,20 @@ uint16_t readCount(intermediateElement *currentElement, const char *what) {
         }
     }
     long value = strtol(digits, NULL, base);
-    if (value < 1 || value > 0xFFFF) {
-        fprintf(stderr, RED "Error: %s was given \"%s\". It has to be at least 1 and no more than 0xFFFF.\n" RESET, what, token);
+    if (value < least || value > 0xFFFF) {
+        fprintf(stderr, RED "Error: %s was given \"%s\". It has to be at least %ld and no more than 0xFFFF.\n" RESET, what, token, least);
         printf(" File: %s at line %d.\n", currentElement->fileName, currentElement->lineNumber);
         exit(1);
     }
     return (uint16_t)value;
+}
+
+uint16_t readCount(intermediateElement *currentElement, const char *what) {
+    return readNumber(currentElement, what, 1);
+}
+
+uint16_t readAddress(intermediateElement *currentElement, const char *what) {
+    return readNumber(currentElement, what, 0);
 }
 
 int checkIfLabel(intermediateElement *currentElement) {
@@ -261,7 +299,15 @@ int readToken(intermediateElement *currentElement, FILE *file, int *lineNumber) 
             if (i < (int)(sizeof(buffer) - 1)) {
                 buffer[i++] = c;
             } else {
-                fprintf(stderr, "Error: String literal too long.\n");
+                // Say the limit and where it was met. A string long enough to reach this
+                // is usually several lines of help text, and "too long" on its own leaves
+                // somebody counting characters to find out by how much.
+                fprintf(stderr, RED "Error: String literal longer than %d characters.\n"
+                        " Every string carries its own zero byte, so two written in a row"
+                        " are two strings\n rather than one long one. Give each its own"
+                        " label and print them one after another.\n" RESET,
+                        (int)(sizeof(buffer) - 1));
+                printf(" File: %s at line %d.\n", currentElement->fileName, *lineNumber);
                 exit(1);
             }
         }

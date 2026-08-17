@@ -14,6 +14,7 @@
 #include "secondPass.h"
 #include "Assm-util.h"
 #include "assembly.h"
+#include "sbex.h"
 
 int debugSecondPass = 0;
 
@@ -62,8 +63,11 @@ void addLabel(char *labelName, uint16_t address, int type, const char *fileName,
 }
 
 void populateLabelTable(intermediateElement *intermediateArray, int arraySize) {
-    int programCount = 0;
-    int dataCount = 0;
+    // Counting starts at the base, so a label in a program built to live somewhere else
+    // already holds the address it will have once it is there. Nothing relocates
+    // anything, which is exactly why this has to be right at assembly time.
+    int programCount = segmentBase(PROGRAM);
+    int dataCount = segmentBase(DATA);
     // Loop through the array, if there's a label definition, add it to the label list.
     for (int i = 0; i < arraySize ; i++) {
         // How many zeroes an #Align comes to depends on where the cursor has reached,
@@ -159,6 +163,16 @@ static void vectorError(const char *message, intermediateElement *element) {
     exit(1);
 }
 
+// Whether the token at b is written on the same line as the one at a, and so belongs to
+// the same entry. A line is what tells a name with a handler apart from a name on its own.
+static int sameLine(intermediateElement *intermediateArray, int a, int b) {
+    if (a < 0 || b < 0) {
+        return 0;
+    }
+    return intermediateArray[a].lineNumber == intermediateArray[b].lineNumber
+        && intermediateArray[a].fileName == intermediateArray[b].fileName;
+}
+
 // The next token belonging to the Vector Segment, or -1 if the segment has run out.
 static int nextVectorToken(intermediateElement *intermediateArray, int arraySize, int from) {
     for (int i = from; i < arraySize; i++) {
@@ -169,12 +183,28 @@ static int nextVectorToken(intermediateElement *intermediateArray, int arraySize
     return -1;
 }
 
-static void addVector(char *name, uint8_t index, uint16_t base, uint16_t handler, intermediateElement *element) {
+// A declared vector has a name and a number but no handler, so nothing goes into the
+// table for it. It exists so that a program can name a service it calls without claiming
+// to implement it, which is what lets one file be included by both sides.
+// Where a vector of this name already is, or -1. A name can be met twice: once where it
+// is declared and once where somebody supplies its handler.
+static int findVector(const char *name) {
+    for (int i = 0; i < vectorArrayCount; i++) {
+        if (vectorArray[i].name && strcmp(vectorArray[i].name, name) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static void addVector(char *name, uint8_t index, uint16_t base, uint16_t handler,
+                      int declaredOnly, intermediateElement *element) {
     if (vectorArrayCount >= MAX_VECTORS) {
         vectorError("Too many vectors defined.", element);
     }
     for (int i = 0; i < vectorArrayCount; i++) {
-        if (vectorArray[i].index == index && vectorArray[i].base == base) {
+        if (vectorArray[i].index == index && vectorArray[i].base == base
+            && !vectorArray[i].declaredOnly && !declaredOnly) {
             fprintf(stderr, RED "Error: That vector already has a handler.\n" RESET);
             printf("File: %s at line %d.\n", element->fileName, element->lineNumber);
             exit(1);
@@ -189,6 +219,7 @@ static void addVector(char *name, uint8_t index, uint16_t base, uint16_t handler
     vectorArray[vectorArrayCount].index = index;
     vectorArray[vectorArrayCount].base = base;
     vectorArray[vectorArrayCount].handler = handler;
+    vectorArray[vectorArrayCount].declaredOnly = declaredOnly;
     vectorArrayCount++;
 }
 
@@ -228,7 +259,26 @@ void populateVectorTable(intermediateElement *intermediateArray, int arraySize) 
             int handlerToken = nextVectorToken(intermediateArray, arraySize, portToken + 1);
             uint16_t handler = resolveHandler(intermediateArray, handlerToken, "Device");
             addVector(NULL, intermediateArray[portToken].byteValue, HARDWARE_VECTOR_BASE,
-                      handler, &intermediateArray[i]);
+                      handler, 0, &intermediateArray[i]);
+            i = nextVectorToken(intermediateArray, arraySize, handlerToken + 1);
+            continue;
+        }
+
+        int handlerToken = nextVectorToken(intermediateArray, arraySize, i + 1);
+        int hasHandler = sameLine(intermediateArray, i, handlerToken);
+        int already = findVector(token);
+
+        if (already >= 0) {
+            // Met before. A handler now is somebody implementing what was declared
+            // earlier, which is how one shared file can serve both sides.
+            if (!hasHandler) {
+                vectorError("That vector is declared more than once.", &intermediateArray[i]);
+            }
+            if (!vectorArray[already].declaredOnly) {
+                vectorError("That vector already has a handler.", &intermediateArray[i]);
+            }
+            vectorArray[already].handler = resolveHandler(intermediateArray, handlerToken, token);
+            vectorArray[already].declaredOnly = 0;
             i = nextVectorToken(intermediateArray, arraySize, handlerToken + 1);
             continue;
         }
@@ -250,9 +300,15 @@ void populateVectorTable(intermediateElement *intermediateArray, int arraySize) 
             nextFreeVector++;
         }
 
-        int handlerToken = nextVectorToken(intermediateArray, arraySize, i + 1);
+        if (!hasHandler) {
+            // Nothing follows it on the line, so this says what the vector is called and
+            // what number it has, and leaves implementing it to somebody else.
+            addVector(token, index, SOFTWARE_VECTOR_BASE, 0, 1, &intermediateArray[i]);
+            i = handlerToken;
+            continue;
+        }
         uint16_t handler = resolveHandler(intermediateArray, handlerToken, token);
-        addVector(token, index, SOFTWARE_VECTOR_BASE, handler, &intermediateArray[i]);
+        addVector(token, index, SOFTWARE_VECTOR_BASE, handler, 0, &intermediateArray[i]);
         i = nextVectorToken(intermediateArray, arraySize, handlerToken + 1);
     }
 }
@@ -440,6 +496,48 @@ void populateOutputBuffers(intermediateElement *intermediateArray, int arraySize
     }
 }
 
+// A loadable program: sixteen bytes saying where it belongs, then the code and the data.
+// The space below each base is not written out, because nothing needs to carry it: the
+// header says where the bytes go and the loader puts them there.
+static void writeLoadable(const char *outputFileName, uint8_t *Program, int programCount,
+                          uint8_t *Data, int dataCount) {
+    uint16_t codeBase = segmentBase(PROGRAM);
+    uint16_t dataBase = segmentBase(DATA);
+    int codeLength = programCount - codeBase;
+    int dataLength = dataCount - dataBase;
+    if (codeLength < 0) codeLength = 0;
+    if (dataLength < 0) dataLength = 0;
+
+    FILE *outputFile = fopen(outputFileName, "wb");
+    if (!outputFile) {
+        fprintf(stderr, RED "Error: Could not open file \"%s\" for writing.\n" RESET, outputFileName);
+        exit(1);
+    }
+    uint8_t header[SBEX_HEADER_BYTES];
+    memset(header, 0, sizeof(header));
+    memcpy(header, SBEX_MAGIC, SBEX_MAGIC_BYTES);
+    header[SBEX_VERSION_AT] = SBEX_VERSION;
+    header[SBEX_CODE_AT] = (uint8_t)(codeBase >> 8);
+    header[SBEX_CODE_AT + 1] = (uint8_t)(codeBase & 0xFF);
+    // Where it starts is where it begins. A program that wants otherwise puts a branch
+    // at its first instruction, which costs three bytes and needs no format for it.
+    header[SBEX_ENTRY_AT] = (uint8_t)(codeBase >> 8);
+    header[SBEX_ENTRY_AT + 1] = (uint8_t)(codeBase & 0xFF);
+    header[SBEX_CODE_LEN_AT] = (uint8_t)(codeLength >> 8);
+    header[SBEX_CODE_LEN_AT + 1] = (uint8_t)(codeLength & 0xFF);
+    header[SBEX_DATA_AT] = (uint8_t)(dataBase >> 8);
+    header[SBEX_DATA_AT + 1] = (uint8_t)(dataBase & 0xFF);
+    header[SBEX_DATA_LEN_AT] = (uint8_t)(dataLength >> 8);
+    header[SBEX_DATA_LEN_AT + 1] = (uint8_t)(dataLength & 0xFF);
+    fwrite(header, 1, sizeof(header), outputFile);
+    fwrite(Program + codeBase, 1, (size_t)codeLength, outputFile);
+    fwrite(Data + dataBase, 1, (size_t)dataLength, outputFile);
+    fclose(outputFile);
+    printf("Successfully wrote SplitBit loadable program to \"%s\".\n", outputFileName);
+    printf(GREEN "  Code: %d bytes at 0x%04X.\n  Data: %d bytes at 0x%04X.\n    Total size: %d bytes.\n" RESET,
+           codeLength, codeBase, dataLength, dataBase, SBEX_HEADER_BYTES + codeLength + dataLength);
+}
+
 void writeOutputFile(const char *outputFileName, uint8_t *Program, int programCount, uint8_t *Data, int dataCount) {
     FILE *outputFile = fopen(outputFileName, "wb");
     if (!outputFile) {
@@ -487,16 +585,35 @@ void writeOutputFile(const char *outputFileName, uint8_t *Program, int programCo
         exit(1);
     }
 
+    // A program with a base is one meant to be loaded, so it is written out with its
+    // addresses in front of it and nothing below them. A boot image carries the padding
+    // because the machine loads it at zero; a loadable one would only be carrying space
+    // it does not use.
+    if (programIsLoadable()) {
+        fclose(outputFile);
+        writeLoadable(outputFileName, Program, programCount, Data, dataCount);
+        return;
+    }
+
     // The Vector Segment, only if the program named any. Leaving it out entirely is
     // what lets a binary written before vectors existed still load: the reader treats
     // the end of the file as an empty table rather than a missing one.
+    int installed = 0;
+    for (int i = 0; i < vectorArrayCount; i++) {
+        if (!vectorArray[i].declaredOnly) {
+            installed++;
+        }
+    }
     int vectorBytes = 0;
-    if (vectorArrayCount > 0) {
+    if (installed > 0) {
         fwrite("VEC", sizeof(char), SEGMENT_MARKER_LENGTH, outputFile);
-        vectorBytes = vectorArrayCount * VECTOR_ENTRY_FILE_BYTES;
+        vectorBytes = installed * VECTOR_ENTRY_FILE_BYTES;
         fputc((vectorBytes >> 8) & 0xFF, outputFile);
         fputc(vectorBytes & 0xFF, outputFile);
         for (int i = 0; i < vectorArrayCount; i++) {
+            if (vectorArray[i].declaredOnly) {
+                continue;
+            }
             uint16_t slot = vectorArray[i].base + (uint16_t)vectorArray[i].index * VECTOR_ENTRY_BYTES;
             fputc((slot >> 8) & 0xFF, outputFile);
             fputc(slot & 0xFF, outputFile);
@@ -508,10 +625,10 @@ void writeOutputFile(const char *outputFileName, uint8_t *Program, int programCo
     fclose(outputFile);
     printf("Successfully wrote SplitBit binary to \"%s\".\n", outputFileName);
     printf(GREEN "  Program Segment size: %d bytes.\n  Data Segment size: %d bytes.\n" RESET, programCount, dataCount);
-    if (vectorArrayCount > 0) {
-        printf(GREEN "  Vectors: %d.\n" RESET, vectorArrayCount);
+    if (installed > 0) {
+        printf(GREEN "  Vectors: %d.\n" RESET, installed);
     }
     printf(GREEN "    Total size: %d bytes.\n" RESET,
            (programCount + dataCount + SPLITBIT_HEADER_BYTES
-            + (vectorArrayCount > 0 ? SEGMENT_MARKER_LENGTH + SEGMENT_LENGTH_BYTES + vectorBytes : 0)));
+            + (installed > 0 ? SEGMENT_MARKER_LENGTH + SEGMENT_LENGTH_BYTES + vectorBytes : 0)));
 }
