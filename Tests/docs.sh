@@ -103,6 +103,25 @@ else:
             problems.append("%s (0x%02X) is a device class and has no row in the Devices"
                             " table" % (name, value))
 
+# ---- Every console status bit is described ----
+#
+# The status port is read by writing a mask and testing it, so a program can only use a bit
+# it has been told the number of. Adding one and forgetting to write it down leaves a bit
+# that works and that nobody can discover. The section names them as "bit N", so that is
+# what is looked for.
+status = {name: int(value, 16)
+          for name, value in re.findall(r'^#define (CONSOLE_STATUS_[A-Z]+)\s+(0x[0-9A-Fa-f]{2})$',
+                                        ioh, re.M)}
+if "## The Console:" not in pm:
+    problems.append("the Programming Manual has lost its \"The Console\" section")
+else:
+    console = pm.split("## The Console:")[1].split("\n## ")[0]
+    for name, value in sorted(status.items(), key=lambda pair: pair[1]):
+        bit = value.bit_length() - 1
+        if "bit %d" % bit not in console:
+            problems.append("%s is bit %d of the console status port and The Console does"
+                            " not mention it" % (name, bit))
+
 # ---- Every directive the assembler knows is written down ----
 for directive in sorted(set(re.findall(r'"(#[A-Za-z]+)"', util))):
     if directive not in am:

@@ -164,6 +164,12 @@ consoleTest          | testPrograms/consoleTest.asm       | run      | consoleTe
 # What it pins down is that READY is clear at the end of input while ENDED is set, so a
 # loop reading while READY stops on its own instead of taking imaginary bytes forever.
 consoleModeTest      | testPrograms/consoleModeTest.asm   | run      | consoleModeTest.in | -
+# The console interrupting instead of being asked. The main program never touches the
+# console at all, so every byte in that output was delivered by a handler. It also pins
+# down the two things that make the feature usable rather than merely present: the end of
+# input raises the line once, so an interrupt-driven program is told when to stop, and a
+# handler that does not read the byte is not called again, so nothing storms.
+consoleInterruptTest | testPrograms/consoleInterruptTest.asm | run   | consoleInterruptTest.in | -
 # Picking a typed line apart, which is how the shell understands anything. Includes a
 # string beginning with a zero: the assembler strips the quotes before deciding what a
 # token is, so such a string looked like a malformed literal and was refused.

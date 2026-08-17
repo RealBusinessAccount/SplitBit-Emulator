@@ -26,6 +26,7 @@
 static int consoleKeyMode = 0;
 static int consoleEnded = 0;
 static int consolePushback = -1;          // A byte already taken from the host, or -1.
+static int consoleInterrupts = 0;         // Whether an arriving byte puts the line up.
 static struct termios consoleSavedTerminal;
 static int consoleTerminalSaved = 0;
 
@@ -35,6 +36,11 @@ void consoleRestore(void) {
         consoleTerminalSaved = 0;
     }
     consoleKeyMode = 0;
+    // Whatever the console was in the middle of asking for is withdrawn along with the
+    // mode. A line left standing here would be answered by whatever ran next, which had
+    // nothing to do with it and never asked to be interrupted.
+    consoleInterrupts = 0;
+    clearInterrupt(PORT_CONSOLE);
 }
 
 // Restores the terminal and then dies the way it would have died anyway, so that the
@@ -45,8 +51,7 @@ static void consoleSignalHandler(int signalNumber) {
     raise(signalNumber);
 }
 
-static void consoleSetMode(uint8_t mode) {
-    int wantKeys = (mode & CONSOLE_MODE_KEY) != 0;
+static void consoleSetMode(int wantKeys) {
     if (wantKeys == consoleKeyMode) {
         return;
     }
@@ -79,6 +84,35 @@ static void consoleSetMode(uint8_t mode) {
     tcsetattr(STDIN_FILENO, TCSANOW, &raw);
 }
 
+// Puts the line up if the console has something to say and has been asked to say it.
+// Called wherever news arrives and wherever a program declares it wants to hear news, so
+// that enabling interrupts while a byte is already waiting is not a way to miss it.
+static void consoleAnnounce(void) {
+    if (consoleInterrupts && (consolePushback >= 0 || consoleEnded)) {
+        raiseInterrupt(PORT_CONSOLE);
+    }
+}
+
+// The whole control port in one write. The two bits are independent, so both are read out
+// of the byte and applied, and neither is inferred from the other.
+static void consoleSetControl(uint8_t control) {
+    // The mode goes first because turning key mode off restores the terminal, and that
+    // withdraws any standing request along with it. Setting the interrupt bit afterwards
+    // means one write can ask for line mode and interrupts together, which is an ordinary
+    // thing to want and would otherwise be undone in the same breath as it was asked for.
+    consoleSetMode((control & CONSOLE_MODE_KEY) != 0);
+
+    int wantInterrupts = (control & CONSOLE_CONTROL_INTERRUPT) != 0;
+    if (!wantInterrupts) {
+        // Asking to stop being interrupted takes down whatever was already asked for. A
+        // request that outlived the setting that made it would arrive at a program that
+        // had just said it did not want it.
+        clearInterrupt(PORT_CONSOLE);
+    }
+    consoleInterrupts = wantInterrupts;
+    consoleAnnounce();
+}
+
 // Everything already written is put where it can be seen before the machine asks the host
 // anything. Standard output is line buffered on a terminal, so a prompt with no newline
 // after it - "> " is exactly that, and exactly why this matters - would sit in the buffer
@@ -92,6 +126,11 @@ static void consoleShowWhatIsWritten(void) {
 }
 
 uint8_t consoleReadByte(void) {
+    // Taking the byte answers whatever the console was asking about, so the line comes
+    // down here as well as when the CPU acknowledges it. Otherwise a program that reads
+    // the data port with the Interrupt Flag down would be interrupted afterwards on
+    // behalf of a byte it already has, and find nothing waiting when it looked.
+    clearInterrupt(PORT_CONSOLE);
     if (consolePushback >= 0) {
         uint8_t byte = (uint8_t)consolePushback;
         consolePushback = -1;
@@ -150,10 +189,47 @@ static void consoleFetch(void) {
     }
     // A read that failed for any other reason is left alone: the next attempt asks again,
     // and an interrupted poll is not news.
+    //
+    // Anything that was news puts the line up. This is the only place a byte arrives from
+    // the outside world, so it is the only place that has to, and it raises AT MOST ONCE
+    // PER BYTE for free: the pushback holds one, and while it is full there is nothing to
+    // fetch and so nothing to announce. A handler that does not read what it was called
+    // about is simply not called again, the way a receive register with one byte in it
+    // stops asking. The end of input announces itself once for the same reason - it is
+    // discovered once, and every later look leaves before it gets here.
+    consoleAnnounce();
+}
+
+// How many instructions the machine runs between glances at the console. Nothing here
+// happens alongside the CPU, so noticing a keystroke costs a system call, and asking on
+// every instruction costs more than executing one: a poll is about 150ns against roughly
+// 9ns for an instruction at full tilt, so it would slow the machine by nearly twenty
+// times. At the emulated clock this stride is a quarter of a millisecond between glances,
+// which no one typing has ever been able to tell from immediately.
+#define CONSOLE_SERVICE_STRIDE 256
+
+void serviceDevices(void) {
+    // The common case is a machine nobody is interrupting, and it costs one test.
+    if (!consoleInterrupts) {
+        return;
+    }
+    static unsigned int untilNextGlance = 0;
+    if (untilNextGlance > 0) {
+        untilNextGlance--;
+        return;
+    }
+    untilNextGlance = CONSOLE_SERVICE_STRIDE - 1;
+    consoleFetch();
 }
 
 static uint8_t consoleStatus(void) {
-    uint8_t status = consoleKeyMode ? CONSOLE_STATUS_KEYMODE : 0;
+    uint8_t status = 0;
+    if (consoleKeyMode) {
+        status |= CONSOLE_STATUS_KEYMODE;
+    }
+    if (consoleInterrupts) {
+        status |= CONSOLE_STATUS_INTERRUPT;
+    }
     consoleFetch();
     if (consoleEnded) {
         // READY IS NOT SET HERE, although a read would answer immediately. The bit means
@@ -395,7 +471,7 @@ static const DeviceRecord *deviceOnPort(uint8_t port) {
     }
     if (port > PORT_CONSOLE && port <= PORT_CONSOLE_TOP) {
         // The status and control ports are the same device as the data port, which is the
-        // one in the table and the one that would raise a line if the console ever did.
+        // one in the table and the one the console raises its line on.
         return deviceOnPort(PORT_CONSOLE);
     }
     if (port > PORT_DISK && port <= PORT_DISK_TOP) {
@@ -440,7 +516,7 @@ uint8_t OutputHandler(uint8_t DataByte, uint8_t Address) {
             // Later, I'll want to use a buffer for this for performance, probably.
             putchar(DataByte);
         break;
-        case CONSOLE_CONTROL: consoleSetMode(DataByte); break;
+        case CONSOLE_CONTROL: consoleSetControl(DataByte); break;
         case CONSOLE_STATUS:
             // Read only. A device saying how it is does not take instructions through the
             // same hole, so a write here is ignored rather than meaning something.
@@ -495,8 +571,9 @@ uint8_t InputHandler(uint8_t Address) {
         break;
         case CONSOLE_STATUS: return consoleStatus();
         case CONSOLE_CONTROL:
-            // Write only. Reading it gives zero rather than the mode, because the mode is
-            // a bit in the status port and one fact wants one place to live.
+            // Write only. Reading it gives zero rather than what was last written, because
+            // everything it sets is reported by the status port and one fact wants one
+            // place to live.
             return 0;
         break;
         case DISK_BLOCK_HIGH: return (uint8_t)(diskBlock >> 8);

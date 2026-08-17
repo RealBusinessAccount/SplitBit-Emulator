@@ -10,6 +10,10 @@
 ;   bit 1  ENDED    input has run out for good
 ;   bit 2  KEYMODE  the console is in key mode
 ;
+; There is a fourth bit, for whether the console interrupts on input, and nothing here
+; sets it. Polling and interrupting are the two ways to get a byte and this is the one
+; about polling; consoleInterruptTest.asm is the other.
+;
 ; This runs with input from a file rather than a terminal, so key mode has no terminal to
 ; put into another state and the mode bit is the only thing that changes. That is on
 ; purpose: the same program has to work either way, and a test that needed a terminal
@@ -60,8 +64,9 @@ readDone:
 
   ; ---- The status at the end of input ----
   ;
-  ; READY is set as well as ENDED, because a read does answer at once. It just answers
-  ; 0xFF forever. ENDED is what says so.
+  ; ENDED is set and READY is clear, although a read would answer at once here: what it
+  ; answers is 0xFF standing in for nothing. READY means there is a byte to be had, so the
+  ; loop above stops on its own rather than taking imaginary bytes forever.
   SETD.0 AtEndLabel
   CALL printString
   CALL showStatus

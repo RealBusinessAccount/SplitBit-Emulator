@@ -130,7 +130,7 @@ If a device interrupts and its vector is empty, that is a fault: the machine sto
 
 | Port | Device | Class |
 | --- | --- | --- |
-| 0x00 - 0x02 | The console. See The Console below. Writing to 0x00 sends a byte to standard output, reading takes one from standard input. | 0x02 |
+| 0x00 - 0x02 | The console. See The Console below. Writing to 0x00 sends a byte to standard output, reading takes one from standard input. It interrupts on 0x00, its base port, when asked to. | 0x02 |
 | 0x10 | A test device. Writing anything to it puts its own line up, so that interrupt handling can be exercised without waiting on anything. The byte written is ignored. | 0x10 |
 | 0x11 | A device that refuses everything, in both directions, so that refusal can be exercised without the memory controller. | 0x11 |
 | 0x20 - 0x23 | The disk. See Storage below. It interrupts on 0x20, its base port. | 0x13 |
@@ -340,13 +340,15 @@ Both arrive at the instruction that asked, so a handler sees which one it was. A
 
 ## The Console:
 
-Port 0x00 is the oldest thing on this machine and it has not changed: writing sends a byte out, reading takes one in and waits until there is one. Every program ever written for SplitBit uses it that way and still does. What is new is that a program can now ask whether a read would have to wait, and can say what it wants a keypress to mean.
+Port 0x00 is the oldest thing on this machine and it has not changed: writing sends a byte out, reading takes one in and waits until there is one. Every program ever written for SplitBit uses it that way and still does. What is new is that a program can say what it wants a keypress to mean, can ask whether a read would have to wait, and can arrange to be told when a byte arrives instead of having to ask at all.
 
 | Port | Register |
 | --- | --- |
 | 0x00 | Data. Writing sends a byte out, reading takes one in and waits for it. |
-| 0x01 | Status. Bit 0 a byte is waiting, bit 1 input has ended, bit 2 the console is in key mode. |
-| 0x02 | Mode. Writing 0x00 asks for line mode, 0x01 for key mode. |
+| 0x01 | Status. Bit 0 a byte is waiting, bit 1 input has ended, bit 2 the console is in key mode, bit 3 the console is set to interrupt. |
+| 0x02 | Control. Bit 0 asks for key mode, bit 1 asks the console to interrupt when a byte arrives. Writing 0x00 asks for neither, which is how the console starts. |
+
+The control port's two bits are independent, and one write sets both. Everything the control port can ask for, the status port reports, so a program can put the console back the way it found it instead of assuming it knows.
 
 ### Two Kinds Of Input:
 
@@ -375,6 +377,38 @@ So a simulation that should stop when somebody presses a key asks the status por
 Reading the data port when input has run out gives 0xFF, which is what it has always given and what programs written before any of this expect. But 0xFF is also an ordinary byte, and nothing could tell the two apart. Bit 1 of the status port is what tells them apart now.
 
 Bit 0 is **not** set once input has ended, even though a read would answer immediately. The bit means a byte is there to be had, and at the end of input there is not. That way a loop that reads while bit 0 is set stops when the input does, instead of taking imaginary bytes forever.
+
+### Being Told Instead Of Asking:
+
+Bit 1 of the control port asks the console to put its interrupt line up when a byte arrives, so a program can get on with something else and be told. The console is on port 0x00, so that is the vector a key comes through, named the way every device is:
+
+```
+#Vectors
+  Device 0x00  keyHandler
+```
+
+The handler is entered because the console had something to say, and asks the status port what. There are two possible answers, and the second is why a program can rely on this instead of also polling:
+
+```
+keyHandler:
+  INA 0x01
+  INIB 0x02                 ; Bit 1: has input ended?
+  AND
+  BNQ noMoreKeys            ; Nothing more is ever coming.
+  INA 0x00                  ; The byte this interrupt was about.
+  OUTA 0x00                 ; Nothing echoes in key mode, so send it back out.
+  RETI
+```
+
+**The end of input raises the line once**, as well as an arriving byte. A program driven entirely by interrupts would otherwise sit forever waiting to be told about a key that cannot arrive.
+
+**The line goes up at most once per byte.** The console holds one byte, so while that byte is still there, nothing new can arrive to ask about, and a handler that returns without reading it is simply not called again. This is what a receive register holding one byte does, and it means a handler cannot interrupt-storm the machine by forgetting something. The cost is the other half of the same fact: bytes arriving while that one is unread are lost, exactly as they would be on hardware.
+
+The two control bits do not depend on each other, so a program may ask to be interrupted in line mode. The terminal still holds what is typed until Return, and then the whole line arrives at once as a run of interrupts, one per byte. That is rarely what anyone wants, but a control bit that quietly did nothing because of another control bit would be worse.
+
+**A program that interrupts on input must not also block on the data port.** Reading it waits, and nothing else in the machine runs while it is waiting, so a program that does both has chosen to wait after asking not to. Interrupting and blocking are two answers to the same question, and a program wants one of them.
+
+The machine notices an arriving key between instructions, and does not look on every single one. The delay is about a quarter of a millisecond, which is shorter than the gap between two keystrokes by a wide margin and shorter than anything a person can perceive at all.
 
 ## Storage:
 

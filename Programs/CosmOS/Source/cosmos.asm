@@ -441,11 +441,13 @@ handleExit:
   LDD.0.1
   MVDS.0
 
-  ; The console goes back to line mode whatever the program left it in. A program that
-  ; wanted keys is expected to put it back itself, but one that stopped early, or forgot,
-  ; would otherwise hand back a shell with no echo and no backspace, and the shell has no
-  ; way to find out that happened. Writing line mode when it is already in line mode costs
-  ; a byte out of a port and does nothing, which is the right price for not having to know.
+  ; The console goes back to how the shell wants it, whatever the program left it in: line
+  ; mode, and not interrupting. A program that wanted either is expected to put it back
+  ; itself, but one that stopped early, or forgot, would otherwise hand back a shell with
+  ; no echo and no backspace, or one being interrupted about keys it is reading anyway.
+  ; Zero is both bits, so this undoes everything the control port can be asked for, and
+  ; asking for what is already the case costs a byte out of a port and does nothing. That
+  ; is the right price for not having to know.
   RSTA
   OUTA 0x02
 

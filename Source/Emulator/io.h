@@ -58,9 +58,26 @@
 // KEY MODE ONLY REACHES THE TERMINAL when there is one. With input coming from a pipe
 // there is nothing to put into another mode, and the status port answers by asking the
 // operating system whether anything is waiting, which is true of a pipe with bytes in it.
+//
+// A PROGRAM THAT INTERRUPTS ON INPUT MUST NOT BLOCK ON THE DATA PORT. Reading it waits,
+// and the machine executes no instructions while it is waiting, so nothing is serviced
+// and the line the console is about to raise goes nowhere until the read it was meant to
+// replace has already finished. Interrupting and blocking are two answers to the same
+// question and a program wants one of them.
 
+// The control port's bits, which are independent of one another. Writing zero asks for
+// line mode with no interrupts, which is how the console starts and what a program that
+// knows nothing of any of this leaves behind it.
 #define CONSOLE_MODE_LINE 0x00
 #define CONSOLE_MODE_KEY  0x01
+
+// Asks the console to put its line up when a byte arrives, instead of the program having
+// to come and look. It composes with the mode rather than depending on it: in line mode
+// the terminal still holds what is typed until Return, and then a whole line's worth of
+// bytes arrive at once, each raising the line in turn as the one before it is taken.
+// That is not especially useful, but a control bit that quietly did nothing depending on
+// another control bit would be worse than a burst of interrupts somebody asked for.
+#define CONSOLE_CONTROL_INTERRUPT 0x02
 
 // Set when there is a byte to be had. NOT set at the end of input, although a read would
 // answer at once there: what it answers is 0xFF standing in for nothing, and calling that
@@ -74,6 +91,9 @@
 // Which mode the console is in, so that a program can put it back the way it found it
 // rather than assuming it knows.
 #define CONSOLE_STATUS_KEYMODE 0x04
+// Whether the console is set to interrupt, for the same reason: everything a program can
+// ask the console to be, it can also ask the console what it currently is.
+#define CONSOLE_STATUS_INTERRUPT 0x08
 
 // Puts the terminal back the way it was found. Registered with atexit and called from the
 // signal handlers, because a machine that stops in key mode and does not undo it leaves
@@ -160,6 +180,16 @@ uint8_t InputHandler(uint8_t Address);
 //
 // These belong to the bus rather than to the CPU. Nothing here is saved in a frame, and
 // a program cannot read them except by being interrupted.
+
+// Gives every device a moment to notice something the machine did not ask it about.
+// Nothing here runs alongside the CPU: a device that waits on the outside world - the
+// console is the only one so far - is never going to see a keystroke unless something
+// asks it to look, and the CPU calling this between instructions is that something.
+//
+// It is called on every step and gets out of the way immediately when there is nothing to
+// do, because there usually is not. A device that wants attention rarely is a device that
+// must cost nothing when it does not.
+void serviceDevices(void);
 
 void raiseInterrupt(uint8_t port);
 

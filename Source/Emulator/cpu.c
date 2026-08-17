@@ -674,6 +674,11 @@ uint8_t executeOperation(uint8_t Instruction, CPURegisters *cpu) {
 
 void stepCPU(CPURegisters *cpu) {
     if (!(cpu->Status & STATUS_HALT)) {
+        // Devices get their moment before the lines are read, and unconditionally: a
+        // device is entitled to notice something whether or not the CPU is currently
+        // willing to be interrupted about it. Masking decides when a request is answered,
+        // not whether the outside world is allowed to have happened.
+        serviceDevices();
         // A device asking for attention is answered between instructions and never
         // inside one, so the address that goes into the frame is always the start of an
         // instruction and RETI always lands somewhere meaningful.
