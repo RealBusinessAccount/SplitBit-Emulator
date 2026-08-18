@@ -146,7 +146,41 @@ Message:
 
 Every label inside is then already the address it will have once the program is loaded, so a branch or a SETD written in it points at the right place. Giving either segment a base makes the whole program a loadable one, and the assembler writes it out with a header saying where its two pieces go, followed by the pieces themselves. The space below each base is not in the file: the header says where the bytes belong and the loader puts them there.
 
-A program starts at its code base. One that wants to begin somewhere else puts a branch at its first instruction, which costs three bytes and needs nothing from the format.
+A program starts at its code base unless it says otherwise, and `Boot` in its Vector Segment is how it says otherwise:
+
+```
+#Program
+  #Base 0x2000
+helpers:
+  ...
+start:
+  ...
+
+#Vectors
+  Boot  start           ; Which is where this program begins.
+```
+
+That fills in the entry point in the header. It is not installed as vector 0 of the machine, which is where everything begins at power on and no business of a program being loaded into a system that is already running.
+
+### Vectors In A Loadable Program:
+
+Everything else in a Vector Segment is carried in the file and installed by whatever loads the program. That is what lets a loaded program be interrupted: a handler is an address in the vector table, and until the format could carry one, a program that was not the one the machine booted from had no way to ask for it.
+
+```
+#Vectors
+  Boot         start
+  Device 0x00  keyHandler    ; The console, which now interrupts this program.
+```
+
+A program carrying vectors is written out as version two of the format, and the assembler says so:
+
+```
+  Vectors: 1. Version 2, so a loader that cannot install them will say so.
+```
+
+A program carrying none stays version one and loads anywhere. The difference matters because a loader that does not understand version two refuses the file rather than running a program with its handlers missing, which would work until the moment it was supposed to be interrupted and then fail somewhere with nothing pointing back at the cause.
+
+Whoever loads the program is expected to take the vectors out again when it finishes. See the Programming Manual.
 
 The address a program is assembled for has to be the address it is loaded at. Nothing checks that, and nothing can fix it: a program put anywhere else has every branch and every SETD inside it pointing somewhere wrong.
 

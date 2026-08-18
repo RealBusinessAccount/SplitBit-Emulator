@@ -1,0 +1,7 @@
+load Keys.sbx
+run
+abq
+run
+cdq
+dump program fe00
+exit

@@ -80,6 +80,12 @@ for i in 1 2 3 4 5 6 7 8; do "$TOOL" put "$DISKS/sbfs.img" "filler$i.txt" >/dev/
 "$ROOT/Assembler" -I "$ROOT/Programs/Libraries" -I "$ROOT/Programs/CosmOS/Source" \
     "$ROOT/Programs/CosmOS/Apps/Snake.asm" -o "$WORK/Snake.sbx" >/dev/null
 "$TOOL" put "$DISKS/cosmos.img" "$WORK/Snake.sbx" >/dev/null
+# Keys.sbx brings a vector of its own, which is what the version two format exists for. It
+# is the only program here the system has to install anything for, so it is what says the
+# whole path works: written into the file, installed at run, taken back out at exit.
+"$ROOT/Assembler" -I "$ROOT/Programs/Libraries" -I "$ROOT/Programs/CosmOS/Source" \
+    "$ROOT/Programs/CosmOS/Apps/Keys.asm" -o "$WORK/Keys.sbx" >/dev/null
+"$TOOL" put "$DISKS/cosmos.img" "$WORK/Keys.sbx" >/dev/null
 printf 'this is not a program' > notes.txt
 "$TOOL" put "$DISKS/cosmos.img" notes.txt >/dev/null
 

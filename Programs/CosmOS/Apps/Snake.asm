@@ -9,13 +9,15 @@
 ; console holds the next key until it is asked, so nothing typed between frames is lost,
 ; and a script of moves plays back one move to a frame.
 ;
-; WHY IT POLLS RATHER THAN INTERRUPTS. The console can raise an interrupt line when a byte
-; arrives, which is the better shape for a game: the loop would never look at the console
-; at all. A loaded program cannot use it. Installing a handler means putting an address in
-; the vector table, and the loadable program format carries only code and data - a program
-; that is not the one the machine booted from has no way to say what its vectors are. So
-; interrupts belong to boot images for now, and this asks once a frame, which is what the
-; machines this one is pretending to be did anyway.
+; WHY IT POLLS RATHER THAN INTERRUPTS. When this was written a loaded program could not be
+; interrupted at all: installing a handler means putting an address in the vector table,
+; and the loadable format carried only code and data, so a program that was not the one the
+; machine booted from had no way to say what its vectors were. That is no longer true - the
+; format carries them now, and Keys.asm is the program that shows it.
+;
+; This still polls, and now by choice. Asking once a frame is what the machines this one is
+; pretending to be actually did, it is the shape a game with a frame loop wants anyway, and
+; having one of each in the same Apps directory is worth more than having two the same.
 ;
 ; THE BOARD IS A PAGE, and that is the whole trick this program turns on. Sixteen by
 ; sixteen is 256 squares, so a square number is a byte, and the board is aligned so that

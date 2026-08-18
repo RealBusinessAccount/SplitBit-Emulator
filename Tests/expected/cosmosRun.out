@@ -4,8 +4,9 @@ CosmOS
 hello.sbx               52
 Life.sbx                1411
 Snake.sbx               2175
+Keys.sbx                663
 notes.txt               21
-5 files
+6 files
 > load what?
 > no such file
 > not a program
@@ -17,5 +18,5 @@ finished
 what should I call you? hello, Claude. that is all I do.
 finished
 > halted
-Execution halted after 12778 cycles.
+Execution halted after 14083 cycles.
 [exit 0]

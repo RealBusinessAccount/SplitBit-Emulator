@@ -231,12 +231,20 @@ cosmosLifeKey        | CosmOS/Source/cosmos.asm           | run      | cosmosLif
 # twelve moves at once: six turn it down the board and six take it left onto the food. So
 # what is recorded is a turn, a meal, a longer snake, and then a wall.
 cosmosSnake          | CosmOS/Source/cosmos.asm           | run      | cosmosSnake.in     | -     | disks/cosmos.img
+# A loaded program that brings a vector of its own, which nothing could do until the
+# loadable format could carry one. It is run TWICE on purpose: installing has to be exactly
+# undone by removing, and the way that fails is asymmetrically, so the second run is the one
+# that catches it. The dump afterwards is the proof that the table was put back - the
+# console's slot at FE00 is zero again, and CosmOS's own disk handler further along is
+# untouched by a program having installed over the top of it.
+cosmosKeys           | CosmOS/Source/cosmos.asm           | run      | cosmosKeys.in      | -     | disks/cosmos.img
 # The programs CosmOS loads, checked on their own so that a failure here reads as "the app
 # does not assemble" rather than as a broken disk image.
 app-greet            | CosmOS/Apps/greet.asm              | assemble | -                  | -
 app-hello            | CosmOS/Apps/hello.asm              | assemble | -                  | -
 app-Life             | CosmOS/Apps/Life.asm               | assemble | -                  | -
 app-Snake            | CosmOS/Apps/Snake.asm              | assemble | -                  | -
+app-Keys             | CosmOS/Apps/Keys.asm               | assemble | -                  | -
 
 # ---- Programs driven by console input ----
 inputTest            | inputTest.asm                      | run      | inputTest.in       | -

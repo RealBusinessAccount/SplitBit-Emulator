@@ -11,7 +11,11 @@
 #include <ctype.h>
 #include "Assm-util.h"
 
-#define MAX_LABELS 256
+// Every label in a program and in everything it includes shares one table, because they
+// share one namespace: a name may only be defined once across the whole assembly. So this
+// is not the size of one file but the size of a program and its libraries together, and
+// CosmOS with its four libraries went past 256 while still being a small system.
+#define MAX_LABELS 1024
 #define MAX_VECTORS 256
 
 typedef struct {

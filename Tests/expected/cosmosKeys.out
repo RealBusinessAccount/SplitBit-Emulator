@@ -1,0 +1,17 @@
+CosmOS
+> loaded, starting at 2000
+> keys, by interrupt. q stops.
+ab
+the console has been handed back
+finished
+> > keys, by interrupt. q stops.
+cd
+the console has been handed back
+finished
+> > FE00  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+FE10  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+FE20  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+FE30  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+> halted
+Execution halted after 10055 cycles.
+[exit 0]

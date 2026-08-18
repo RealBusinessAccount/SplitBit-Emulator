@@ -57,7 +57,10 @@ void addLabel(char *labelName, uint16_t address, int type, const char *fileName,
         if (debugSecondPass) printf("Added label %s with address %04X\n", labelName, labelArray[labelCount].address);
         labelCount++;
     } else {
-        fprintf(stderr, "Error: Too many labels defined.\n");
+        fprintf(stderr, RED "Error: Too many labels. This program and everything it\n"
+                            " includes may define %d between them, and \"%s\" is one too many.\n" RESET,
+                MAX_LABELS, labelName);
+        printf("File: %s at line %d.\n", fileName, lineNumber);
         exit(1);
     }
 }
@@ -564,16 +567,43 @@ static void writeLoadable(const char *outputFileName, uint8_t *Program, int prog
         fprintf(stderr, RED "Error: Could not open file \"%s\" for writing.\n" RESET, outputFileName);
         exit(1);
     }
+    // Boot says where a program begins, which is what the entry field holds, so in a
+    // loadable program that line fills it in. It is NOT installed as vector 0: that entry
+    // is where the whole machine starts, and a program being loaded into a running system
+    // has no business saying anything about that.
+    //
+    // Without a Boot line the entry is the first byte of the code, which is where a
+    // program begins if it does not say otherwise.
+    uint16_t entry = codeBase;
+    int installed = 0;
+    for (int i = 0; i < vectorArrayCount; i++) {
+        if (vectorArray[i].declaredOnly) {
+            continue;
+        }
+        if (vectorArray[i].base == SOFTWARE_VECTOR_BASE
+            && vectorArray[i].index == VECTOR_BOOT) {
+            entry = vectorArray[i].handler;
+            continue;
+        }
+        installed++;
+    }
+    if (installed > 255) {
+        fprintf(stderr, RED "Error: A loadable program may bring at most 255 vectors.\n" RESET);
+        exit(1);
+    }
+
     uint8_t header[SBEX_HEADER_BYTES];
     memset(header, 0, sizeof(header));
     memcpy(header, SBEX_MAGIC, SBEX_MAGIC_BYTES);
-    header[SBEX_VERSION_AT] = SBEX_VERSION;
+    // A program that brings vectors needs something of its loader that a version one
+    // loader does not know how to give, so it says so, and an older one refuses it rather
+    // than running it without them.
+    header[SBEX_VERSION_AT] = installed > 0 ? SBEX_VERSION_VECTORS : SBEX_VERSION;
+    header[SBEX_VECTORS_AT] = (uint8_t)installed;
     header[SBEX_CODE_AT] = (uint8_t)(codeBase >> 8);
     header[SBEX_CODE_AT + 1] = (uint8_t)(codeBase & 0xFF);
-    // Where it starts is where it begins. A program that wants otherwise puts a branch
-    // at its first instruction, which costs three bytes and needs no format for it.
-    header[SBEX_ENTRY_AT] = (uint8_t)(codeBase >> 8);
-    header[SBEX_ENTRY_AT + 1] = (uint8_t)(codeBase & 0xFF);
+    header[SBEX_ENTRY_AT] = (uint8_t)(entry >> 8);
+    header[SBEX_ENTRY_AT + 1] = (uint8_t)(entry & 0xFF);
     header[SBEX_CODE_LEN_AT] = (uint8_t)(codeLength >> 8);
     header[SBEX_CODE_LEN_AT + 1] = (uint8_t)(codeLength & 0xFF);
     header[SBEX_DATA_AT] = (uint8_t)(dataBase >> 8);
@@ -583,10 +613,36 @@ static void writeLoadable(const char *outputFileName, uint8_t *Program, int prog
     fwrite(header, 1, sizeof(header), outputFile);
     fwrite(Program + codeBase, 1, (size_t)codeLength, outputFile);
     fwrite(Data + dataBase, 1, (size_t)dataLength, outputFile);
+
+    // The vectors, last, so that everything before them sits where a version one loader
+    // already expects to find it.
+    for (int i = 0; i < vectorArrayCount; i++) {
+        if (vectorArray[i].declaredOnly) {
+            continue;
+        }
+        if (vectorArray[i].base == SOFTWARE_VECTOR_BASE
+            && vectorArray[i].index == VECTOR_BOOT) {
+            continue;
+        }
+        uint16_t slot = vectorArray[i].base + (uint16_t)vectorArray[i].index * VECTOR_ENTRY_BYTES;
+        fputc((slot >> 8) & 0xFF, outputFile);
+        fputc(slot & 0xFF, outputFile);
+        fputc((vectorArray[i].handler >> 8) & 0xFF, outputFile);
+        fputc(vectorArray[i].handler & 0xFF, outputFile);
+    }
     fclose(outputFile);
     printf("Successfully wrote SplitBit loadable program to \"%s\".\n", outputFileName);
-    printf(GREEN "  Code: %d bytes at 0x%04X.\n  Data: %d bytes at 0x%04X.\n    Total size: %d bytes.\n" RESET,
-           codeLength, codeBase, dataLength, dataBase, SBEX_HEADER_BYTES + codeLength + dataLength);
+    printf(GREEN "  Code: %d bytes at 0x%04X.\n  Data: %d bytes at 0x%04X.\n" RESET,
+           codeLength, codeBase, dataLength, dataBase);
+    if (entry != codeBase) {
+        printf(GREEN "  Starts at 0x%04X.\n" RESET, entry);
+    }
+    if (installed > 0) {
+        printf(GREEN "  Vectors: %d. Version 2, so a loader that cannot install them will say so.\n" RESET,
+               installed);
+    }
+    printf(GREEN "    Total size: %d bytes.\n" RESET,
+           SBEX_HEADER_BYTES + codeLength + dataLength + installed * SBEX_VECTOR_ENTRY_BYTES);
 }
 
 void writeOutputFile(const char *outputFileName, uint8_t *Program, int programCount, uint8_t *Data, int dataCount) {

@@ -279,12 +279,24 @@ loadMagicLoop:
   STA.1
   BNA loadMagicLoop
 
+  ; Version one is code and data. Version two also brings vectors, which is a thing a
+  ; loader has to know how to do rather than a detail it can skip: a program whose handlers
+  ; were quietly dropped would run and then go wrong somewhere with nothing to connect it
+  ; back to here. Anything else is refused.
   SETD.0 0x80 0x00
   DPUP.0 0d04
   LDA.0
+  SETD.1 LoadVersion
+  STA.1
   INIB 0d1
   XOR
+  BRQ loadVersionKnown
+  SETD.1 LoadVersion
+  LDA.1
+  INIB 0d2
+  XOR
   BNQ loadWrongVersion
+loadVersionKnown:
 
   ; The code. It comes from the staging area just past the sixteen byte header, and goes
   ; wherever the header says, in Program Memory, which the instruction set cannot write
@@ -340,6 +352,75 @@ loadMagicLoop:
   INIA 0x01
   OUTA 0xE8             ; Blit.
 
+  ; ---- The vectors it brought ----
+  ;
+  ; Kept here rather than installed. A vector points into a program, so it has no business
+  ; being in the table while that program is only loaded and not running: run puts them in
+  ; and exit takes them out again, so the window they are live in is exactly the run.
+  ; Keeping our own copy is also what lets a program be run more than once, since the
+  ; staging area it came in on is fair game for the program's own use.
+  ;
+  ; Where to read them from is not worked out. The data blit left the controller's source
+  ; address on the first byte after the data, which is where they are, so it is read back.
+  SETD.0 VectorSource
+  INA 0xE1
+  STA.0
+  INCD.0
+  INA 0xE2
+  STA.0
+
+  SETD.0 0x80 0x00
+  DPUP.0 0d05
+  LDA.0
+  SETD.1 LoadedVectorCount
+  STA.1
+  BRA loadVectorsCopied
+
+  ; More than there is room for is refused rather than half taken. Half a program's
+  ; handlers is not a smaller version of that program.
+  INIB 0d17
+  CCF
+  SUB
+  BNC loadTooManyVectors
+
+  SETD.0 VectorSource
+  LDD.2.0                   ; DP2 walks the entries where they are staged.
+  SETD.3 LoadedVectors      ; DP3 walks our own copy of them.
+  SETD.1 LoadedVectorCount
+  LDA.1
+  SETD.1 VectorsLeft
+  STA.1
+
+loadVectorCopy:
+  ; Four bytes: where it goes, then what goes there. The two bytes for what was there
+  ; before are left alone until something is actually put in.
+  LDA.2
+  STA.3
+  INCD.2
+  INCD.3
+  LDA.2
+  STA.3
+  INCD.2
+  INCD.3
+  LDA.2
+  STA.3
+  INCD.2
+  INCD.3
+  LDA.2
+  STA.3
+  INCD.2
+  INCD.3
+  INCD.3
+  INCD.3
+
+  SETD.1 VectorsLeft
+  LDA.1
+  DECA
+  STA.1
+  BNA loadVectorCopy
+
+loadVectorsCopied:
+
   ; Where it starts. Written out by hand rather than through a routine, because a routine
   ; could not hand two bytes back: CALL puts A, B and the first three pointers back the
   ; way it found them.
@@ -369,6 +450,9 @@ loadNoDisk:
   BRI loadComplain
 loadNothingNamed:
   SETD.0 LoadWhat
+  BRI loadComplain
+loadTooManyVectors:
+  SETD.0 TooManyVectors
   BRI loadComplain
 loadMissing:
   SETD.0 NoSuchFile
@@ -401,6 +485,8 @@ doRun:
   SETD.1 SystemStack
   STD.0.1
 
+  CALL installVectors
+
   ; The entry address is a number until BRD makes it a place. DP3 is the one to build it
   ; in, because it is the pointer nothing puts back.
   SETD.1 LoadedEntry
@@ -413,6 +499,112 @@ runNothing:
   CALL newLine
   BRI prompt
 
+; ---- Putting a program's vectors in, and taking them out again ----
+;
+; The vector table lives in Program Memory, which no instruction can write, so both of
+; these go through the memory controller. Port 0xE9 reads a byte from the source and writes
+; a byte to the destination, stepping the address on either way, so a two byte entry is two
+; reads or two writes and no address arithmetic in between.
+;
+; What was in the slot is kept before anything replaces it, and put back afterwards, rather
+; than the slot being cleared. Clearing would be wrong wherever a program has installed a
+; handler over one the system was already using: the program is allowed to do that, and
+; when it goes, what it covered up has to come back rather than becoming a hole.
+
+installVectors:
+  SETD.0 LoadedVectorCount
+  LDA.0
+  BRA installDone
+  SETD.1 VectorsLeft
+  STA.1
+  SETD.3 LoadedVectors
+
+installOne:
+  ; DP3 walks one six byte entry: where it goes, what goes there, and room for what was
+  ; there before. Reading and writing the same slot, so the controller is pointed at it
+  ; from both ends at once and the address is only worked out once.
+  RSTA
+  OUTA 0xE0                 ; SourceBank: Program Memory.
+  OUTA 0xE3                 ; DestBank: the same.
+  LDA.3
+  OUTA 0xE1
+  OUTA 0xE4
+  INCD.3
+  LDA.3
+  OUTA 0xE2
+  OUTA 0xE5
+  INCD.3                    ; On the handler.
+
+  ; What is there now, before anything replaces it.
+  INA 0xE9
+  PSHA
+  INA 0xE9
+  PSHA
+
+  ; And the handler in its place.
+  LDA.3
+  OUTA 0xE9
+  INCD.3
+  LDA.3
+  OUTA 0xE9
+  INCD.3                    ; On the two bytes kept for what was there before.
+
+  ; The Stack gives them back in the reverse of the order they went on, so the low byte
+  ; arrives first and is written to the second of the two. Getting this the natural way
+  ; round instead put the low byte where the high one goes and the high byte over the
+  ; handler, which the first run of a program survives - the table is already written by
+  ; then - and the second run does not.
+  POPA
+  INCD.3
+  STA.3
+  DECD.3
+  POPA
+  STA.3
+  INCD.3
+  INCD.3
+
+  SETD.1 VectorsLeft
+  LDA.1
+  DECA
+  STA.1
+  BNA installOne
+installDone:
+  RET
+
+removeVectors:
+  SETD.0 LoadedVectorCount
+  LDA.0
+  BRA removeDone
+  SETD.1 VectorsLeft
+  STA.1
+  SETD.3 LoadedVectors
+
+removeOne:
+  RSTA
+  OUTA 0xE3                 ; DestBank: Program Memory.
+  LDA.3
+  OUTA 0xE4
+  INCD.3
+  LDA.3
+  OUTA 0xE5
+  INCD.3
+  INCD.3
+  INCD.3                    ; Past the handler, to what was underneath it.
+  LDA.3
+  OUTA 0xE9
+  INCD.3
+  LDA.3
+  OUTA 0xE9
+  INCD.3
+
+  SETD.1 VectorsLeft
+  LDA.1
+  DECA
+  STA.1
+  BNA removeOne
+removeDone:
+  RET
+
 ; ---- The services ----
 ;
 ; These are what a loaded program is allowed to ask for. The names and their numbers come
@@ -421,6 +613,19 @@ runNothing:
 ;
 ; A handler arrives with the caller's registers exactly as they were: an interrupt frame
 ; is pushed, not cleared. So the pointer a program put in DP0 is still there to be used.
+
+; The disk finishing, acknowledged and ignored.
+;
+; The system drives the disk by asking its status port and waiting, so it has no use for
+; the line. But the disk raises one after every operation whether anybody wants it or not,
+; and a line goes on waiting while the Interrupt Flag is down rather than being lost. The
+; shell keeps the flag down, so the line from the last disk read was still standing when
+; the first program to enable interrupts ran, and it arrived there - a fault, in a program
+; that had never heard of the disk, blamed on the innocent instruction that let it through.
+;
+; Answering a line is what takes it down, so this is one instruction and that is the point.
+diskDone:
+  RETI
 
 handlePrintString:
   CALL printString
@@ -440,6 +645,11 @@ handleExit:
   SETD.1 SystemStack
   LDD.0.1
   MVDS.0
+
+  ; Whatever the program put in the vector table comes out again. A vector points into the
+  ; program that supplied it, and the program is gone, so anything left installed would aim
+  ; an interrupt at whatever those addresses hold next.
+  CALL removeVectors
 
   ; The console goes back to how the shell wants it, whatever the program left it in: line
   ; mode, and not interrupting. A program that wanted either is expected to put it back
@@ -713,6 +923,8 @@ LoadWhat:
 "load what?"
 NoSuchFile:
 "no such file"
+TooManyVectors:
+"that program wants more vectors than there is room for"
 Unreadable:
 "could not read it"
 NotProgram:
@@ -745,6 +957,26 @@ LoadedEntry:
   0x00 0x00
 LoadCount:
   0x00
+LoadVersion:
+  0x00
+
+; ---- The vectors a loaded program brought with it ----
+;
+; Six bytes each: where it goes, what goes there, and what was there before. The last two
+; are filled in when the program runs and read back when it exits, so what a program covers
+; up comes back rather than becoming a hole.
+;
+; Sixteen is a limit rather than a considered number. It is far more than anything written
+; so far wants, and a program asking for more is refused at load rather than having some of
+; its handlers installed and the rest dropped.
+VectorSource:
+  0x00 0x00
+VectorsLeft:
+  0x00
+LoadedVectorCount:
+  0x00
+LoadedVectors:
+  #Reserve 0d96
 
 ; Where the monitor is looking, so that a bare 'dump' can carry on from it.
 DumpBank:
@@ -781,3 +1013,4 @@ CommandLine:
   osPrintString  handlePrintString
   osReadLine     handleReadLine
   osExit         handleExit
+  Device 0x20    diskDone

@@ -131,6 +131,35 @@ else:
         problems.append("the Assembler Manual does not say the automatic vectors start"
                         " at %d" % autoFrom)
 
+# ---- The loadable header table matches the offsets the assembler writes ----
+#
+# The Programming Manual prints the header field by field, which is the description two
+# implementations work from. sbex.h is where the offsets actually are, so a field moved
+# there and not here would leave the manual describing a format nobody writes.
+sbex = read("Source/Assembler/sbex.h")
+offsets = {name: int(value)
+           for name, value in re.findall(r'^#define (SBEX_[A-Z_]+_AT)\s+(\d+)$', sbex, re.M)}
+if "## Loading A Program From A Disk:" not in pm:
+    problems.append("the Programming Manual has lost its loadable program section")
+else:
+    loading = pm.split("## Loading A Program From A Disk:")[1].split("\n## ")[0]
+    listed = [int(m) for m in re.findall(r'^\| (\d+) \| \d* \|', loading, re.M)]
+    for name, offset in sorted(offsets.items(), key=lambda pair: pair[1]):
+        if offset not in listed:
+            problems.append("%s is at offset %d and the header table has no row for it"
+                            % (name, offset))
+    # Spelled as a word, the way these manuals write small numbers in prose.
+    asWord = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five"}
+    for version in ("SBEX_VERSION", "SBEX_VERSION_VECTORS"):
+        number = re.search(r'^#define %s\s+(\d+)$' % version, sbex, re.M)
+        if not number:
+            problems.append("%s is gone from sbex.h" % version)
+            continue
+        said = asWord.get(int(number.group(1)))
+        if said is None or said not in loading.lower():
+            problems.append("the loadable program section does not mention version %s (%s)"
+                            % (number.group(1), said))
+
 # ---- Every console status bit is described ----
 #
 # The status port is read by writing a mask and testing it, so a program can only use a bit
