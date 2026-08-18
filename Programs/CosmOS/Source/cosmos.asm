@@ -110,6 +110,16 @@ prompt:
   BRQ doDump
 
   SETD.0 CommandLine
+  SETD.1 DeleteName
+  CALL textSame
+  BRQ doDelete
+
+  SETD.0 CommandLine
+  SETD.1 RenameName
+  CALL textSame
+  BRQ doRename
+
+  SETD.0 CommandLine
   SETD.1 HelpName
   CALL textSame
   BRQ doHelp
@@ -195,7 +205,16 @@ dirDone:
   SETD.0 DirSeen
   LDA.0
   CALL printByteDecimal
+  ; One file is not one files. Cheap to get right and it reads as carelessness otherwise.
+  SETD.0 DirSeen
+  LDA.0
+  DECA
+  BRA dirOne
   SETD.0 FilesText
+  BRI dirCount
+dirOne:
+  SETD.0 FileText
+dirCount:
   CALL printString
   CALL newLine
   BRI prompt
@@ -470,6 +489,84 @@ loadComplain:
   CALL newLine
   BRI prompt
 
+; ---- delete and rename ----
+;
+; The two things a disk needs that reading and writing do not provide, and the two that
+; anything editing a document will want from the shell as well as from a program. Deleting
+; frees an entry and its blocks; renaming changes twenty two bytes and moves nothing.
+
+doDelete:
+  SETD.0 DiskReady
+  LDA.0
+  BRA fileNoDisk
+
+  SETD.1 TextRest
+  LDD.0.1
+  LDA.0
+  BRA deleteWhat
+
+  CALL sbfsDelete
+  BNQ deleteFailed
+  SETD.0 Deleted
+  CALL printString
+  CALL newLine
+  BRI prompt
+
+deleteWhat:
+  SETD.0 DeleteWhat
+  BRI fileComplain
+deleteFailed:
+  SETD.0 NoSuchFile
+  BRI fileComplain
+
+doRename:
+  SETD.0 DiskReady
+  LDA.0
+  BRA fileNoDisk
+
+  SETD.1 TextRest
+  LDD.0.1
+  LDA.0
+  BRA renameWhat
+
+  ; Two names, so the rest of the line is split again. textSplit writes a zero over the
+  ; space it cuts at, so what was one string becomes two without anything being copied.
+  SETD.1 TextRest
+  LDD.0.1
+  SETD.1 RenameFrom
+  STD.0.1
+  CALL textSplit
+
+  SETD.1 TextRest
+  LDD.1.1
+  LDA.1
+  BRA renameWhat            ; Only one name was given, and this needs both.
+
+  SETD.2 RenameFrom
+  LDD.0.2
+  CALL sbfsRename
+  BNQ renameFailed
+  SETD.0 Renamed
+  CALL printString
+  CALL newLine
+  BRI prompt
+
+renameWhat:
+  SETD.0 RenameWhat
+  BRI fileComplain
+renameFailed:
+  ; Either there is no such file or the new name is already taken. Which of the two is not
+  ; worth another message: both mean the disk does not have room for that name to move.
+  SETD.0 RenameNo
+  BRI fileComplain
+
+fileNoDisk:
+  SETD.0 NoDisk
+fileComplain:
+  CALL printString
+  CALL newLine
+  BRI prompt
+
 ; ---- run ----
 ;
 ; Hands the machine to whatever was loaded. Where the Stack is now is written down first,
@@ -485,6 +582,15 @@ doRun:
   SETD.1 SystemStack
   STD.0.1
 
+  ; Whatever followed the word "run" is kept where the program can ask for it. Copied
+  ; rather than pointed at, because what it is pointing at is the line the shell typed
+  ; into, and a program is entitled to outlive the shell's opinion of that.
+  SETD.1 TextRest
+  LDD.0.1
+  SETD.1 RunArgument
+  INIB 0d64
+  CALL copyText
+
   CALL installVectors
 
   ; The entry address is a number until BRD makes it a place. DP3 is the one to build it
@@ -498,6 +604,26 @@ runNothing:
   CALL printString
   CALL newLine
   BRI prompt
+
+; DP0 is a string, DP1 is where it should go, and B is how much room there is counting
+; the zero on the end. What does not fit is left behind, and what is written is a string
+; either way.
+copyText:
+  BRB copyTextDone          ; No room at all, so nothing is written, not even the zero.
+copyTextLoop:
+  DECB
+  BRB copyTextEnd           ; Only room for the terminator now.
+  LDA.0
+  STA.1
+  BRA copyTextDone
+  INCD.0
+  INCD.1
+  BRI copyTextLoop
+copyTextEnd:
+  RSTA
+  STA.1
+copyTextDone:
+  RET
 
 ; ---- Putting a program's vectors in, and taking them out again ----
 ;
@@ -633,6 +759,20 @@ handlePrintString:
 
 handleReadLine:
   CALL readLine
+  RETI
+
+; What the program was asked to work on. DP0 says where to put it and B how much room
+; there is, counting the zero on the end, which is the same bargain readLine offers.
+;
+; Being asked for rather than left at an agreed address is deliberate. The two sides of
+; this already have to agree on a vector number and nothing else, and that number is
+; written down once in services.asm; an address would be a second thing to agree about, in
+; a memory map that is a convention rather than anything enforced.
+handleArgument:
+  PSHD.0
+  POPD.1
+  SETD.0 RunArgument
+  CALL copyText
   RETI
 
 ; Giving the machine back. This is the one place MVDS earns its keep. The program's Stack,
@@ -893,13 +1033,17 @@ Farewell:
 "halted"
 FilesText:
 " files"
+FileText:
+" file"
 
 ; Two strings rather than one, because a string literal stops at 255 characters and each
 ; one carries its own zero byte, so they are printed in turn rather than joined.
 HelpText:
 "dir          list what is on the disk
 load <file>  read a program off the disk
-run          start what was loaded"
+run [words]  start what was loaded, and tell it those words
+delete <file>        take it off the disk
+rename <file> <to>   call it something else"
 HelpMoreText:
 "dump         sixty four bytes of memory, and again for more
              dump <program|data|bank> <address>
@@ -923,6 +1067,16 @@ LoadWhat:
 "load what?"
 NoSuchFile:
 "no such file"
+Deleted:
+"gone"
+Renamed:
+"renamed"
+DeleteWhat:
+"delete what?"
+RenameWhat:
+"rename what to what?"
+RenameNo:
+"there is no such file, or that name is taken"
 TooManyVectors:
 "that program wants more vectors than there is room for"
 Unreadable:
@@ -944,6 +1098,10 @@ LoadName:
 "load"
 RunName:
 "run"
+DeleteName:
+"delete"
+RenameName:
+"rename"
 HelpName:
 "help"
 ExitName:
@@ -959,6 +1117,15 @@ LoadCount:
   0x00
 LoadVersion:
   0x00
+
+; Where the first of rename's two names is, kept while the second is picked out of the
+; line, since finding that needs the pointers for itself.
+RenameFrom:
+  0x00 0x00
+
+; What followed "run", kept for the program to ask for.
+RunArgument:
+  #Reserve 0d64
 
 ; ---- The vectors a loaded program brought with it ----
 ;
@@ -1013,4 +1180,5 @@ CommandLine:
   osPrintString  handlePrintString
   osReadLine     handleReadLine
   osExit         handleExit
+  osArgument     handleArgument
   Device 0x20    diskDone

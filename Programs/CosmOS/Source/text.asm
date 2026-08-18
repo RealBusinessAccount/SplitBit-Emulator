@@ -215,6 +215,82 @@ textHexNo:
   ADD
   RET
 
+; ---- A number written in decimal ----
+;
+; DP0 names it. Q is the value, and TextDigits says how many digits were read, which is
+; zero when there was no number there at all. Stops at the first thing that is not a digit.
+;
+; Decimal rather than hex, and one byte rather than two, because this is for the numbers a
+; person types at a program: a line number, a count, a how many. Nobody counts lines in
+; hex, and nobody types a line number above 255 on a machine this size. textHexWord is
+; still the one for an address, where hex is what everybody means.
+;
+; Ten times the running total is worked out as eight of it plus two of it, because nothing
+; on this machine multiplies. Anything past 255 wraps, which is what the same sum does
+; everywhere else here.
+textNumber:
+  RSTA
+  SETD.1 TextValue
+  STA.1
+  SETD.1 TextDigits
+  STA.1
+
+textNumberLoop:
+  LDA.0
+  BRA textNumberDone
+
+  ; Below '0' or above '9' ends it.
+  INIB 0d48
+  CCF
+  SUB
+  BRC textNumberDone            ; It borrowed, so the character was below '0'.
+  MVQA
+  INIB 0d10
+  CCF
+  SUB
+  BNC textNumberDone            ; It did not borrow, so it was ten or more past '0'.
+
+  PSHA                          ; The digit, while the total is multiplied.
+  SETD.1 TextValue
+  LDA.1
+  LDB.1
+  CCF
+  ADD                           ; Twice.
+  MVQA
+  MVQB
+  PSHA                          ; Twice, kept: ten is eight and two.
+  CCF
+  ADD                           ; Four times.
+  MVQA
+  MVQB
+  CCF
+  ADD                           ; Eight times.
+  MVQA
+  POPB
+  CCF
+  ADD                           ; Ten times.
+  MVQA
+  POPB
+  CCF
+  ADD                           ; And the digit.
+  SETD.1 TextValue
+  STQ.1
+
+  SETD.1 TextDigits
+  LDA.1
+  INCA
+  STA.1
+  INCD.0
+  BRI textNumberLoop
+
+textNumberDone:
+  SETD.1 TextValue
+  LDA.1
+  RSTB
+  CCF
+  ADD                           ; Q is the value, the way a routine hands a byte back.
+  RET
+
 #Data
 
 ; Where the rest of the line begins, after textSplit has taken a word off the front.

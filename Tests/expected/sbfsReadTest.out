@@ -3,5 +3,5 @@ across.txt 0002 BC ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHI
 aName22CharactersLong! 0000 16 exactly twenty two!!!!
 empty.txt 0000 00 
 absent.txt missing
-Execution halted after 19230 cycles.
+Execution halted.
 [exit 0]

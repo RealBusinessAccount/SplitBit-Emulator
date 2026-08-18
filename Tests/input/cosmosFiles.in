@@ -1,0 +1,9 @@
+dir
+rename one.txt first.txt
+dir
+delete first.txt
+dir
+delete first.txt
+rename two.txt
+rename two.txt two.txt
+exit

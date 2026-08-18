@@ -1,0 +1,21 @@
+CosmOS
+> loaded, starting at 2000
+> poem.txt, 0 lines
+> : : : : > : : > 1: alpha
+2: INSERTED
+3: beta
+4: gamma
+> : > > 1: CHANGED
+2: INSERTED
+3: beta
+> written, 22 bytes
+> finished
+> poem.txt, 3 lines
+> 1: CHANGED
+2: INSERTED
+3: beta
+> there is no such line
+> finished
+> halted
+Execution halted.
+[exit 0]

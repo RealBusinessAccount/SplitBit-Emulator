@@ -24,3 +24,4 @@
   osPrintString  0d16   ; DP0 names a string. Prints it.
   osReadLine     0d17   ; DP0 names somewhere to put a line read from the console.
   osExit         0d18   ; Give the machine back to the system.
+  osArgument     0d19   ; DP0 names somewhere to put the rest of the run command.

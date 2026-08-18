@@ -4,5 +4,5 @@ caught 01FC
 read ok
 lowered ok
 fenced 05
-Execution halted after 535 cycles.
+Execution halted.
 [exit 0]

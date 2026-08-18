@@ -1,7 +1,9 @@
 CosmOS
 > dir          list what is on the disk
 load <file>  read a program off the disk
-run          start what was loaded
+run [words]  start what was loaded, and tell it those words
+delete <file>        take it off the disk
+rename <file> <to>   call it something else
 dump         sixty four bytes of memory, and again for more
              dump <program|data|bank> <address>
 help         this
@@ -21,5 +23,5 @@ aName22CharactersLong!  22
 12 files
 > > I do not know: frobnicate
 > halted
-Execution halted after 12376 cycles.
+Execution halted.
 [exit 0]

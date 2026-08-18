@@ -1,3 +1,3 @@
 Fault: 0xFE at Program Address 0x0002 is not an instruction.
-Execution halted after 2 cycles.
+Execution halted.
 [exit 1]

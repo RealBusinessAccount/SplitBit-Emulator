@@ -1,0 +1,17 @@
+CosmOS
+> one.txt                 13
+two.txt                 14
+2 files
+> renamed
+> first.txt               13
+two.txt                 14
+2 files
+> gone
+> two.txt                 14
+1 file
+> no such file
+> rename what to what?
+> there is no such file, or that name is taken
+> halted
+Execution halted.
+[exit 0]

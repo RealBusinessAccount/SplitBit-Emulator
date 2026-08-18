@@ -1,4 +1,4 @@
 Fault: The device on port 17 refused the access at Program Address 0x000A, and nothing is installed to deal with it.
 O
-Execution halted after 6 cycles.
+Execution halted.
 [exit 1]

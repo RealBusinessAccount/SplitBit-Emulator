@@ -5,8 +5,9 @@ hello.sbx               52
 Life.sbx                1411
 Snake.sbx               2175
 Keys.sbx                663
+Say.sbx                 155
 notes.txt               21
-6 files
+7 files
 > load what?
 > no such file
 > not a program
@@ -18,5 +19,5 @@ finished
 what should I call you? hello, Claude. that is all I do.
 finished
 > halted
-Execution halted after 14083 cycles.
+Execution halted.
 [exit 0]

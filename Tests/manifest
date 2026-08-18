@@ -77,6 +77,11 @@ sbfsWalkTest         | testPrograms/sbfsWalkTest.asm      | run      | -        
 # Writing a filesystem, then reading back what was written. The disk starts with a file
 # on it, so allocation has to find room rather than start at the beginning.
 sbfsWriteTest        | testPrograms/sbfsWriteTest.asm     | run      | -                  | -     | disks/write.img
+# Deleting, renaming, and saving over something already there, which is what any tool that
+# edits a document needs and what none of the tests above touch. The interesting line is
+# the third: saving a longer version moves the file, because files here are contiguous and
+# do not grow. The last two lines are a rename and a delete having actually happened.
+sbfsEditTest         | testPrograms/sbfsEditTest.asm      | run      | -                  | -     | disks/edit.img
 
 # Loading a program off a disk and running it. Everything below this line existed before
 # the loader did; the only new part is the sixteen bytes on the front of a loadable
@@ -238,6 +243,26 @@ cosmosSnake          | CosmOS/Source/cosmos.asm           | run      | cosmosSna
 # console's slot at FE00 is zero again, and CosmOS's own disk handler further along is
 # untouched by a program having installed over the top of it.
 cosmosKeys           | CosmOS/Source/cosmos.asm           | run      | cosmosKeys.in      | -     | disks/cosmos.img
+# The shell taking things off a disk and calling them something else, which is the last of
+# CosmOS's original four verbs to be built and the first time anything has changed a disk
+# from the shell. Its own image, because it changes what is on it: a fixture named with a
+# directory is used as it stands, so a test that writes to a shared one changes what every
+# test after it sees. The refusals are here too - deleting what is not there, renaming with
+# a name missing, and renaming something to a name already taken.
+cosmosFiles          | CosmOS/Source/cosmos.asm           | run      | cosmosFiles.in     | -     | disks/files.img
+# A program being told what it is for. Nothing loaded before this could be told anything,
+# so every app did the same thing however it was started - which is fine for a demo and no
+# use at all to a tool that edits a named document. Run three times: with nothing, with a
+# name, and with several words, since what arrives is the rest of the line rather than a
+# list and it is the program's business what to make of it.
+cosmosSay            | CosmOS/Source/cosmos.asm           | run      | cosmosSay.in       | -     | disks/cosmos.img
+# The editor, which is the first program on this machine that makes a file a person typed:
+# every byte on every other image here was put there by the host tool. It is run twice in
+# one session, and that is the test rather than a flourish - the second run reads back what
+# the first one wrote, so the whole path is checked at once: read a name from the argument,
+# split a file into lines, edit them, build a file back out of them, and save it over
+# something that was already there and is now a different size.
+cosmosEdit           | CosmOS/Source/cosmos.asm           | run      | cosmosEdit.in      | -     | disks/editor.img
 # The programs CosmOS loads, checked on their own so that a failure here reads as "the app
 # does not assemble" rather than as a broken disk image.
 app-greet            | CosmOS/Apps/greet.asm              | assemble | -                  | -
@@ -245,6 +270,8 @@ app-hello            | CosmOS/Apps/hello.asm              | assemble | -        
 app-Life             | CosmOS/Apps/Life.asm               | assemble | -                  | -
 app-Snake            | CosmOS/Apps/Snake.asm              | assemble | -                  | -
 app-Keys             | CosmOS/Apps/Keys.asm               | assemble | -                  | -
+app-Say              | CosmOS/Apps/Say.asm                | assemble | -                  | -
+app-Edit             | CosmOS/Apps/Edit.asm               | assemble | -                  | -
 
 # ---- Programs driven by console input ----
 inputTest            | inputTest.asm                      | run      | inputTest.in       | -

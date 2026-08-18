@@ -84,6 +84,24 @@ trim() {
     printf '%s' "$v"
 }
 
+# Takes the cycle count out of the emulator's last line, in place.
+#
+# HOW MANY CYCLES A PROGRAM TOOK IS NOT WHAT ANY OF THESE TESTS ARE ABOUT, and having it in
+# every recorded result made every one of them fragile in the same way: two instructions
+# added to CosmOS moved the count in six unrelated files at once, so a real difference
+# would have arrived in a crowd of meaningless ones and had to be picked out by hand.
+#
+# WHETHER a program stopped on its own or ran into its limit is kept, because that is
+# behaviour and several tests exist to check it. Only the number goes.
+#
+# Anything that genuinely wants to measure cycles should say so out loud in a test of its
+# own rather than every test carrying the measurement and nothing asserting anything about
+# it.
+settle() {
+    sed -i -E 's/^Execution halted after [0-9]+ cycles\.$/Execution halted./;
+               s/^Execution stopped after [0-9]+ cycles\. \(cycle limit reached\)$/Execution stopped. (cycle limit reached)/' "$1"
+}
+
 check() {
     # check <name> <actual-file>
     local name="$1" actual="$2" golden="$EXPECTED/$1.out"
@@ -205,6 +223,7 @@ while IFS='|' read -r name src mode stdin limit disk; do
             # supposed to exit non zero, and that should be just as pinned down as
             # what it printed.
             printf '[exit %d]\n' "$STATUS" >> "$OUT"
+            settle "$OUT"
             check "$name" "$OUT"
             ;;
         *)

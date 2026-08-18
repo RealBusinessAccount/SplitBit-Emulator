@@ -991,6 +991,208 @@ sbfsSameByte:
   XOR
   RET
 
+; ---- Deleting ----
+;
+; Frees a file. DP0 names it, and Q is zero if it went.
+;
+; A deleted entry and one that was never used are the same thing, which is the whole of
+; what deleting is here: the entry is zeroed and its blocks stop being spoken for. THE
+; BLOCKS THEMSELVES ARE LEFT EXACTLY AS THEY WERE, so what was in a file is still on the
+; disk until something is put over the top of it. Worth knowing if anything is ever meant
+; to be private. The host tool does the same, so the two agree about what a deleted disk
+; looks like.
+;
+; Nothing is compacted. Deleting leaves a hole, and because files are contiguous a hole is
+; only usable by something that fits inside it. That is the price of the directory being
+; the whole allocation map, and tidying it up is an ordinary program somebody can write
+; rather than anything the format has to say.
+sbfsDelete:
+  CALL sbfsFind
+  BNQ sbfsDeleteFailed
+
+  ; How much room it was taking, worked out before the entry that says so is thrown away.
+  CALL sbfsFileExtent
+
+  ; sbfsFind leaves DP3 on the entry and SbfsBlock on the directory block it came out of,
+  ; which is everything needed to change it and put it back.
+  PSHD.3
+  POPD.0
+  INIB 0d32
+sbfsDeleteWipe:
+  RSTA
+  STA.0
+  INCD.0
+  DECB
+  BNB sbfsDeleteWipe
+
+  SETD.1 SbfsBuffer
+  CALL sbfsBufferIn
+  CALL sbfsWriteBlock
+  BNQ sbfsDeleteFailed
+
+  ; And the free count goes back up. It is a note rather than the truth, but a note worth
+  ; keeping right.
+  RSTA
+  SETD.0 SbfsBlock
+  STA.0
+  INCD.0
+  STA.0
+  CALL sbfsReadBlock
+  BNQ sbfsDeleteFailed
+  SETD.1 SbfsBuffer
+  CALL sbfsBufferOut
+  SETD.0 SbfsBuffer
+  DPUP.0 0d12
+  SETD.2 SbfsWantBlocks
+  CALL sbfsAddWord
+  SETD.1 SbfsBuffer
+  CALL sbfsBufferIn
+  CALL sbfsWriteBlock
+  RET
+
+sbfsDeleteFailed:
+  RSTA
+  INIB 0d1
+  CCF
+  ADD
+  RET
+
+; ---- Renaming ----
+;
+; DP0 is the name a file has, DP1 is the name it should have. Q is zero if it was renamed.
+;
+; Only the twenty two bytes of the name change, so no data moves and no block is touched
+; but the one holding the entry. THAT IS WHAT MAKES A SAFE SAVE POSSIBLE. Writing a file
+; that has grown means putting it somewhere else, and the obvious order - throw the old one
+; away, then write the new one - loses the lot if there turns out to be nowhere to put it.
+; Renaming is the cheapest thing this filesystem can do and the only one that can be left
+; until last, so it is what the order is built around.
+sbfsRename:
+  ; Where the old name is, kept somewhere that finding things will not tread on.
+  SETD.2 SbfsSavedName
+  STD.0.2
+
+  PSHD.1
+  POPD.0
+  SETD.1 SbfsNewName
+  CALL sbfsKeepName     ; Twenty two bytes, padded, the way an entry holds one.
+
+  ; Refused if something already answers to the new name. Two entries with one name is a
+  ; disk that cannot be searched sensibly: a search answers with whichever it meets first,
+  ; so the other becomes unreachable without ever having been deleted.
+  SETD.0 SbfsNewName
+  CALL sbfsFind
+  BRQ sbfsRenameFailed
+
+  SETD.2 SbfsSavedName
+  LDD.0.2
+  CALL sbfsFind
+  BNQ sbfsRenameFailed
+
+  PSHD.3
+  POPD.1
+  DPUP.1 0d06           ; Past the flags, the start, the block count and the tail.
+  SETD.0 SbfsNewName
+  INIA 0d22
+  SETD.2 SbfsCount
+  STA.2
+sbfsRenameName:
+  LDA.0
+  STA.1
+  INCD.0
+  INCD.1
+  LDA.2
+  DECA
+  STA.2
+  BNA sbfsRenameName
+
+  SETD.1 SbfsBuffer
+  CALL sbfsBufferIn
+  CALL sbfsWriteBlock
+  RET
+
+sbfsRenameFailed:
+  RSTA
+  INIB 0d1
+  CCF
+  ADD
+  RET
+
+; ---- Saving over something that is already there ----
+;
+; DP0 names the file, DP1 is the data, and SbfsFileBlocks with SbfsFileTail say how big it
+; now is. Q is zero if it was saved.
+;
+; This is the routine every tool that edits a document wants, and the reason it is here
+; rather than in each of them is that the careful order is not obvious and getting it wrong
+; destroys somebody's work:
+;
+;   make a temporary        nothing is lost if there is nowhere to put it
+;   write it
+;   delete the original     only once the new one is safely down
+;   rename the temporary
+;
+; The obvious order - delete, create, write - looks fine and is a trap. Files here are
+; contiguous, so a file that has grown may not fit where it was, and a create can be
+; refused for want of a run long enough even on a disk with plenty of free blocks. Do it
+; that way round and the original is already gone when that happens.
+sbfsSaveFile:
+  SETD.2 SbfsSaveName
+  STD.0.2
+  SETD.2 SbfsSaveData
+  STD.1.2
+
+  ; How big it is, kept aside: finding and deleting things both overwrite the place the
+  ; size is normally said, because both of them describe whatever they last looked at.
+  SETD.0 SbfsSaveBlocks
+  SETD.2 SbfsFileBlocks
+  CALL sbfsSetWord
+  SETD.0 SbfsFileTail
+  LDA.0
+  SETD.1 SbfsSaveTail
+  STA.1
+
+  ; A temporary left behind by a save that did not finish would be in the way. Whether
+  ; there was one is not worth asking about, since either answer leads here.
+  SETD.0 SbfsTempName
+  CALL sbfsDelete
+
+  SETD.0 SbfsFileBlocks
+  SETD.2 SbfsSaveBlocks
+  CALL sbfsSetWord
+  SETD.0 SbfsSaveTail
+  LDA.0
+  SETD.1 SbfsFileTail
+  STA.1
+
+  SETD.0 SbfsTempName
+  CALL sbfsCreate
+  BNQ sbfsSaveFailed
+
+  SETD.2 SbfsSaveData
+  LDD.1.2
+  CALL sbfsWriteFile
+  BNQ sbfsSaveFailed
+
+  ; Now, and not before, the old one goes. It may not exist, which is what saving something
+  ; for the first time looks like from here.
+  SETD.2 SbfsSaveName
+  LDD.0.2
+  CALL sbfsDelete
+
+  SETD.0 SbfsTempName
+  SETD.2 SbfsSaveName
+  LDD.1.2
+  CALL sbfsRename
+  RET
+
+sbfsSaveFailed:
+  RSTA
+  INIB 0d1
+  CCF
+  ADD
+  RET
+
 #Data
 
 SbfsMagic:
@@ -1049,6 +1251,30 @@ SbfsName:
 
 SbfsWanted:
   #Reserve 0d22
+
+; ---- What renaming and saving keep ----
+
+; A name on its way into an entry, padded to the twenty two bytes an entry holds.
+SbfsNewName:
+  #Reserve 0d22
+
+; Where a name lives, kept across a search, which needs the pointers for itself.
+SbfsSavedName:
+  0x00 0x00
+
+SbfsSaveName:
+  0x00 0x00
+SbfsSaveData:
+  0x00 0x00
+SbfsSaveBlocks:
+  0x00 0x00
+SbfsSaveTail:
+  0x00
+
+; What a document is called while it is being written and is not yet the real thing. A
+; name nothing else is likely to want, and short enough to leave room for a long one.
+SbfsTempName:
+"sbfs.part"
 
 SbfsBuffer:
   #Reserve 0d256

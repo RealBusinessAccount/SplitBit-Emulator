@@ -19,5 +19,5 @@ CosmOS
 0020  00 FF 00 00 00 00 00 00 00 FF 00 00 00 00 00 00  ................
 0030  00 FF 00 00 00 00 00 00 00 FF 00 00 00 00 00 00  ................
 > halted
-Execution halted after 23512 cycles.
+Execution halted.
 [exit 0]

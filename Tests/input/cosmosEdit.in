@@ -1,0 +1,22 @@
+load Edit.sbx
+run poem.txt
+a
+alpha
+beta
+gamma
+.
+i 2
+INSERTED
+.
+l
+c 1
+CHANGED
+d 4
+l
+w
+q
+run poem.txt
+l
+d 99
+q
+exit

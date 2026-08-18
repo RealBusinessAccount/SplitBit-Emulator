@@ -59,7 +59,7 @@ for i in 1 2 3 4 5 6 7 8; do "$TOOL" put "$DISKS/sbfs.img" "filler$i.txt" >/dev/
 # to the hardware, so something has to check that one still gives the machine back.
 #
 # notes.txt is there so that loading something that is not a program can be tried too.
-"$TOOL" format "$DISKS/cosmos.img" 32 1 >/dev/null
+"$TOOL" format "$DISKS/cosmos.img" 256 2 >/dev/null
 "$ROOT/Assembler" -I "$ROOT/Programs/CosmOS/Source" \
     "$ROOT/Programs/CosmOS/Apps/greet.asm" -o "$WORK/greet.sbx" >/dev/null
 "$TOOL" put "$DISKS/cosmos.img" "$WORK/greet.sbx" >/dev/null
@@ -86,6 +86,11 @@ for i in 1 2 3 4 5 6 7 8; do "$TOOL" put "$DISKS/sbfs.img" "filler$i.txt" >/dev/
 "$ROOT/Assembler" -I "$ROOT/Programs/Libraries" -I "$ROOT/Programs/CosmOS/Source" \
     "$ROOT/Programs/CosmOS/Apps/Keys.asm" -o "$WORK/Keys.sbx" >/dev/null
 "$TOOL" put "$DISKS/cosmos.img" "$WORK/Keys.sbx" >/dev/null
+# Say.sbx is the first program that can be told anything. Everything before it did the same
+# thing however it was started.
+"$ROOT/Assembler" -I "$ROOT/Programs/CosmOS/Source" \
+    "$ROOT/Programs/CosmOS/Apps/Say.asm" -o "$WORK/Say.sbx" >/dev/null
+"$TOOL" put "$DISKS/cosmos.img" "$WORK/Say.sbx" >/dev/null
 printf 'this is not a program' > notes.txt
 "$TOOL" put "$DISKS/cosmos.img" notes.txt >/dev/null
 
@@ -94,3 +99,29 @@ printf 'this is not a program' > notes.txt
 "$TOOL" format "$DISKS/write.img" 32 1 >/dev/null
 printf 'already here' > here.txt
 "$TOOL" put "$DISKS/write.img" here.txt >/dev/null
+
+# A disk of its own for the editing test, which deletes and renames things and would
+# otherwise leave the writing test's disk looking nothing like the writing test expects.
+# It starts with one file on it so that a document written here has to be placed around
+# something, and so that the disk can be compared afterwards against one that never had
+# any of it: the metadata should come back exactly as it was.
+"$TOOL" format "$DISKS/edit.img" 32 1 >/dev/null
+"$TOOL" put "$DISKS/edit.img" here.txt >/dev/null
+
+# A disk for the shell's delete and rename, which is its own because those change what is
+# on it. A fixture whose name has a directory in it is used as it stands rather than being
+# made fresh per test, so a test that writes to a shared one would quietly change what
+# every test after it sees.
+"$TOOL" format "$DISKS/files.img" 32 1 >/dev/null
+printf 'the first one' > one.txt
+printf 'the second one' > two.txt
+"$TOOL" put "$DISKS/files.img" one.txt >/dev/null
+"$TOOL" put "$DISKS/files.img" two.txt >/dev/null
+
+# A disk for the editor, holding nothing but the editor. Its own, because the whole point
+# of it is that it writes: a document made on a shared fixture would turn up in the file
+# listing of every test that came after it.
+"$TOOL" format "$DISKS/editor.img" 256 2 >/dev/null
+"$ROOT/Assembler" -I "$ROOT/Programs/Libraries" -I "$ROOT/Programs/CosmOS/Source" \
+    "$ROOT/Programs/CosmOS/Apps/Edit.asm" -o "$WORK/Edit.sbx" >/dev/null
+"$TOOL" put "$DISKS/editor.img" "$WORK/Edit.sbx" >/dev/null

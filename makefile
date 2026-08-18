@@ -76,6 +76,8 @@ test: $(EMU_TARGET) $(ASM_TARGET) $(DSK_TARGET)
 	@echo
 	@./Tests/disk.sh
 	@echo
+	@./Tests/terminal.sh
+	@echo
 	@./Tests/docs.sh
 
 # Rebuild both tools with the address and undefined behaviour sanitizers and run
@@ -96,6 +98,8 @@ sanitize:
 	@$(MAKE) --no-print-directory CFLAGS="$(SANITIZE_FLAGS)"
 	@echo "Running the test suite under AddressSanitizer and UndefinedBehaviorSanitizer."
 	@./Tests/run.sh
+	@echo
+	@./Tests/terminal.sh
 	@$(MAKE) --no-print-directory clean
 	@$(MAKE) --no-print-directory
 	@echo "Sanitizer run finished cleanly. Normal binaries rebuilt."

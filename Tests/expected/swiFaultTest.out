@@ -1,4 +1,4 @@
 Fault: Software vector 20, dispatched from Program Address 0x0008, has no handler installed.
 O
-Execution halted after 5 cycles.
+Execution halted.
 [exit 1]

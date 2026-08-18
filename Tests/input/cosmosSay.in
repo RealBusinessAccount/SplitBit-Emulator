@@ -1,0 +1,5 @@
+load Say.sbx
+run
+run notes.txt
+run a longer thing with spaces
+exit

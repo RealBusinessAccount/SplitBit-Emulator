@@ -179,6 +179,23 @@ else:
             problems.append("%s is bit %d of the console status port and The Console does"
                             " not mention it" % (name, bit))
 
+# ---- Every service the system offers has a row ----
+#
+# services.asm is the one place the numbers are written, and both the system and every
+# program include it. A service added there and not here is one nothing can find out about
+# except by reading the source of the operating system.
+services = read("Programs/CosmOS/Source/services.asm")
+offered = re.findall(r'^\s{2}(os[A-Za-z]+)\s+0d\d+', services, re.M)
+if not offered:
+    problems.append("no services could be found in services.asm")
+elif "## What A Program May Ask The System For:" not in pm:
+    problems.append("the Programming Manual has lost its services section")
+else:
+    section = pm.split("## What A Program May Ask The System For:")[1].split("\n## ")[0]
+    for name in offered:
+        if ("| %s |" % name) not in section:
+            problems.append("%s is a service and has no row in the services table" % name)
+
 # ---- Every directive the assembler knows is written down ----
 for directive in sorted(set(re.findall(r'"(#[A-Za-z]+)"', util))):
     if directive not in am:
@@ -189,7 +206,7 @@ for directive in sorted(set(re.findall(r'"(#[A-Za-z]+)"', util))):
 # The first column of the table in each of these sections names something the library has
 # to define. A routine renamed in the source and not in the manual is caught here, which
 # is what keeps the tables a description rather than a memory.
-for heading, library in [("## Reading The Filesystem:", "Programs/CosmOS/Source/sbfs.asm"),
+for heading, library in [("## Reading And Writing The Filesystem:", "Programs/CosmOS/Source/sbfs.asm"),
                          ("## The Console Library:", "Programs/CosmOS/Source/console.asm")]:
     if heading not in pm:
         problems.append("the Programming Manual has lost its \"%s\" section"

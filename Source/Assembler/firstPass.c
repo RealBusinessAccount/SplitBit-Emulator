@@ -166,8 +166,18 @@ int loadFile(intermediateElement **intermediateArray, char *fileName, int *inter
         exit(1);
     }
     // Read off tokens.
-    while (readToken(&(*intermediateArray)[*intermediateIndex], file, &lineNumber)) {
-        if ((size_t)*intermediateIndex >= *arraySize - 1) {
+    //
+    // ROOM IS MADE BEFORE THE TOKEN IS READ, not after. readToken writes into the element
+    // at the current index, so a check that came afterwards was checking whether the write
+    // that had already happened was allowed to. It survived for a long time because the
+    // margin usually covered it, and stopped surviving when a file grew past a doubling:
+    // several paths below take a SECOND element for one token - an #Include takes one for
+    // the file name, #Align and #Reserve take one for the count - so the index can move by
+    // two in an iteration and step straight over a margin of one.
+    //
+    // The margin is two for that reason, which is the most any one iteration uses.
+    while (1) {
+        if ((size_t)*intermediateIndex + 2 >= *arraySize) {
             size_t grownSize = *arraySize * 2;  // Double the size of the array.
             // Into a temporary, so that the old allocation is still ours to free if
             // this fails, rather than being lost the moment realloc returns NULL.
@@ -184,7 +194,9 @@ int loadFile(intermediateElement **intermediateArray, char *fileName, int *inter
             *intermediateArray = grown;
             *arraySize = grownSize;
         }
-        //printf("Token number %d\n", intermediateIndex);
+        if (!readToken(&(*intermediateArray)[*intermediateIndex], file, &lineNumber)) {
+            break;
+        }
         // Go ahead and mark what we already know about this token.
         (*intermediateArray)[*intermediateIndex].fileName = fileName;
         (*intermediateArray)[*intermediateIndex].lineNumber = lineNumber;

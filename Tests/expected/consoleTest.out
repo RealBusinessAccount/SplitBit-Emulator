@@ -10,5 +10,5 @@ lines read:
 [SplitBit] 8
 [a line that is f] 16
 end of input
-Execution halted after 6064 cycles.
+Execution halted.
 [exit 0]

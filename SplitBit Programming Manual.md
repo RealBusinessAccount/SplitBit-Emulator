@@ -454,9 +454,9 @@ Status bit 1 says the last operation failed: there is no disk, or the block aske
 
 A disk error is not a fault. Faults on this machine mean it cannot continue, and a read that fails is an ordinary thing that happens to working programs on failing media. It is reported so that a program can cope with it, rather than stopping the machine and taking the choice away.
 
-## Reading The Filesystem:
+## Reading And Writing The Filesystem:
 
-The disk knows blocks and nothing else, so a filesystem is software. Programs/CosmOS/Source/sbfs.asm reads one.
+The disk knows blocks and nothing else, so a filesystem is software. Programs/CosmOS/Source/sbfs.asm is one.
 
 | Routine | Does |
 | --- | --- |
@@ -467,10 +467,34 @@ The disk knows blocks and nothing else, so a filesystem is software. Programs/Co
 | sbfsNext | Steps the walk to the next entry in use. Q is zero if there was one. |
 | sbfsCreate | Makes a file. DP0 names it, and SbfsFileBlocks with SbfsFileTail say how big it is. Q is zero if it was made, and then SbfsFileStart says where it went. |
 | sbfsWriteFile | Writes the file that was made, from Data Memory at DP1. |
+| sbfsDelete | DP0 names a file. Frees its entry and its blocks. Q is zero if it went. |
+| sbfsRename | DP0 is the name a file has, DP1 the name it should have. Q is zero if it was renamed. Refused if something already answers to the new name. |
+| sbfsSaveFile | DP0 names the file, DP1 is the data, and SbfsFileBlocks with SbfsFileTail say how big it now is. Writes it whether or not it was there before, and whatever size it used to be. |
 
 Finding a file and listing what is there are different jobs. sbfsFind searches for one name; sbfsFirst and sbfsNext walk the whole directory, stopping on each entry that is in use and stepping over the free ones. A walk keeps a directory block in SbfsBuffer between calls, so anything else that goes to the disk in the middle of one ends it: take what is wanted out of an entry before asking the disk for anything else.
 
 A file's size is settled when it is made, because nothing can grow one afterwards. Files are laid down contiguously, so the block after a file usually belongs to somebody else. A program that does not know how much it will write has to guess high and accept the slack, or build its output elsewhere and make the file once the size is known.
+
+### Saving Something Twice:
+
+Which is why saving a document is not the same as writing a file, and why sbfsSaveFile exists rather than each tool doing it. A file that has grown will usually not fit where it was, so saving it means putting it somewhere else and letting go of where it was — and **the obvious order is a trap**:
+
+```
+  delete the old one
+  make a new one          <- refused, and the old one is already gone
+  write it
+```
+
+A create can be refused for want of a run long enough even on a disk with plenty of free blocks, because free blocks are only useful to a contiguous file when they are next to each other. Done in that order, the first fragmented disk somebody meets eats their work. sbfsSaveFile does it the other way round:
+
+```
+  make a temporary        nothing is lost if there is nowhere to put it
+  write it
+  delete the original     only now, once the new one is safely down
+  rename the temporary
+```
+
+**That is what renaming is for.** It looks like a convenience and it is the safety mechanism: it is the only one of the three operations that moves no data — a name lives in the directory entry, so renaming writes twenty two bytes into one block — which makes it the only one that can be left until last and relied on not to fail.
 
 Finding room is a walk through the directory rather than a lookup, because there is no allocation table. With files laid down contiguously the directory already says which blocks are spoken for, and a second copy of that would be a second thing to keep right. The free count in the superblock is kept up to date but it is a note rather than the truth: it can be worked out again from the directory, and the directory is the one to believe.
 
@@ -518,6 +542,30 @@ There is no branch at the top. print.asm begins with a BRI to a label called sta
 Every routine names the Data Pointer it works through rather than assuming there is only one. A pointer handed in is DP0, and nothing in the library disturbs DP3.
 
 readLine cuts a line short if it is longer than the buffer, and then reads the rest of it and throws it away, so that what is left over does not turn up as the next line. ConsoleEndOfInput is set if the console ran out instead of ending a line, and it is cleared at the start of every call, so it always describes the last line read. That is a different thing from an empty line, and a program reading until there is no more has to be able to tell the two apart.
+
+## What A Program May Ask The System For:
+
+A loaded program is on its own hardware and can do anything the machine can do — it is a fence, not a wall. But the things it usually wants are things the system is already doing, and asking is both shorter and the only way to reach code that was assembled separately. `CALL` needs a label, and a label has to be in the same assembly; `SWI` needs only a number both sides agree on.
+
+Those numbers are written down once, in `Programs/CosmOS/Source/services.asm`, which both the system and the program include. Neither side ever types a number.
+
+| Service | Does |
+| --- | --- |
+| osPrintString | DP0 names a string ending in a zero byte. Prints it. |
+| osReadLine | DP0 names somewhere to put a line, B says how much room there is. Reads one from the console. |
+| osExit | Gives the machine back. Does not return. |
+| osArgument | DP0 names somewhere to put whatever followed the run command, B says how much room there is. |
+
+```
+#Include services.asm
+  ...
+  SETD.0 Message
+  SWI osPrintString
+```
+
+`osArgument` is how a program is told what it is for. Everything written before it did the same thing however it was started, which is fine for a program that greets you and no use to one that edits a named document. What arrives is the whole rest of the line, spaces and all, rather than a list of words: what counts as an argument is the program's business, and handing over what was typed is the system's.
+
+A handler is entered with the caller's registers exactly as they were, because an interrupt frame is pushed rather than cleared. That is why a service can be given a pointer in DP0 and a count in B without any of it being copied anywhere first.
 
 ## Loading A Program From A Disk:
 
@@ -570,6 +618,26 @@ hello:
 That is not general placement: a base applies to a whole segment, and only the first thing in one can set it. It is exactly enough for a program that wants to live at one address, which is what a loadable program is. See the Assembler Manual.
 
 Whoever does the loading keeps its own code and data below the addresses the loaded program claims. That is an arrangement between the two of them rather than anything the machine enforces. Programs/CosmOS is where that arrangement is written down as a memory map and kept to.
+
+## Programs That Come With The System:
+
+`Programs/CosmOS/Apps` holds what the shell can load. Most of them are old programs that were written for the bare machine and needed five edits to become loadable ones; the last three were written for the system as it is now.
+
+| Program | What it is for |
+| --- | --- |
+| Life | Conway's Game of Life, which had to be taught to stop, since a program that never ends takes the shell with it. Polls the console between generations. |
+| Snake | A game. Draws a whole screen with cursor addressing and steers with single keys, asking the console once a frame and never waiting. |
+| Keys | The console interrupting rather than being asked. The only one that brings a vector of its own, which is what the version two format exists for. |
+| Say | Prints whatever it was told, which is the shortest thing that shows osArgument working. |
+| Edit | A line editor. |
+
+### The Editor:
+
+`Edit` is the first program on this machine that makes a file a person typed — every byte on every disk before it was put there by the host tool. It is line oriented in the manner of `ed`: `l` lists, `a` adds at the end, `i` and `c` and `d` take a line number, `w` writes and `q` stops.
+
+It keeps the document as a **linked list of lines** rather than one buffer with newlines in it. Each line says where the next one is, how long it is, and then its bytes. Inserting is two pointers changed and nothing moved; with a flat buffer it would mean shifting every byte after the edit, on a machine whose only block move is a device asked politely. The price is that deleted lines are not reused, so a heavy session uses more room than the document needs and writing it out is what tidies up.
+
+Saving goes through `sbfsSaveFile`, so a document that has grown is written somewhere else and the original is only let go of once the new one is safely down. That is the whole reason the editor was written: not because the machine needed an editor, but because every tool that produces a file needs the same four operations, and building them for one imaginary tool is how they end up wrong.
 
 ## Refusing:
 

@@ -1,0 +1,8 @@
+here.txt   0002 already here
+doc.txt    0003 first draft
+doc.txt    0004 a second draft, which is longer than the first
+notes.txt  0004 a second draft, which is longer than the first
+doc.txt    gone
+notes.txt  gone
+Execution halted.
+[exit 0]

@@ -76,7 +76,7 @@ cosmos: $(COSMOS) $(APPS)
 $(COSMOS_DISK): $(APPS)
 	@mkdir -p $(@D)
 	rm -f $@
-	$(DISKTOOL) format $@ 64 2
+	$(DISKTOOL) format $@ 256 2
 	@for app in $(APPS); do $(DISKTOOL) put $@ $$app; done
 
 cosmos-disk: $(COSMOS_DISK)
