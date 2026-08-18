@@ -50,7 +50,7 @@ The top kilobyte of Program Memory is reserved for vectors. Each entry is two by
 | 0xFC00 | Software vectors 0 to 255 |
 | 0xFE00 | Hardware vectors 0 to 255, one for each I/O port |
 
-Program text may not run past 0xFBFF. The assembler refuses to assemble a program that would.
+The Program Segment may not run past 0xFBFF. The assembler refuses to assemble a program that would.
 
 The software vectors are given out like this:
 

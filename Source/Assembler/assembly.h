@@ -42,7 +42,7 @@
 //
 // The top kilobyte of Program Memory is reserved for vectors. Both tools have to
 // agree on where it begins: the CPU starts execution through it, and the assembler
-// has to refuse program text that would run into it.
+// has to refuse a Program Segment that would run into it.
 //
 // Entries are two bytes each, most significant byte first, the same order the branch
 // instructions and this file format already use.
@@ -88,9 +88,14 @@
 #define VECTOR_FIRST_PINNED  16
 #define VECTOR_FIRST_AUTO    64
 
-// The first address the vector table occupies, and so the first address that program
-// text may not use.
-#define PROGRAM_TEXT_LIMIT SOFTWARE_VECTOR_BASE
+// The first address the vector table occupies, and so the first address the Program
+// Segment may not reach.
+//
+// The Segment rather than the code: instructions are most of what goes there, but not all
+// of it. Literal bytes go there, a label named in the Program Segment puts its two byte
+// address there, and #Align and #Reserve put runs of zeroes there. What the limit measures
+// is how far all of that together has pushed the cursor.
+#define PROGRAM_SEGMENT_LIMIT SOFTWARE_VECTOR_BASE
 
 #define SPLITBIT_MAGIC "SPBT"
 #define SPLITBIT_MAGIC_LENGTH 4

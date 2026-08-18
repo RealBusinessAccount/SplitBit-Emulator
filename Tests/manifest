@@ -277,6 +277,10 @@ diagDuplicateVector  | testPrograms/diagnostics/duplicateVector.asm | xfail | - 
 # The two mistakes that pinning a number makes possible. Numbers the assembler hands out
 # cannot collide; numbers a person writes down can, and can also be written outside the
 # range set aside for them.
+# A string in the Program Segment, which used to assemble to nothing at all and say so to
+# nobody. Strings only have a case for the Data buffer, so one aimed anywhere else fell
+# through and vanished.
+diagStringInProgram  | testPrograms/diagnostics/stringInProgram.asm | xfail | -      | -
 diagPinnedRange      | testPrograms/diagnostics/pinnedVectorRange.asm | xfail | -    | -
 diagPinnedTaken      | testPrograms/diagnostics/pinnedVectorTaken.asm | xfail | -    | -
 diagBareSWI          | testPrograms/diagnostics/bareSWI.asm        | xfail | -       | -

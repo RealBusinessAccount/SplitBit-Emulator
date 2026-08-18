@@ -330,9 +330,29 @@ int loadFile(intermediateElement **intermediateArray, char *fileName, int *inter
                 printf(" File: %s at line %d.\n", fileName, lineNumber);
                 exit(1);
             }
+        // A string, which only the Data Segment can hold. Nothing below this line looks at
+        // strings, so without this they would fall past every check and out the bottom,
+        // and a string written anywhere else would assemble to nothing at all and say so
+        // to nobody.
+        } else if ((*intermediateArray)[*intermediateIndex].type == STRING) {
+            if (status == PROGRAM) {
+                fprintf(stderr, RED "Error: A string cannot go in the Program Segment.\n"
+                                    " Strings live in Data Memory, which is the only memory an instruction\n"
+                                    " can read. A string in Program Memory could not be reached even by the\n"
+                                    " program holding it, except through the memory controller.\n" RESET);
+                printf(" File: %s at line %d.\n", fileName, lineNumber);
+                printf(" The string: \"%s\"\n", (*intermediateArray)[*intermediateIndex].token);
+                printf(" Move it below a #Data line.\n");
+                exit(1);
+            }
+            if (status != DATA) {
+                fprintf(stderr, RED "Error: Attempting to write a string to nowhere!\n Did you forget to use the #Data keyword?\n" RESET);
+                printf(" File: %s at line %d.\n", fileName, lineNumber);
+                printf(" The string: \"%s\"\n", (*intermediateArray)[*intermediateIndex].token);
+                exit(1);
+            }
         // Finally, check if it's a label or label definition.
-        // First, make sure it hasn't already been marked as a string literal.
-        } else if ((*intermediateArray)[*intermediateIndex].type != STRING) {
+        } else {
             if (checkIfLabel(&(*intermediateArray)[*intermediateIndex])) {
                 if (status == NOWHERE) {
                     fprintf(stderr, RED "Error: Attempting to create or use a label nowhere!\n Did you forget to use the #Program or #Data keyword?\n" RESET);

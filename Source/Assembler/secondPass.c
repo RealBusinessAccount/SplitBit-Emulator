@@ -96,10 +96,10 @@ void populateLabelTable(intermediateElement *intermediateArray, int arraySize) {
         if (debugSecondPass) printf("Token: %s with byte length %d to destination %d of type %d\n", intermediateArray[i].token ,intermediateArray[i].byteLength, intermediateArray[i].destination, intermediateArray[i].type);
 
     }
-        if (programCount > PROGRAM_TEXT_LIMIT ) {
+        if (programCount > PROGRAM_SEGMENT_LIMIT ) {
             fprintf(stderr, RED "Error: Program is too long to fit in Program Memory.\n"
-                                " Program text may not run past 0x%04X, where the vector table begins.\n" RESET,
-                                PROGRAM_TEXT_LIMIT - 1);
+                                " The Program Segment may not run past 0x%04X, where the vector table begins.\n" RESET,
+                                PROGRAM_SEGMENT_LIMIT - 1);
             exit(1);
         }
         if (dataCount > 0xFFFF ) {
