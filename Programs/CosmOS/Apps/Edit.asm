@@ -75,33 +75,39 @@ start:
   RSTA
   STA.0
 
-  CALL sbfsMount
-  BNQ noDisk
-
   CALL loadFile
 
   SETD.0 FileName
-  CALL printString
+  SWI osPrintString
   SETD.0 CommaText
-  CALL printString
+  SWI osPrintString
   CALL countLines
   MVQA
-  CALL printByteDecimal
+  CALL printByte
+  ; One line is not one lines. The same care the shell's file listing takes, for the same
+  ; reason: it costs four instructions and reads as carelessness without them.
+  DECA
+  BRA oneLine
   SETD.0 LinesText
-  CALL printString
+  BRI sayLines
+oneLine:
+  SETD.0 LineText
+sayLines:
+  SWI osPrintString
   CALL newLine
 
 commandLoop:
   SETD.0 PromptText
-  CALL printString
+  SWI osPrintString
   SETD.0 Command
   INIB 0d40
-  CALL readLine
+  SWI osReadLine
 
   ; Running out of typing ends it, the same way it ends the shell.
-  SETD.0 ConsoleEndOfInput
-  LDA.0
-  BNA quit
+  INA 0x01
+  INIB 0x02                 ; ENDED
+  AND
+  BNQ quit
 
   SETD.0 Command
   LDA.0
@@ -150,7 +156,7 @@ commandArgument:
   BRQ quit
 
   SETD.0 WhatText
-  CALL printString
+  SWI osPrintString
   CALL newLine
   BRI commandLoop
 
@@ -159,15 +165,10 @@ quit:
 
 noName:
   SETD.0 NoNameText
-  CALL printString
+  SWI osPrintString
   CALL newLine
   SWI osExit
 
-noDisk:
-  SETD.0 NoDiskText
-  CALL printString
-  CALL newLine
-  SWI osExit
 
 ; ---- The commands ----
 
@@ -189,13 +190,14 @@ doInsert:
   BRA insertNeedsLine
 insertLoop:
   SETD.0 EnteringText
-  CALL printString
+  SWI osPrintString
   SETD.0 Entry
   INIB 0d80
-  CALL readLine
-  SETD.0 ConsoleEndOfInput
-  LDA.0
-  BNA commandLoop
+  SWI osReadLine
+  INA 0x01
+  INIB 0x02                 ; ENDED
+  AND
+  BNQ commandLoop
 
   ; A line that is just a dot ends it, which is the oldest convention there is for this.
   SETD.0 Entry
@@ -216,7 +218,7 @@ insertLoop:
 
 insertNeedsLine:
   SETD.0 NeedsLineText
-  CALL printString
+  SWI osPrintString
   CALL newLine
   BRI commandLoop
 
@@ -228,13 +230,14 @@ doChange:
   BNQ noSuchLine
 
   SETD.0 EnteringText
-  CALL printString
+  SWI osPrintString
   SETD.0 Entry
   INIB 0d80
-  CALL readLine
-  SETD.0 ConsoleEndOfInput
-  LDA.0
-  BNA commandLoop
+  SWI osReadLine
+  INA 0x01
+  INIB 0x02                 ; ENDED
+  AND
+  BNQ commandLoop
 
   SETD.0 Entry
   CALL makeNode
@@ -257,7 +260,7 @@ doDelete:
 
 noSuchLine:
   SETD.0 NoLineText
-  CALL printString
+  SWI osPrintString
   CALL newLine
   BRI commandLoop
 
@@ -265,17 +268,17 @@ doWrite:
   CALL writeFile
   BNQ writeFailed
   SETD.0 WrittenText
-  CALL printString
+  SWI osPrintString
   SETD.0 WroteSize
-  CALL printWordDecimal
+  CALL printWord
   SETD.0 BytesText
-  CALL printString
+  SWI osPrintString
   CALL newLine
   BRI commandLoop
 
 writeFailed:
   SETD.0 NoWriteText
-  CALL printString
+  SWI osPrintString
   CALL newLine
   BRI commandLoop
 
@@ -513,9 +516,9 @@ listStep:
 
   SETD.0 Counted
   LDA.0
-  CALL printByteDecimal
+  CALL printByte
   SETD.0 ColonText
-  CALL printString
+  SWI osPrintString
 
   PSHD.3
   POPD.1
@@ -558,23 +561,19 @@ listDone:
 ; document rather than a mistake, which is what makes this the way to start one.
 loadFile:
   SETD.0 FileName
-  CALL sbfsFind
-  BNQ loadNothing
-
   SETD.1 0x40 0x00
-  CALL sbfsRead
+  SWI osFileRead
   BNQ loadNothing
 
-  ; How many bytes came back: the block count is the high byte of the length and the tail
-  ; is the low one, which is how a size is put together everywhere on this disk.
-  SETD.0 SbfsFileBlocks
-  DPUP.0 0d01
-  LDA.0
+  ; How many bytes came back. The service says so in DP3, which is one of the two things a
+  ; service is allowed to answer in, and a file that fits in memory has a length that fits
+  ; in a pointer. A name that is not on the disk fails here, and that is a new document
+  ; rather than a mistake.
+  PSHD.3
+  POPA                      ; The low byte is on top, the way a pointer is pushed.
+  POPB
   SETD.1 ReadLeft
-  STA.1
-  SETD.0 SbfsFileTail
-  LDA.0
-  SETD.1 ReadLeft
+  STB.1
   INCD.1
   STA.1
 
@@ -715,24 +714,9 @@ writeOut:
   ; whole blocks and the low byte is the tail.
   SETD.2 WroteSize
   STD.1.2
-  SETD.0 WroteSize
-  LDA.0
-  INIB 0x40
-  CCF
-  SUB
-  MVQA
-  SETD.0 SbfsFileBlocks
-  RSTB
-  STB.0
-  INCD.0
-  STA.0
-  SETD.0 WroteSize
-  INCD.0
-  LDA.0
-  SETD.0 SbfsFileTail
-  STA.0
 
-  ; The size the file is about to be, said in bytes, before saving changes what these mean.
+  ; Turn where it stopped into how big it is, which is one subtraction: the high byte less
+  ; 0x40 and the low byte as it stands.
   SETD.0 WroteSize
   LDA.0
   INIB 0x40
@@ -740,11 +724,44 @@ writeOut:
   SUB
   MVQA
   SETD.0 WroteSize
-  STA.0
+  STA.0                     ; WroteSize is now a count of bytes, which is what gets printed.
+
+  ; And into the two registers the service takes a size in.
+  SETD.0 WroteSize
+  LDA.0
+  INCD.0
+  LDB.0
 
   SETD.0 FileName
   SETD.1 0x40 0x00
-  CALL sbfsSaveFile
+  SWI osFileSave
+  RET
+
+; ---- All that is left of a console library ----
+;
+; Printing a string and reading a line are services now. These three are only here because
+; what a service takes is not quite what the call sites have: a number arrives in two
+; registers rather than one or in memory, and a line feed is a string like any other.
+
+newLine:
+  SETD.0 Break
+  SWI osPrintString
+  RET
+
+; A is a byte.
+printByte:
+  PSHA
+  POPB
+  RSTA
+  SWI osPrintNumber
+  RET
+
+; DP0 is a two byte number, most significant first.
+printWord:
+  LDA.0
+  INCD.0
+  LDB.0
+  SWI osPrintNumber
   RET
 
 ; DP0 is a two byte number, A is a byte. Adds the one to the other.
@@ -765,6 +782,8 @@ addByteToWord:
 
   #Base 0x1000
 
+Break:
+  0x0A 0x00
 PromptText:
 "> "
 EnteringText:
@@ -775,6 +794,8 @@ CommaText:
 ", "
 LinesText:
 " lines"
+LineText:
+" line"
 WrittenText:
 "written, "
 BytesText:
@@ -785,8 +806,6 @@ WhatText:
 "l list, a add, i insert, c change, d delete, w write, q quit"
 NoNameText:
 "edit what? try: run edit <file>"
-NoDiskText:
-"there is no disk"
 NoLineText:
 "there is no such line"
 NeedsLineText:
@@ -824,6 +843,4 @@ ReadLeft:
 WroteSize:
   0x00 0x00
 
-#Include sbfs.asm
 #Include text.asm
-#Include console.asm
