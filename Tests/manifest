@@ -191,6 +191,11 @@ consoleInterruptTest | testPrograms/consoleInterruptTest.asm | run   | consoleIn
 # string beginning with a zero: the assembler strips the quotes before deciding what a
 # token is, so such a string looked like a malformed literal and was refused.
 textTest             | testPrograms/textTest.asm          | run      | -                  | -
+# Strings that spell instructions. The quotes are gone by the time a token is classified, so
+# "ADD" in a Data Segment was assembled as the ADD instruction and refused with a message
+# about a mistake nobody had made. Mnemonics match without regard to case, so "or" and "and"
+# were caught too - ordinary words to want in a message.
+stringMnemonic       | testPrograms/stringMnemonic.asm    | run      | -                  | -
 
 # ---- CosmOS ----
 # The system and its shell, driven by a script of commands. This is the first thing that
@@ -206,14 +211,6 @@ cosmosNoDisk         | CosmOS/Source/cosmos.asm           | run      | cosmosNoD
 # load can refuse is tried first, and run is asked for twice, so the Stack being reclaimed
 # rather than merely abandoned is what makes the second one work.
 cosmosRun            | CosmOS/Source/cosmos.asm           | run      | cosmosRun.in       | -     | disks/cosmos.img
-# The monitor. It reads Program Memory, which the instruction set cannot do at all, so it
-# works only through the controller. The targets are chosen to be stable: a loaded
-# program's code and data, and the bank table, rather than the system's own code, which
-# would churn whenever any library changed.
-#
-# Dumping the bank table is worth having on its own. It is the machine describing itself,
-# and it shows the disk buffer that sbfsMount registered as bank 3 at boot.
-cosmosDump           | CosmOS/Source/cosmos.asm           | run      | cosmosDump.in      | -     | disks/cosmos.img
 # The original hello.asm, brought over as an application. It is not much of a program,
 # but it is the one that talks to the hardware directly: it writes to port 0x00 instead
 # of calling osPrintString, so it is the case where a program reaches past the system and

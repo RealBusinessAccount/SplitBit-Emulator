@@ -323,8 +323,14 @@ int loadFile(intermediateElement **intermediateArray, char *fileName, int *inter
                     status = VECTORS;
                 break;
             }
-        // Next, check to see if it's an instruction.
-        } else if (checkIfInstruction(&(*intermediateArray)[*intermediateIndex])) {
+        // Next, check to see if it's an instruction. A string is never one, however it is
+        // spelled: the quotes are gone by the time anything looks at a token, so a string
+        // whose text happens to be a mnemonic looked exactly like that instruction and was
+        // assembled as one. Mnemonics are matched without regard to case, so this was not
+        // only a problem for a program with "ADD" in its data - "or" and "and" are ordinary
+        // enough words to find in a message.
+        } else if ((*intermediateArray)[*intermediateIndex].type != STRING
+                   && checkIfInstruction(&(*intermediateArray)[*intermediateIndex])) {
             // We should check if we're set up to mark this for the Program Segment.
             if (status != PROGRAM) {
                 fprintf(stderr, RED "Error: Attempting to assemble outside the Program Segment.\n Did you forget to use the #Program keyword?\n" RESET);
