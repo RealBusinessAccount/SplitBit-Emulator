@@ -1,9 +1,15 @@
-Tests/build/
-Programs/build/
-Object/
-Assembler
-SplitBit
-SplitDisk
-CLAUDE.md
-claudeResume.sh
-codexResume.sh
+# Anchored to the repository root, all of them. Without the leading slash a pattern
+# matches at any depth, so "Assembler" also ignored the Source/Assembler DIRECTORY - and a
+# new source file added there would have been silently untracked.
+/Tests/build/
+/Programs/build/
+/Object/
+/Assembler
+/SplitBit
+/SplitDisk
+/CLAUDE.md
+/claudeResume.sh
+/codexResume.sh
+
+# Python leaves these beside the test scripts.
+__pycache__/
