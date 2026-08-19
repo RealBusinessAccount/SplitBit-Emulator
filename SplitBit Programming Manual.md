@@ -555,6 +555,11 @@ Those numbers are written down once, in `Programs/CosmOS/Source/services.asm`, w
 | osReadLine | DP0 names somewhere to put a line, B says how much room there is. Reads one from the console. Q comes back holding how long it was. |
 | osExit | Gives the machine back. Does not return. |
 | osArgument | DP0 names somewhere to put whatever followed the run command, B says how much room there is. |
+| osFileRead | DP0 names a file, DP1 says where to put it. Q is zero if it read, and DP3 comes back holding how many bytes there were. |
+| osFileSave | DP0 names a file, DP1 is the bytes, A and B together are how many. Q is zero if it saved, whether or not it was there before. |
+| osFileDelete | DP0 names a file. Q is zero if it went. |
+| osFileRename | DP0 is the name a file has, DP1 the name it should have. Q is zero if it moved. |
+| osPrintNumber | A and B together are a number. Prints it in decimal, without leading zeroes. |
 
 ```
 #Include services.asm
@@ -562,6 +567,18 @@ Those numbers are written down once, in `Programs/CosmOS/Source/services.asm`, w
   SETD.0 Message
   SWI osPrintString
 ```
+
+### The Disk Without A Filesystem:
+
+A program that wants a file does not need to know what a filesystem is. Before these existed it had to include the whole of `sbfs.asm` — two and a half kilobytes of a private copy of code the system already had running — and then mount a disk that was already mounted.
+
+There is no service to mount one, and that is not an omission. The system mounts the disk before it reads its first prompt, and there is one disk with one buffer registered as one bank; a program mounting it again was only ever an artefact of owning a second copy of the library. That call disappears rather than moving.
+
+Sizes fit the registers exactly, in both directions. A file that can be read into Data Memory is under 64K by definition, so its length is sixteen bits: coming back it is DP3, and going out it is A and B together. Neither direction needs a record in memory whose shape both sides have to agree on.
+
+A file of 256 blocks or more is refused by `osFileRead` rather than partly read, because 64K will not fit in Data Memory and its length will not fit in the pointer that reports it. A length that lies would be worse than a file that will not open.
+
+`Programs/CosmOS/Apps/Files.asm` does the whole round trip — write, read, report, rename, delete — in 645 bytes, and includes nothing but the service names.
 
 `osArgument` is how a program is told what it is for. Everything written before it did the same thing however it was started, which is fine for a program that greets you and no use to one that edits a named document. What arrives is the whole rest of the line, spaces and all, rather than a list of words: what counts as an argument is the program's business, and handing over what was typed is the system's.
 
@@ -642,7 +659,7 @@ Whoever does the loading keeps its own code and data below the addresses the loa
 
 ## Programs That Come With The System:
 
-`Programs/CosmOS/Apps` holds what the shell can load. Most of them are old programs that were written for the bare machine and needed five edits to become loadable ones; the last three were written for the system as it is now.
+`Programs/CosmOS/Apps` holds what the shell can load. Several are old programs written for the bare machine that needed five edits each to become loadable ones — the Fibonacci and sieve programs, `greet`, and `hello`. The rest were written for the system as it is now, and each of those exists to show one thing working:
 
 | Program | What it is for |
 | --- | --- |
@@ -650,11 +667,78 @@ Whoever does the loading keeps its own code and data below the addresses the loa
 | Snake | A game. Draws a whole screen with cursor addressing and steers with single keys, asking the console once a frame and never waiting. |
 | Keys | The console interrupting rather than being asked. The only one that brings a vector of its own, which is what the version two format exists for. |
 | Say | Prints whatever it was told, which is the shortest thing that shows osArgument working. |
+| Files | Writes a file, reads it back, renames it and deletes it, in 645 bytes, including nothing but the service names. It is what says a program does not need a filesystem inside it. |
 | Edit | A line editor. |
+
+### The Monitor:
+
+The monitor is **part of the shell**, not a program the shell loads, and that is the whole reason it works. A loaded program occupies the one place a loaded program goes, so a monitor that was an application could never look at any other application: loading the thing you wanted to inspect would replace the thing doing the inspecting.
+
+`monitor` turns it on and the prompt changes from `>` to `*`. It is **a mode, not a detour** — the shell's own commands still work, and the mode persists until you say otherwise:
+
+```
+> load Snake.sbx
+> monitor
+* d 2000
+2000  47 00 11 00  SETD.0 1100
+* b data
+bank 01
+* x 1000
+* exit
+> 
+```
+
+**A program giving the machine back lands at the prompt it was started from**, so `g` into something, letting it run, and having it exit puts you back at `*` rather than at the shell. That falls out of the mode being a variable the prompt reads rather than a second loop: every way back to the prompt goes through one place, including `osExit`. Looking at a program and running it therefore do not interrupt each other, which is the thing a monitor is for.
+
+`exit` leaves whatever you are in — the monitor if you are in it, the machine if you are not.
+
+| | |
+| --- | --- |
+| `x [addr]` | Sixty-four bytes, as hex and as characters |
+| `d [addr]` | Eight instructions, disassembled |
+| `s addr b b …` | Put those bytes there |
+| `b program\|data\|n` | Which bank to look at |
+| `g addr` | Go there |
+
+`x` and `d` share one cursor and each leaves it past what it showed, so without an address either carries on — reading through memory is one letter at a time, and you can switch between bytes and instructions without retyping where you are. `s` deliberately does not move it.
+
+Everything else here does something; the monitor looks at what the others did. It shows memory as hex and as characters, disassembles it, writes bytes into it, and jumps to an address — all through the memory controller, which is the only thing that can reach Program Memory.
+
+That is why a monitor is worth more on this machine than on most. Data Memory a program can already read for itself with a Data Pointer. The half it cannot see is Program Memory, and that is the half its bugs are in.
+
+**Its instruction table is generated from the assembler's**, by `Tests/instructiontable.py`, and checked against it by `Tests/docs.sh` — along with a second check that the lengths that table implies are the ones the manual's own Bytes column prints. Both matter for the same reason: a disassembler that disagreed about how long an instruction is would not print one line wrong, it would lose its place and print everything after it wrong. Which is what a disassembler does anyway when it starts in the middle of an instruction, and is worth seeing once so it is recognised later.
+
+**Where to put something you typed in yourself** is a question the monitor answers, because the answer moves every time the monitor is rebuilt. `m` says where its own two segments end, and those are the first free addresses:
+
+```
+> m
+code from 2000, free from 2607
+data from 1000, free from 1367 up to the stack
+```
+
+Which is what makes the monitor's real trick possible — a program that no assembler ever saw:
+
+```
+> s 8000 26 48 D1 00 26 49 D1 00 26 0A D1 00 18 12
+> d 8000
+8000  26 48        INIA 48
+8002  D1 00        OUTA 00
+8004  26 49        INIA 49
+...
+800C  18 12        SWI 12
+> g 8000
+HI
+```
+
+Typed in as bytes, checked by disassembling it back, and run. It ends with `SWI osExit`, which is how it gives the machine to the shell rather than to nothing.
+
+There are no breakpoints yet, and `g` does not come back. The machinery for both already exists and nothing has used it: SplitBit has 192 undecodable bytes, and an invalid opcode dispatches through the `BadOpcode` vector carrying **the address of the offending byte**. A breakpoint is a spare byte written over an instruction and a handler waiting for it.
 
 ### The Editor:
 
 `Edit` is the first program on this machine that makes a file a person typed — every byte on every disk before it was put there by the host tool. It is line oriented in the manner of `ed`: `l` lists, `a` adds at the end, `i` and `c` and `d` take a line number, `w` writes and `q` stops.
+
+It includes nothing but `services.asm` and `text.asm`: the filesystem and the console are the system's, asked for rather than carried. That is what took it from 4,941 bytes to 1,983 without a line of its own logic changing — and the way that was checked is worth knowing, because the recorded output of the `cosmosEdit` test did not move by a single byte across the rewrite.
 
 It keeps the document as a **linked list of lines** rather than one buffer with newlines in it. Each line says where the next one is, how long it is, and then its bytes. Inserting is two pointers changed and nothing moved; with a flat buffer it would mean shifting every byte after the edit, on a machine whose only block move is a device asked politely. The price is that deleted lines are not reused, so a heavy session uses more room than the document needs and writing it out is what tidies up.
 

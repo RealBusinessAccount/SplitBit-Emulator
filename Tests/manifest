@@ -211,6 +211,17 @@ cosmosNoDisk         | CosmOS/Source/cosmos.asm           | run      | cosmosNoD
 # load can refuse is tried first, and run is asked for twice, so the Stack being reclaimed
 # rather than merely abandoned is what makes the second one work.
 cosmosRun            | CosmOS/Source/cosmos.asm           | run      | cosmosRun.in       | -     | disks/cosmos.img
+# The monitor, which is part of the shell rather than a program: a mode you go into and stay
+# in. The targets are chosen to be stable - a loaded program's code and data, and the bank
+# table - rather than the system's own code, which would churn whenever any library changed.
+#
+# Looking at the bank table is worth having on its own. It is the machine describing itself,
+# and it shows the disk buffer that sbfsMount registered as bank 3 at boot.
+#
+# The last part is what the mode is FOR: a program typed in as bytes, run with g, and the
+# prompt that comes back is the monitor's own. A program giving the machine back lands where
+# it was started from, so looking at something and running it do not interrupt each other.
+cosmosMonitor        | CosmOS/Source/cosmos.asm           | run      | cosmosMonitor.in   | -     | disks/cosmos.img
 # The original hello.asm, brought over as an application. It is not much of a program,
 # but it is the one that talks to the hardware directly: it writes to port 0x00 instead
 # of calling osPrintString, so it is the case where a program reaches past the system and
@@ -266,6 +277,12 @@ cosmosSay            | CosmOS/Source/cosmos.asm           | run      | cosmosSay
 # split a file into lines, edit them, build a file back out of them, and save it over
 # something that was already there and is now a different size.
 cosmosEdit           | CosmOS/Source/cosmos.asm           | run      | cosmosEdit.in      | -     | disks/editor.img
+# The file services, exercised by a program that includes NOTHING but the service names: no
+# filesystem library, no console library. It writes a file, reads it back, says how long it
+# was, renames it and deletes it, in 645 bytes - against the editor's 4941, which does less
+# with files and carries the filesystem inside it. That difference is the whole case for the
+# service layer, and this is where it is checked rather than argued.
+cosmosServices       | CosmOS/Source/cosmos.asm           | run      | cosmosFiles2.in    | -     | disks/services.img
 # The programs CosmOS loads, checked on their own so that a failure here reads as "the app
 # does not assemble" rather than as a broken disk image.
 app-greet            | CosmOS/Apps/greet.asm              | assemble | -                  | -
@@ -275,6 +292,7 @@ app-Snake            | CosmOS/Apps/Snake.asm              | assemble | -        
 app-Keys             | CosmOS/Apps/Keys.asm               | assemble | -                  | -
 app-Say              | CosmOS/Apps/Say.asm                | assemble | -                  | -
 app-Edit             | CosmOS/Apps/Edit.asm               | assemble | -                  | -
+app-Files            | CosmOS/Apps/Files.asm              | assemble | -                  | -
 
 # ---- Programs driven by console input ----
 inputTest            | inputTest.asm                      | run      | inputTest.in       | -

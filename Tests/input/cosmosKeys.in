@@ -3,5 +3,8 @@ run
 abq
 run
 cdq
-dump program fe00
+monitor
+b program
+x fe00
+exit
 exit

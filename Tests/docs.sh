@@ -184,17 +184,98 @@ else:
 # services.asm is the one place the numbers are written, and both the system and every
 # program include it. A service added there and not here is one nothing can find out about
 # except by reading the source of the operating system.
+# DECLARING A SERVICE AND IMPLEMENTING ONE ARE DIFFERENT THINGS, and the manual should
+# describe the second. services.asm names them and fixes their numbers, which is what lets a
+# number be pinned before anything answers to it; cosmos.asm is where a name gets a handler.
+# A row for a service nothing implements would be describing a call that faults, and a
+# missing row for one that works is a service nobody can find out about.
 services = read("Programs/CosmOS/Source/services.asm")
-offered = re.findall(r'^\s{2}(os[A-Za-z]+)\s+0d\d+', services, re.M)
-if not offered:
+named = set(re.findall(r'^\s{2}(os[A-Za-z]+)\s+0d\d+', services, re.M))
+system = read("Programs/CosmOS/Source/cosmos.asm")
+vectors = system.split("#Vectors")[-1] if "#Vectors" in system else ""
+implemented = {name for name in re.findall(r'^\s{2}(os[A-Za-z]+)\s+[a-zA-Z]', vectors, re.M)
+               if name in named}
+if not named:
     problems.append("no services could be found in services.asm")
 elif "## What A Program May Ask The System For:" not in pm:
     problems.append("the Programming Manual has lost its services section")
 else:
     section = pm.split("## What A Program May Ask The System For:")[1].split("\n## ")[0]
-    for name in offered:
-        if ("| %s |" % name) not in section:
-            problems.append("%s is a service and has no row in the services table" % name)
+    documented = set(re.findall(r'^\| (os[A-Za-z]+) \|', section, re.M))
+    for name in sorted(implemented - documented):
+        problems.append("%s is a service the system implements and has no row in the"
+                        " services table" % name)
+    for name in sorted(documented - implemented):
+        problems.append("the services table describes %s, which nothing implements: calling"
+                        " it would dispatch through an empty vector and fault" % name)
+
+# ---- Every program the manual describes is really there ----
+#
+# The table names what the shell can load. A program renamed or removed leaves a row
+# describing something nobody can run, which is the same kind of quiet wrongness as a
+# routine that no longer exists. The other direction is deliberately not checked: the ported
+# programs are covered in the prose rather than given a row each.
+import os
+if "## Programs That Come With The System:" not in pm:
+    problems.append("the Programming Manual has lost its list of programs")
+else:
+    listed = pm.split("## Programs That Come With The System:")[1].split("\n### ")[0]
+    # After the separator, so the table's own heading row is not mistaken for a program.
+    listed = listed.split("| --- |")[-1]
+    for name in re.findall(r'^\| ([A-Z][A-Za-z0-9-]*) \|', listed, re.M):
+        if not os.path.exists("Programs/CosmOS/Apps/%s.asm" % name):
+            problems.append("the manual describes a program called %s, and there is no"
+                            " Programs/CosmOS/Apps/%s.asm" % (name, name))
+
+# ---- The monitor's instruction table is the assembler's ----
+#
+# The monitor disassembles, so it needs the same 64 instructions with the same names and the
+# same lengths. A disassembler that disagreed about a length would not print one line wrong,
+# it would lose its place and print everything after it wrong, which is the worst way for a
+# tool like that to fail: confidently. So the table is generated from assembly.c by
+# Tests/instructiontable.py, and what is in the monitor is checked against it here.
+import subprocess
+generated = subprocess.run([sys.executable, "Tests/instructiontable.py"],
+                           capture_output=True, text=True)
+if generated.returncode != 0:
+    problems.append("the instruction table generator would not run")
+else:
+    wanted = [line.rstrip() for line in generated.stdout.splitlines() if line.strip()]
+    monitor = read("Programs/CosmOS/Source/cosmos.asm")
+    if "\nInstructions:\n" not in monitor:
+        problems.append("the system has lost its instruction table")
+    else:
+        block = monitor.split("\nInstructions:\n")[1]
+        have = []
+        for line in block.splitlines():
+            if not line.strip() or not line.startswith("  0x"):
+                break
+            have.append(line.rstrip())
+        if have != wanted:
+            problems.append("the system's instruction table is not what the assembler's"
+                            " instruction set generates: %d entries against %d, first"
+                            " difference at %s"
+                            % (len(have), len(wanted),
+                               next((a or b for a, b in zip(have + [None] * len(wanted),
+                                                            wanted + [None] * len(have))
+                                     if a != b), "the end")))
+
+# ---- And the lengths that table implies are the ones the manual prints ----
+#
+# The generator works out how long each instruction is from rules written in it; the manual
+# says so in a column somebody typed. They are independent accounts of the same fact, which
+# is exactly the pair worth checking against each other.
+sys.path.insert(0, "Tests")
+import instructiontable
+lengthOf = {0: 1, 1: 3, 2: 2, 3: 2, 4: 3, 5: 4, 6: 3}
+printed = {}
+for m in re.finditer(r'^\|\s*[0-9A-F]{2}\s*\|\s*([A-Z][A-Z0-9]*)\s*\|\s*(\d+)\s*\|', pm, re.M):
+    printed[m.group(1)] = int(m.group(2))
+for opcode, name in instructiontable.table():
+    implied = lengthOf[instructiontable.shapeOf(opcode)]
+    if name in printed and printed[name] != implied:
+        problems.append("the manual says %s is %d bytes and the disassembler will read it"
+                        " as %d" % (name, printed[name], implied))
 
 # ---- Every directive the assembler knows is written down ----
 for directive in sorted(set(re.findall(r'"(#[A-Za-z]+)"', util))):

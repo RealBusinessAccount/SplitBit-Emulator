@@ -14,6 +14,8 @@ SplitBit is a custom 8 bit system designed for hobbyist projects and experimenta
 - Devices: A bus registry that says what a machine is made of, so a program can ask rather than being told.
 - Filesystem: SBFS, read and written by SplitBit itself, and by a host tool that speaks the same format so an image can be moved either way.
 - Loadable Programs: A program that was not booted from carries a header saying where it belongs, and Programs/loader.asm reads one off a disk, puts it there, and runs it.
+- An Operating System: CosmOS boots the machine, mounts a disk, lists what is on it, loads a program and runs it, and takes the machine back when it finishes. It comes with a library of programs to run, including a game and a line editor that writes files a person typed.
+- System Services: A loaded program reaches the console and the disk through numbered software interrupts rather than carrying a copy of the code that drives them. The numbers are written down in one file that both sides include, so neither ever types one. It took the editor from 4941 bytes to 1983 without changing a line of what it does.
 - Storage: A block device with 256 byte blocks and 16 megabytes of them, backed by an image file on the host. It knows blocks and not files, because a filesystem is meant to be software SplitBit runs.
 - Memory Controller: Reads and writes Program Memory, moves blocks between memory banks, reaches memory that devices bring with them, and guards a range against being written by accident. It is how a SplitBit machine loads a program.
 - Assembler: Assemble human readable assembly language files directly into SplitBit compatible binary files. Supports including external files, handling labels, alignment and reservation, and defining Program, Data and Vector segments.
@@ -66,7 +68,7 @@ The sources are ISO C, and build clean under -std=c11 -pedantic with -Wall -Wext
 - delete \<image\> \<name\>: Remove one.
 
 #### Notes:
-- SplitDisk speaks the same on disk format SplitBit does, so an image it makes is one the machine can read, and one the machine writes is one it can read back. Until SplitBit can write its own filesystem this is the only way to get a program onto a disk.
+- SplitDisk speaks the same on disk format SplitBit does, so an image it makes is one the machine can read, and one the machine writes is one it can read back. SplitBit writes its own filesystem now, so this is not the only way to get something onto a disk; it is still the only way to get a program onto one, since nothing running on the machine assembles anything yet.
 - Files are laid down contiguously, so a disk can have free blocks without having them in one piece. When that happens put says so rather than putting part of a file on.
 
 ### Usage:

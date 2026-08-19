@@ -25,3 +25,29 @@
   osReadLine     0d17   ; DP0 names somewhere to put a line read from the console.
   osExit         0d18   ; Give the machine back to the system.
   osArgument     0d19   ; DP0 names somewhere to put the rest of the run command.
+
+; ---- What the system does with the disk on a program's behalf ----
+;
+; A loaded program that wanted a file used to include the whole filesystem, which is two
+; and a half kilobytes of it carrying a private copy of code the system already has
+; running. These are that code, reachable.
+;
+; NOTHING HERE MOUNTS ANYTHING. The system mounted the disk before it read the prompt, and
+; there is one disk with one buffer registered as one bank; a program mounting it again was
+; only ever an artefact of having its own copy of the library.
+;
+; Sizes are in bytes and fit the registers exactly. A file that can be read into Data
+; Memory is under 64K by definition, so its length is sixteen bits: coming back it is DP3,
+; going out it is A and B together, and neither direction needs a record in memory that
+; both sides have to agree on the shape of.
+  osFileRead     0d20   ; DP0 names it, DP1 says where. Q is zero if it read, DP3 is how many bytes.
+  osFileSave     0d21   ; DP0 names it, DP1 is the bytes, A and B are how many. Q is zero if it saved.
+  osFileDelete   0d22   ; DP0 names it. Q is zero if it went.
+  osFileRename   0d23   ; DP0 is the name it has, DP1 the name it should have. Q is zero if it moved.
+
+; ---- And with the console ----
+;
+; printString is already up there. This is the other half of what a program prints: a
+; number, in decimal, without leading zeroes. A and B together, so one service covers both
+; a line number and a byte count and there is no need for two.
+  osPrintNumber  0d24

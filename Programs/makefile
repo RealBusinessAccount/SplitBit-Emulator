@@ -79,7 +79,10 @@ $(COSMOS_DISK): $(APPS)
 	$(DISKTOOL) format $@ 256 2
 	@for app in $(APPS); do $(DISKTOOL) put $@ $$app; done
 
-cosmos-disk: $(COSMOS_DISK)
+# The system as well as the disk. Building only the image leaves whatever cosmos.bin was
+# there before, or none at all, and then the disk is booted with a system that does not
+# match the programs on it.
+cosmos-disk: $(COSMOS) $(COSMOS_DISK)
 
 run-cosmos: $(COSMOS) $(COSMOS_DISK)
 	$(EMU) --disk $(COSMOS_DISK) $(COSMOS)

@@ -125,3 +125,11 @@ printf 'the second one' > two.txt
 "$ROOT/Assembler" -I "$ROOT/Programs/Libraries" -I "$ROOT/Programs/CosmOS/Source" \
     "$ROOT/Programs/CosmOS/Apps/Edit.asm" -o "$WORK/Edit.sbx" >/dev/null
 "$TOOL" put "$DISKS/editor.img" "$WORK/Edit.sbx" >/dev/null
+
+# A disk for the file services, holding nothing but the program that exercises them. Its
+# own, because that program writes: it tidies up after itself, but a run that stopped part
+# way would leave a document behind on a fixture every later test reads.
+"$TOOL" format "$DISKS/services.img" 256 2 >/dev/null
+"$ROOT/Assembler" -I "$ROOT/Programs/CosmOS/Source" \
+    "$ROOT/Programs/CosmOS/Apps/Files.asm" -o "$WORK/Files.sbx" >/dev/null
+"$TOOL" put "$DISKS/services.img" "$WORK/Files.sbx" >/dev/null

@@ -67,8 +67,26 @@ bootNoDisk:
 
 ; ---- The loop ----
 
+; ---- The loop ----
+;
+; The shell has two modes and one prompt that says which. Ordinary mode runs programs;
+; monitor mode also looks at memory, changes it, and jumps into it.
+;
+; THE MODE IS A VARIABLE RATHER THAN A SECOND LOOP, and that is what makes it persistent
+; without anything having to remember it. Every way back here goes through this one place,
+; INCLUDING A PROGRAM GIVING THE MACHINE BACK - so jumping to an address, letting it run,
+; and having it exit puts you back at the monitor prompt you left from, rather than at the
+; shell. Only saying so leaves the monitor, or a program breaking the machine badly enough
+; to need starting again.
 prompt:
+  SETD.0 Mode
+  LDA.0
+  BRA promptPlain
+  SETD.0 MonitorPrompt
+  BRI promptSay
+promptPlain:
   SETD.0 PromptText
+promptSay:
   CALL printString
 
   SETD.0 CommandLine
@@ -105,11 +123,6 @@ prompt:
   BRQ doRun
 
   SETD.0 CommandLine
-  SETD.1 DumpName
-  CALL textSame
-  BRQ doDump
-
-  SETD.0 CommandLine
   SETD.1 DeleteName
   CALL textSame
   BRQ doDelete
@@ -127,8 +140,46 @@ prompt:
   SETD.0 CommandLine
   SETD.1 ExitName
   CALL textSame
-  BRQ quit
+  BRQ doExit
 
+  SETD.0 CommandLine
+  SETD.1 MonitorName
+  CALL textSame
+  BRQ doMonitor
+
+  ; The monitor's own commands, which only answer when the monitor is on. They are single
+  ; letters because they are typed constantly and because the prompt has already said which
+  ; mode you are in; the plain shell keeps its words and stays plain.
+  SETD.0 Mode
+  LDA.0
+  BRA promptUnknown
+
+  SETD.0 CommandLine
+  SETD.1 ExamineName
+  CALL textSame
+  BRQ doExamine
+
+  SETD.0 CommandLine
+  SETD.1 DisName
+  CALL textSame
+  BRQ doDisassemble
+
+  SETD.0 CommandLine
+  SETD.1 SetName
+  CALL textSame
+  BRQ doSet
+
+  SETD.0 CommandLine
+  SETD.1 BankName
+  CALL textSame
+  BRQ doBank
+
+  SETD.0 CommandLine
+  SETD.1 GoName
+  CALL textSame
+  BRQ doGo
+
+promptUnknown:
   ; Nothing matched. Saying which word was not understood is worth the four instructions:
   ; it tells somebody who mistyped what they actually typed.
   SETD.0 Unknown
@@ -141,6 +192,26 @@ prompt:
 ; Running out of console leaves the cursor part way along a line, because there was no
 ; return at the end to move it on. Somebody who typed "exit" has already pressed one, and
 ; a second would only leave a blank line behind.
+; Leaving whatever you are in: the monitor if you are in it, and the machine if you are
+; not. Two exits to stop from the monitor, which is what every nested prompt has ever asked
+; for and reads the right way round.
+doExit:
+  SETD.0 Mode
+  LDA.0
+  BRA quit
+  RSTA
+  STA.0
+  BRI prompt
+
+doMonitor:
+  INIA 0x01
+  SETD.0 Mode
+  STA.0
+  SETD.0 MonitorHelp
+  CALL printString
+  CALL newLine
+  BRI prompt
+
 quitRanOut:
   CALL newLine
 quit:
@@ -787,6 +858,144 @@ handleArgument:
   CALL copyText
   RETI
 
+; ---- The disk, on a program's behalf ----
+;
+; A loaded program that wanted a file used to include the whole filesystem, so it carried a
+; private copy of code the system already has running, and mounted a disk that was already
+; mounted. These are that code, reachable through a number instead.
+;
+; Every one of them answers in Q, and the answer is written into the frame over the saved
+; register, because RETI puts every register back and would otherwise throw it away. That
+; has to be done here rather than in a routine of its own: the offsets are from where the
+; Stack Pointer is, and a CALL moves it by ten.
+;
+; A machine with no disk answers no to all of them rather than going ahead and finding out,
+; because sbfs on a disk that was never mounted is reading whatever bank 3 happens to be.
+
+; DP0 names the file, DP1 says where to put it. Q is zero if it read, and DP3 comes back
+; holding how many bytes there were.
+handleFileRead:
+  SETD.2 DiskReady
+  LDA.2
+  BRA fileReadNo
+
+  CALL sbfsFind
+  BNQ fileReadNo
+
+  ; A file of 256 blocks is 64K, which will not fit in Data Memory and will not fit in the
+  ; pointer that says how long it is either. Refused, rather than read as much of as fits:
+  ; a length that lies is worse than a file that will not open.
+  SETD.2 SbfsFileBlocks
+  LDA.2
+  BNA fileReadNo
+
+  CALL sbfsRead
+  BNQ fileReadNo
+
+  ; How long it is: the block count is the high byte of that and the tail is the low one,
+  ; which is how a size is put together everywhere on this disk.
+  SETD.2 SbfsFileBlocks
+  INCD.2
+  LDA.2
+  SETD.2 SbfsFileTail
+  LDB.2
+
+  MVSD.2
+  DPUP.2 0d05               ; The saved DP3, high byte first.
+  STA.2
+  INCD.2
+  STB.2
+
+  MVSD.2
+  DPUP.2 0d02               ; And the saved Q.
+  RSTA
+  STA.2
+  RETI
+
+fileReadNo:
+  MVSD.2
+  DPUP.2 0d02
+  INIA 0d1
+  STA.2
+  RETI
+
+; DP0 names the file, DP1 is the bytes, and A and B together are how many. Q is zero if it
+; saved. Whether it was there before makes no difference, which is what saving means.
+handleFileSave:
+  SETD.2 DiskReady
+  PSHA
+  LDA.2
+  BRA fileSaveNoDisk
+  POPA
+
+  ; Blocks are the high half of the count and the tail is the low half.
+  SETD.2 SbfsFileBlocks
+  PSHA
+  RSTA
+  STA.2                     ; A whole file's block count fits in a byte, so this is zero.
+  INCD.2
+  POPA
+  STA.2
+  SETD.2 SbfsFileTail
+  STB.2
+
+  CALL sbfsSaveFile
+  MVQA
+  MVSD.2
+  DPUP.2 0d02
+  STA.2
+  RETI
+
+fileSaveNoDisk:
+  POPA
+  MVSD.2
+  DPUP.2 0d02
+  INIA 0d1
+  STA.2
+  RETI
+
+; DP0 names it. Q is zero if it went.
+handleFileDelete:
+  SETD.2 DiskReady
+  LDA.2
+  BRA serviceNoDisk
+  CALL sbfsDelete
+  MVQA
+  MVSD.2
+  DPUP.2 0d02
+  STA.2
+  RETI
+
+; DP0 is the name it has, DP1 the name it should have. Q is zero if it moved.
+handleFileRename:
+  SETD.2 DiskReady
+  LDA.2
+  BRA serviceNoDisk
+  CALL sbfsRename
+  MVQA
+  MVSD.2
+  DPUP.2 0d02
+  STA.2
+  RETI
+
+serviceNoDisk:
+  MVSD.2
+  DPUP.2 0d02
+  INIA 0d1
+  STA.2
+  RETI
+
+; A and B together are a number. Prints it in decimal without leading zeroes, which covers
+; a line number and a byte count both, so there is no need for one service each.
+handlePrintNumber:
+  SETD.0 PrintNumber
+  STA.0
+  INCD.0
+  STB.0
+  SETD.0 PrintNumber
+  CALL printWordDecimal
+  RETI
+
 ; Giving the machine back. This is the one place MVDS earns its keep. The program's Stack,
 ; and the frame this very interrupt arrived on, are both abandoned where they lie, because
 ; nothing is going to return through either of them.
@@ -828,49 +1037,99 @@ handleExit:
 ; Program Memory and this can is the whole point: the instruction set has no way to look
 ; at itself, and the controller does, so a monitor is possible at all only through it.
 
-doDump:
+; b <program|data|number>
+;
+; The two banks that always exist have names, because "program" is what somebody means and
+; 0 is only what the machine calls it. Anything else is a number, and has to be one that is
+; really there.
+doBank:
   SETD.1 TextRest
   LDD.0.1
   LDA.0
-  BRA dumpGo            ; Nothing said, so carry on from where the last one stopped.
+  BRA bankWhat
 
-  ; Which bank. The two that always exist have names, because typing "program" is what
-  ; somebody means and 0 is what the machine calls it.
-  CALL textSplit
   SETD.1 ProgramWord
   CALL textSame
-  BRQ dumpBankProgram
+  BRQ bankProgram
   SETD.1 DataWord
   CALL textSame
-  BRQ dumpBankData
+  BRQ bankData
 
   CALL textHexWord
-  BNQ dumpBadWhere
+  BNQ bankWhat
   SETD.0 TextValue
   INCD.0
   LDA.0
-  BRI dumpSetBank
-dumpBankProgram:
+  BRI bankSet
+bankProgram:
   RSTA
-  BRI dumpSetBank
-dumpBankData:
+  BRI bankSet
+bankData:
   INIA 0d1
-dumpSetBank:
+bankSet:
+  ; The old one is kept, because asking about a bank means writing it down first - and if
+  ; it turns out not to exist, being left pointed at it would fault on the very next look.
+  SETD.0 DumpBank
+  LDB.0
+  SETD.1 BankWas
+  STB.1
   SETD.0 DumpBank
   STA.0
 
-  ; And where in it. Naming a bank without an address means the start of it, which is the
-  ; only answer that does not depend on what was asked for last time.
+  ; Naming a bank puts the cursor at the start of it, which is the only answer that does
+  ; not depend on what was asked for last time.
+  CALL bankPresent
+  BRQ bankNotThere
+
   RSTA
   SETD.0 DumpAt
   STA.0
   INCD.0
   STA.0
 
+  SETD.0 BankIs
+  CALL printString
+  SETD.0 DumpBank
+  LDA.0
+  CALL printByteHex
+  CALL newLine
+  BRI prompt
+
+bankNotThere:
+  SETD.0 BankWas
+  LDA.0
+  SETD.1 DumpBank
+  STA.1                 ; Back where it was, which is somewhere that exists.
+  SETD.0 NoSuchBank
+  CALL printString
+  CALL newLine
+  BRI prompt
+
+bankWhat:
+  SETD.0 BankUsage
+  CALL printString
+  CALL newLine
+  BRI prompt
+
+; x [address] - sixty four bytes. d [address] - eight instructions. Without an address
+; either carries on from where the last one stopped, so reading through memory is one
+; letter at a time and the two share a place in it.
+doExamine:
+  RSTA
+  SETD.0 ShowAsCode
+  STA.0
+  BRI showAt
+
+doDisassemble:
+  INIA 0x01
+  SETD.0 ShowAsCode
+  STA.0
+
+showAt:
   SETD.1 TextRest
   LDD.0.1
   LDA.0
-  BRA dumpCheckBank
+  BRA dumpGo            ; Nothing said, so carry on from where the last one stopped.
   CALL textHexWord
   BNQ dumpBadWhere
   SETD.0 TextValue
@@ -885,36 +1144,14 @@ dumpSetBank:
   STA.1
 
 dumpCheckBank:
-  ; Is there such a bank? Asking the controller for a bank that is not there is refused,
-  ; and a refusal nobody catches stops the machine, which is a poor answer to a typing
-  ; mistake. The bank table says what exists, and it lives in bank 2.
-  ;
-  ; Bank n's record starts at n times eight. A and B are a shift register sixteen bits
-  ; wide, so putting the number in the low half and rotating left three times multiplies
-  ; it by eight without anything falling off the top: the most it can reach is 2040.
-  RSTA
-  SETD.0 DumpBank
-  LDB.0
-  SHL SHL SHL
-  SETD.0 DumpRecord
-  STA.0
-  INCD.0
-  STB.0
-
-  INIA 0d2
-  OUTA 0xE0             ; SourceBank: the controller's own memory.
-  SETD.0 DumpRecord
-  LDA.0
-  OUTA 0xE1
-  INCD.0
-  LDA.0
-  OUTA 0xE2
-  INA 0xE9              ; The flags byte of that bank's record.
-  INIB 0x01
-  AND
-  BRQ dumpNoBank        ; The present bit is down, so nothing is there.
+  CALL bankPresent
+  BRQ dumpNoBank
 
 dumpGo:
+  SETD.0 ShowAsCode
+  LDA.0
+  BNA disassembleGo
+
   INIA 0d4
   SETD.0 DumpRows
   STA.0
@@ -1009,8 +1246,21 @@ dumpRowNext:
   BNA dumpRow
   BRI prompt
 
+disassembleGo:
+  INIA 0d8
+  SETD.0 DumpRows
+  STA.0
+disassembleOne:
+  CALL showInstruction
+  SETD.0 DumpRows
+  LDA.0
+  DECA
+  STA.0
+  BNA disassembleOne
+  BRI prompt
+
 dumpBadWhere:
-  SETD.0 DumpUsage
+  SETD.0 ExamineUsage
   CALL printString
   CALL newLine
   BRI prompt
@@ -1020,6 +1270,434 @@ dumpNoBank:
   CALL newLine
   BRI prompt
 
+; s <address> <byte> <byte> ...
+;
+; Writes into whichever bank is being looked at, THROUGH THE CONTROLLER, so Program Memory
+; can be changed as easily as Data - which no instruction on this machine can do, and which
+; is most of the reason for having a monitor at all.
+;
+; The cursor is left alone. Somebody poking a byte is usually looking at something else, and
+; having the address they were reading move underneath them would be a poor reward.
+doSet:
+  SETD.1 TextRest
+  LDD.0.1
+  CALL textHexWord
+  BNQ setWhat
+
+  SETD.1 DumpBank
+  LDA.1
+  OUTA 0xE3
+  SETD.1 TextValue
+  LDA.1
+  OUTA 0xE4
+  INCD.1
+  LDA.1
+  OUTA 0xE5
+
+  CALL stepPastNumber
+  PSHD.3
+  POPD.0
+setByte:
+  CALL textHexWord
+  BNQ prompt            ; Nothing more on the line, so that was all of them.
+  SETD.1 TextValue
+  INCD.1
+  LDA.1
+  OUTA 0xE9             ; The destination steps on by itself, so a run of bytes is a loop.
+  CALL stepPastNumber
+  PSHD.3
+  POPD.0
+  BRI setByte
+
+setWhat:
+  SETD.0 SetUsage
+  CALL printString
+  CALL newLine
+  BRI prompt
+
+; g <address>
+;
+; Somewhere to go. It does not come back by itself - that would want a breakpoint, which is
+; a byte written over an instruction and a handler waiting for it, and neither exists yet.
+; But a program that gives the machine back the ordinary way lands at the prompt it was
+; started from, which is this one, still in the monitor.
+doGo:
+  SETD.1 TextRest
+  LDD.0.1
+  CALL textHexWord
+  BNQ goWhat
+
+  ; Where the Stack is now, written down before leaving, exactly as run does it. Whatever is
+  ; jumped to may give the machine back through osExit, and osExit puts the Stack back to
+  ; what is written here - so without this it would restore the one the LAST run left, or
+  ; none at all, and the shell would come back with its Stack pointing at nothing.
+  MVSD.0
+  SETD.1 SystemStack
+  STD.0.1
+
+  SETD.1 TextValue
+  LDD.3.1
+  BRD.3
+
+goWhat:
+  SETD.0 GoUsage
+  CALL printString
+  CALL newLine
+  BRI prompt
+
+; DP0 names text that textHexWord has just read a number off the front of. LEAVES DP3 past
+; the digits and any spaces after them, ready for the next one.
+;
+; DP3 rather than DP0, because a subroutine cannot hand a pointer back in DP0: CALL saves it
+; and RET puts it back, so stepping it here would be undone on the way out.
+stepPastNumber:
+  PSHD.0
+  POPD.3
+  SETD.1 TextDigits
+  LDB.1
+stepPastDigits:
+  BRB stepPastSpaces
+  INCD.3
+  DECB
+  BRI stepPastDigits
+stepPastSpaces:
+  LDA.3
+  BRA stepPastDone
+  INIB 0x20
+  XOR
+  BNQ stepPastDone
+  INCD.3
+  BRI stepPastSpaces
+stepPastDone:
+  RET
+
+
+; Points the controller's source at the cursor, so that reading port 0xE9 walks forwards.
+aimAtDumpAt:
+  SETD.0 DumpBank
+  LDA.0
+  OUTA 0xE0
+  SETD.0 DumpAt
+  LDA.0
+  OUTA 0xE1
+  INCD.0
+  LDA.0
+  OUTA 0xE2
+  RET
+
+; One byte from the cursor, and the cursor moves on.
+;
+; THE BYTE COMES BACK IN Q, not in A, because a subroutine cannot hand anything back in A:
+; CALL saves it and RET puts it back, so an assignment here would be undone by the return.
+takeByte:
+  INA 0xE9
+  PSHA
+  SETD.0 DumpAt
+  INCD.0
+  LDA.0
+  INCA
+  STA.0
+  BNC takeByteDone
+  DECD.0
+  LDA.0
+  INCA
+  STA.0
+takeByteDone:
+  POPA
+  RSTB
+  OR
+  RET
+
+; ---- Showing instructions ----
+;
+; The half of a monitor that a byte dump cannot do. What it needs and a dump does not
+; is to know how LONG each instruction is, because getting that wrong does not print one
+; line wrong - it loses the place and prints everything after it wrong.
+
+; One instruction: where it is, the bytes it is made of, and what it says.
+showInstruction:
+  SETD.0 DumpAt
+  LDA.0
+  CALL printByteHex
+  INCD.0
+  LDA.0
+  CALL printByteHex
+  INIA 0x20
+  OUTA 0x00
+  INIA 0x20
+  OUTA 0x00
+
+  CALL aimAtDumpAt
+  CALL takeByte
+  MVQA
+  SETD.0 Opcode
+  STA.0
+
+  CALL findInstruction
+  BNQ showUnknown
+
+  ; What shape it is, and from that how many bytes it runs to.
+  PSHD.3
+  POPD.0
+  INCD.0
+  LDA.0
+  SETD.1 Shape
+  STA.1
+
+  SETD.0 ShapeLength
+  LDB.1
+shapeStep:
+  BRB shapeGot
+  INCD.0
+  DECB
+  BRI shapeStep
+shapeGot:
+  LDA.0
+  SETD.1 Length
+  STA.1
+
+  ; The rest of its bytes. The first one is already read.
+  SETD.0 InstrBytes
+  SETD.1 Opcode
+  LDA.1
+  STA.0
+  INCD.0
+  SETD.1 Length
+  LDB.1
+  DECB
+readRest:
+  BRB readRestDone
+  PSHB
+  CALL takeByte
+  POPB
+  MVQA
+  STA.0
+  INCD.0
+  DECB
+  BRI readRest
+readRestDone:
+
+  ; Show them, padded out so that what follows lines up however long the instruction was.
+  SETD.0 InstrBytes
+  SETD.1 Length
+  LDB.1
+showBytes:
+  PSHB
+  LDA.0
+  CALL printByteHex
+  INIA 0x20
+  OUTA 0x00
+  POPB
+  INCD.0
+  DECB
+  BNB showBytes
+
+  INIB 0d4
+  SETD.0 Length
+  LDA.0
+padBytes:
+  CCF
+  SUB
+  BRQ padDone               ; As many as there are, so nothing to pad.
+  PSHA
+  PSHB
+  INIA 0x20
+  OUTA 0x00
+  OUTA 0x00
+  OUTA 0x00
+  POPB
+  POPA
+  DECB
+  BRI padBytes
+padDone:
+  INIA 0x20
+  OUTA 0x00
+
+  ; Its name, without the spaces it is padded to four with.
+  PSHD.3
+  POPD.0
+  DPUP.0 0d02
+  INIB 0d4
+showName:
+  LDA.0
+  BRA showNameDone
+  PSHB
+  INIB 0x20
+  XOR
+  POPB
+  BRQ showNameDone
+  OUTA 0x00
+  INCD.0
+  DECB
+  BNB showName
+showNameDone:
+
+  ; And whatever follows it, which depends only on the shape.
+  SETD.0 Shape
+  LDA.0
+  BRA showOperandNone       ; 0, nothing at all
+
+  DECA
+  BRA showAddress           ; 1, an address
+  DECA
+  BRA showByte              ; 2, one byte
+  DECA
+  BRA showSelector          ; 3, a Data Pointer
+  DECA
+  BRA showSelectorByte      ; 4, a Data Pointer and a byte
+  DECA
+  BRA showSelectorAddress   ; 5, a Data Pointer and an address
+  BRI showTwoSelectors      ; 6
+
+showOperandNone:
+  CALL newLine
+  RET
+
+showAddress:
+  INIA 0x20
+  OUTA 0x00
+  SETD.0 InstrBytes
+  INCD.0
+  LDA.0
+  CALL printByteHex
+  INCD.0
+  LDA.0
+  CALL printByteHex
+  CALL newLine
+  RET
+
+showByte:
+  INIA 0x20
+  OUTA 0x00
+  SETD.0 InstrBytes
+  INCD.0
+  LDA.0
+  CALL printByteHex
+  CALL newLine
+  RET
+
+showSelector:
+  CALL putSelectorOne
+  CALL newLine
+  RET
+
+showSelectorByte:
+  CALL putSelectorOne
+  INIA 0x20
+  OUTA 0x00
+  SETD.0 InstrBytes
+  DPUP.0 0d02
+  LDA.0
+  CALL printByteHex
+  CALL newLine
+  RET
+
+showSelectorAddress:
+  CALL putSelectorOne
+  INIA 0x20
+  OUTA 0x00
+  SETD.0 InstrBytes
+  DPUP.0 0d02
+  LDA.0
+  CALL printByteHex
+  INCD.0
+  LDA.0
+  CALL printByteHex
+  CALL newLine
+  RET
+
+showTwoSelectors:
+  CALL putSelectorOne
+  INIA 0d46                 ; .
+  OUTA 0x00
+  SETD.0 InstrBytes
+  DPUP.0 0d02
+  LDA.0
+  CALL printDecimalDigit
+  CALL newLine
+  RET
+
+; ".n" for the selector that follows the opcode.
+putSelectorOne:
+  INIA 0d46
+  OUTA 0x00
+  SETD.0 InstrBytes
+  INCD.0
+  LDA.0
+  CALL printDecimalDigit
+  RET
+
+; A byte that decodes as nothing. Shown as it is, and the cursor moves on by one, because
+; the only honest thing to do with a byte that is not an instruction is say so and carry on.
+showUnknown:
+  SETD.0 Opcode
+  LDA.0
+  CALL printByteHex
+  SETD.0 UnknownText
+  SWI osPrintString
+  RET
+
+; Looks the opcode up. DP3 lands on its entry and Q is zero, or Q is not zero and it is not
+; an instruction at all.
+findInstruction:
+  SETD.3 Instructions
+  SETD.0 InstructionCount
+  LDB.0
+findStep:
+  LDA.3
+  SETD.0 Opcode
+  PSHB
+  LDB.0
+  XOR
+  POPB
+  BRQ findFound
+  DPUP.3 0d07
+  DECB
+  BNB findStep
+  RSTA
+  INIB 0d1
+  CCF
+  ADD
+  RET
+findFound:
+  RSTA
+  RSTB
+  CCF
+  ADD
+  RET
+
+; Is there such a bank? Q is zero if there is not.
+;
+; ASKING THE CONTROLLER FOR A BANK THAT IS NOT THERE IS REFUSED, and a refusal nobody
+; catches stops the machine, which is a wretched answer to a mistyped number. The bank table
+; says what exists, and it lives in bank 2.
+;
+; Bank n's record starts at n times eight. A and B are a shift register sixteen bits wide,
+; so putting the number in the low half and rotating left three times multiplies it by
+; eight without anything falling off the top: the most it can reach is 2040.
+bankPresent:
+  RSTA
+  SETD.0 DumpBank
+  LDB.0
+  SHL SHL SHL
+  SETD.0 DumpRecord
+  STA.0
+  INCD.0
+  STB.0
+
+  INIA 0d2
+  OUTA 0xE0             ; SourceBank: the controller's own memory.
+  SETD.0 DumpRecord
+  LDA.0
+  OUTA 0xE1
+  INCD.0
+  LDA.0
+  OUTA 0xE2
+  INA 0xE9              ; The flags byte of that bank's record.
+  INIB 0x01
+  AND
+  RET
+
 ; ---- help ----
 
 doHelp:
@@ -1027,6 +1705,15 @@ doHelp:
   CALL printString
   CALL newLine
   SETD.0 HelpMoreText
+  CALL printString
+  CALL newLine
+
+  ; And what the monitor adds, but only when it is on. Listing commands that would not
+  ; answer is a way of teaching somebody something untrue.
+  SETD.0 Mode
+  LDA.0
+  BRA prompt
+  SETD.0 MonitorHelp
   CALL printString
   CALL newLine
   BRI prompt
@@ -1057,21 +1744,18 @@ run [words]  start what was loaded, and tell it those words
 delete <file>        take it off the disk
 rename <file> <to>   call it something else"
 HelpMoreText:
-"dump         sixty four bytes of memory, and again for more
-             dump <program|data|bank> <address>
+"monitor      look at memory, change it, and jump into it
 help         this
-exit         stop"
+exit         stop, or leave the monitor if you are in it"
 
-DumpUsage:
-"dump <program|data|bank> <address>"
+ExamineUsage:
+"x <address>, or x on its own to carry on"
 NoSuchBank:
 "there is no such bank"
 ProgramWord:
 "program"
 DataWord:
 "data"
-DumpName:
-"dump"
 
 ExecMagic:
 "SBEX"
@@ -1104,6 +1788,33 @@ NothingLoaded:
 Finished:
 "finished"
 
+MonitorPrompt:
+"* "
+UnknownText:
+"       ?
+"
+MonitorName:
+"monitor"
+MonitorHelp:
+"x examine, d disassemble, s set, b bank, g go, exit leaves"
+ExamineName:
+"x"
+DisName:
+"d"
+SetName:
+"s"
+BankName:
+"b"
+GoName:
+"g"
+BankUsage:
+"b <program|data|number>"
+BankIs:
+"bank "
+SetUsage:
+"s <address> <byte> <byte> ..."
+GoUsage:
+"g <address>"
 DirName:
 "dir"
 LoadName:
@@ -1139,6 +1850,11 @@ RenameFrom:
 RunArgument:
   #Reserve 0d64
 
+; A number on its way to being printed, since the routine that prints one wants it in
+; memory and a service is handed it in registers.
+PrintNumber:
+  0x00 0x00
+
 ; ---- The vectors a loaded program brought with it ----
 ;
 ; Six bytes each: where it goes, what goes there, and what was there before. The last two
@@ -1164,10 +1880,102 @@ DumpAt:
   0x00 0x00
 DumpRows:
   0x00
+Mode:
+  0x00
 DumpCount:
+  0x00
+BankWas:
+  0x00
+ShowAsCode:
   0x00
 DumpRecord:
   0x00 0x00
+Opcode:
+  0x00
+Shape:
+  0x00
+Length:
+  0x00
+InstrBytes:
+  #Reserve 0d4
+
+; How many bytes an instruction of each shape runs to, the opcode included.
+ShapeLength:
+  0d1 0d3 0d2 0d2 0d3 0d4 0d3
+
+InstructionCount:
+  0d64
+
+; ---- The instruction table ----
+;
+; Generated by Tests/instructiontable.py from the assembler's own list, and checked against
+; it by Tests/docs.sh. Seven bytes each: the opcode, the shape, and four characters of name
+; with the zero the assembler puts after a string.
+Instructions:
+  0x00 0d0 "ADD "
+  0x01 0d0 "SUB "
+  0x02 0d0 "AND "
+  0x03 0d0 "OR  "
+  0x04 0d0 "XOR "
+  0x05 0d0 "NOTA"
+  0x06 0d0 "NOTB"
+  0x07 0d0 "SHL "
+  0x08 0d0 "SHR "
+  0x10 0d1 "BRI "
+  0x11 0d1 "BRQ "
+  0x12 0d1 "BRA "
+  0x13 0d1 "BRB "
+  0x14 0d1 "BRC "
+  0x15 0d3 "BRD "
+  0x1A 0d1 "BNQ "
+  0x1B 0d1 "BNA "
+  0x1C 0d1 "BNB "
+  0x1D 0d1 "BNC "
+  0x17 0d1 "CALL"
+  0x18 0d2 "SWI "
+  0x19 0d0 "RETI"
+  0x1F 0d0 "RET "
+  0x20 0d0 "RSTA"
+  0x21 0d0 "RSTB"
+  0x22 0d0 "INCA"
+  0x23 0d0 "INCB"
+  0x24 0d0 "DECA"
+  0x25 0d0 "DECB"
+  0x26 0d2 "INIA"
+  0x27 0d2 "INIB"
+  0x28 0d0 "CCF "
+  0x29 0d0 "MVQA"
+  0x2A 0d0 "MVQB"
+  0x2B 0d0 "SIF "
+  0x2C 0d0 "CIF "
+  0x30 0d0 "PSHQ"
+  0x31 0d0 "PSHA"
+  0x32 0d0 "PSHB"
+  0x33 0d3 "PSHD"
+  0x34 0d0 "POPA"
+  0x35 0d0 "POPB"
+  0x36 0d3 "POPD"
+  0x40 0d3 "INCD"
+  0x41 0d3 "DECD"
+  0x42 0d3 "LDA "
+  0x43 0d3 "LDB "
+  0x44 0d3 "STQ "
+  0x45 0d3 "STA "
+  0x46 0d3 "STB "
+  0x47 0d5 "SETD"
+  0x48 0d4 "DPUP"
+  0x49 0d4 "DPDN"
+  0x4A 0d6 "LDD "
+  0x4B 0d6 "STD "
+  0x4C 0d3 "MVSD"
+  0x4D 0d3 "MVDS"
+  0xD0 0d2 "OUTQ"
+  0xD1 0d2 "OUTA"
+  0xD2 0d2 "OUTB"
+  0xE0 0d2 "INA "
+  0xE1 0d2 "INB "
+  0xF0 0d0 "NOP "
+  0xFF 0d0 "HALT"
 DumpBytes:
   #Reserve 0d16
 
@@ -1193,4 +2001,9 @@ CommandLine:
   osReadLine     handleReadLine
   osExit         handleExit
   osArgument     handleArgument
+  osFileRead     handleFileRead
+  osFileSave     handleFileSave
+  osFileDelete   handleFileDelete
+  osFileRename   handleFileRename
+  osPrintNumber  handlePrintNumber
   Device 0x20    diskDone

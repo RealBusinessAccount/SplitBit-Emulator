@@ -1,0 +1,12 @@
+CosmOS
+> loaded, starting at 2000
+> saved it
+read it back, 22 bytes:
+a file kept by asking
+renamed it
+deleted it
+and it is gone
+finished
+> halted
+Execution halted.
+[exit 0]

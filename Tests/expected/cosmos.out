@@ -4,10 +4,9 @@ load <file>  read a program off the disk
 run [words]  start what was loaded, and tell it those words
 delete <file>        take it off the disk
 rename <file> <to>   call it something else
-dump         sixty four bytes of memory, and again for more
-             dump <program|data|bank> <address>
+monitor      look at memory, change it, and jump into it
 help         this
-exit         stop
+exit         stop, or leave the monitor if you are in it
 > greeting.txt            17
 filler1.txt             8
 filler2.txt             8
