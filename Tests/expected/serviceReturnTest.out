@@ -1,0 +1,5 @@
+quiet: 7
+answer: 42
+pointer: ABC
+Execution halted.
+[exit 0]

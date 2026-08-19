@@ -141,6 +141,12 @@ vectorTest           | testPrograms/vectorTest.asm        | run      | -        
 # it. This pins both ends of that range and leaves a third to the assembler, then calls all
 # three by name: a number going astray shows up as the wrong word rather than as silence.
 pinnedVectorTest     | testPrograms/pinnedVectorTest.asm  | run      | -                  | -
+# A service handing something back, which RETI otherwise makes impossible: it restores every
+# register from the frame, so a handler that worked something out has no way to say so. The
+# answer is written into the frame over the saved register. All three cases are here - a
+# service that says nothing and leaves Q exactly as it found it, one that answers in Q, and
+# one that answers in DP3 - because the first is what makes the other two safe to rely on.
+serviceReturnTest    | testPrograms/serviceReturnTest.asm | run      | -                  | -
 deviceTest           | testPrograms/deviceTest.asm        | run      | -                  | -
 faultResumeTest      | testPrograms/faultResumeTest.asm   | run      | -                  | -
 # The worked example out of the Assembler Manual, so the manual cannot go stale.

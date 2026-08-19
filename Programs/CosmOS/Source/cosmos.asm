@@ -759,6 +759,18 @@ handlePrintString:
 
 handleReadLine:
   CALL readLine
+
+  ; readLine works out how long the line was, and RETI would throw that away: it restores
+  ; every register from the frame, which is exactly what makes an interrupt safe to arrive
+  ; unannounced and exactly what stops a service answering. So the answer is written into
+  ; the frame, over the saved Q, and RETI puts it back as though the caller had computed it.
+  ;
+  ; This has to be here rather than in a routine, because the offset is from where the
+  ; Stack Pointer is now and a CALL moves it by ten.
+  MVQA
+  MVSD.1
+  DPUP.1 0d02
+  STA.1
   RETI
 
 ; What the program was asked to work on. DP0 says where to put it and B how much room

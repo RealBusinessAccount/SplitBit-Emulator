@@ -552,7 +552,7 @@ Those numbers are written down once, in `Programs/CosmOS/Source/services.asm`, w
 | Service | Does |
 | --- | --- |
 | osPrintString | DP0 names a string ending in a zero byte. Prints it. |
-| osReadLine | DP0 names somewhere to put a line, B says how much room there is. Reads one from the console. |
+| osReadLine | DP0 names somewhere to put a line, B says how much room there is. Reads one from the console. Q comes back holding how long it was. |
 | osExit | Gives the machine back. Does not return. |
 | osArgument | DP0 names somewhere to put whatever followed the run command, B says how much room there is. |
 
@@ -566,6 +566,27 @@ Those numbers are written down once, in `Programs/CosmOS/Source/services.asm`, w
 `osArgument` is how a program is told what it is for. Everything written before it did the same thing however it was started, which is fine for a program that greets you and no use to one that edits a named document. What arrives is the whole rest of the line, spaces and all, rather than a list of words: what counts as an argument is the program's business, and handing over what was typed is the system's.
 
 A handler is entered with the caller's registers exactly as they were, because an interrupt frame is pushed rather than cleared. That is why a service can be given a pointer in DP0 and a count in B without any of it being copied anywhere first.
+
+### How A Service Answers:
+
+The same thing that makes an interrupt safe makes a service mute. RETI restores every register from the frame, so whatever a handler worked out is thrown away on the way out — which is exactly right for a device interrupting at a moment nobody chose, and useless for a service that was asked a question.
+
+A service answers by **writing into its own frame**, over the saved register, and letting RETI put it back. MVSD copies the Stack Pointer into a Data Pointer and the frame sits just above it, so returning a byte in Q is three instructions:
+
+```
+answer:
+  INIA 0d42
+  MVSD.1
+  DPUP.1 0d02           ; The saved Q. See the frame table under Interrupts.
+  STA.1
+  RETI
+```
+
+**Which registers a service may answer in is the convention CALL already has: Q and DP3.** A subroutine cannot hand back A, B or Data Pointers 0 to 2 because RET puts them back; a service *could* write over any of them and should not, for exactly the reason that list exists. A caller is entitled to find what it kept still there.
+
+**Only the handler itself can do this.** The offsets are from wherever the Stack Pointer is, and a CALL moves it by ten — so a routine called by a handler that tried the same thing would be writing into its own return address. The poke belongs inline, next to the RETI.
+
+A service that has nothing to say does nothing, and the caller's registers arrive back untouched. That is worth knowing from the other side too: a service cannot corrupt a register by accident, only by deciding to.
 
 ## Loading A Program From A Disk:
 
