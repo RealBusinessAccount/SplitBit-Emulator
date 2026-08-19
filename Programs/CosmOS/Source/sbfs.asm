@@ -350,13 +350,20 @@ sbfsWalkName:
 ; Compares the name in the entry at DP2 with the one kept in SbfsWanted. Q is zero if
 ; they are the same. Names are padded with zeroes rather than terminated, so a name that
 ; fills the field has no terminator to look for, which is why the count is what stops it.
+; A COUNTER OF ITS OWN, and that matters more than it looks. sbfsFind counts the eight
+; entries of a block in SbfsCount and calls this for each one; when this used SbfsCount too,
+; a failed comparison left the ENTRY count holding however far the NAME comparison had got.
+; A name differing at its first byte left 22 there, so the search walked twenty two entries
+; through a buffer holding eight - off the end of it, into whatever data happened to follow,
+; and reported a match against rubbish. What followed the buffer decided whether it looked
+; like it worked, which is why it went unnoticed until unrelated data was added.
 sbfsMatchEntry:
   PSHD.2
   POPD.0
   DPUP.0 0d06           ; The name inside the entry.
   SETD.2 SbfsWanted
   INIA 0d22
-  SETD.1 SbfsCount
+  SETD.1 SbfsMatchLeft
   STA.1
 
 sbfsMatchLoop:
@@ -1227,6 +1234,8 @@ SbfsScratch:
 SbfsOne:
   0x00 0x01
 SbfsCount:
+  0x00
+SbfsMatchLeft:
   0x00
 SbfsLeft:
   0x00
