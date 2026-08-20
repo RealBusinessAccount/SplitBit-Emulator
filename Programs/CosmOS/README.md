@@ -99,6 +99,7 @@ prompt rather than at the shell.
 | -- | -- |
 | `x [address]` | Display 64 bytes as hexadecimal and as characters. |
 | `d [address]` | Disassemble eight instructions. |
+| `a <address>` | Assemble instructions into memory until a line containing only a dot. |
 | `s <address> <byte>...` | Write bytes into the bank being examined, including Program Memory. |
 | `b <program\|data\|bank>` | Select a memory space or a registered bank number. |
 | `g <address>` | Begin execution at an address. |
@@ -250,7 +251,7 @@ than merely checking its filesystem code against itself.
 
 CosmOS is early software for an experimental computer. It runs one application at a
 time, has no privilege levels or process isolation, does not relocate applications, and
-does not yet provide a native assembler or linker. Its present purpose is to make
+provides a line assembler but not yet a native assembler for source files, nor a linker. Its present purpose is to make
 SplitBit usable from inside the machine: inspect it, manage persistent files, load
 programs, provide common services, and return reliably to a command prompt.
 

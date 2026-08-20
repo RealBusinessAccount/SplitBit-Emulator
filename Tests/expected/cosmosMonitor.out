@@ -1,5 +1,5 @@
 CosmOS
-> x examine, d disassemble, s set, b bank, g go, exit leaves
+> x examine, d disassemble, a assemble, s set, b bank, g go, exit leaves
 * b <program|data|number>
 * there is no such bank
 * loaded, starting at 2000
@@ -46,6 +46,20 @@ finished
 800A  00           ADD
 800B  00           ADD
 800C  00           ADD
+* bank 01
+* * bank 00
+* 8200: 8204: 8206: 8208: 820B: no such instruction
+820B: that one needs a value after it
+820B: 820D: * 8200  47 00 81 00  SETD.0 8100
+8204  18 10        SWI 10
+8206  42 02        LDA.2
+8208  4A 00 01     LDD.0.1
+820B  18 12        SWI 12
+820D  00           ADD
+820E  00           ADD
+820F  00           ADD
+* hello, typed
+finished
 * > greet.sbx               210
 hello.sbx               52
 Life.sbx                1411

@@ -179,6 +179,11 @@ promptSay:
   CALL textSame
   BRQ doGo
 
+  SETD.0 CommandLine
+  SETD.1 AsmName2
+  CALL textSame
+  BRQ doAssemble
+
 promptUnknown:
   ; Nothing matched. Saying which word was not understood is worth the four instructions:
   ; it tells somebody who mistyped what they actually typed.
@@ -1848,6 +1853,385 @@ findFound:
   ADD
   RET
 
+
+; ---- Assembling a line at a time ----
+;
+; a <address>, then instructions until a line that is just a dot. The syntax is the
+; assembler's - a selector rides on the mnemonic as LDA.0 or LDD.0.1, and leaving one off
+; means Data Pointer 0, exactly as it does in a source file - so nothing learned here has to
+; be unlearned when writing a real program.
+;
+; NUMBERS ARE HEXADECIMAL AND BARE. A source file writes 0x2000 or 0d16 because it has both
+; and must say which; a monitor has only one and says so once, in the manual, rather than on
+; every line. It is the same reason x and d take bare addresses.
+;
+; What cannot be written here is a label, and that is the whole difference between this and
+; the assembler proper: a label is a promise to fill an address in later, and later is what
+; a line at a time does not have.
+
+doAssemble:
+  SETD.1 TextRest
+  LDD.0.1
+  CALL textHexWord
+  BNQ assembleWhat
+  SETD.0 TextValue
+  SETD.1 DumpAt
+  CALL sbfsCopyWord     ; Two bytes from DP0 to DP1, which sbfs already has.
+
+assembleLine:
+  SETD.0 DumpAt
+  CALL printWordHex
+  SETD.0 AsmPrompt
+  CALL printString
+
+  SETD.0 AsmLine
+  INIB 0d40
+  CALL readLine
+
+  INA 0x01
+  INIB 0x02                 ; ENDED, so there is nothing more to assemble.
+  AND
+  BNQ prompt
+
+  SETD.0 AsmLine
+  LDA.0
+  BRA assembleLine          ; An empty line is somebody thinking.
+
+  SETD.0 AsmLine
+  SETD.1 DotText
+  CALL textSame
+  BRQ prompt
+
+  SETD.0 AsmLine
+  CALL textSplit            ; The mnemonic, and whatever follows it.
+  CALL assembleOne
+  BRI assembleLine
+
+assembleWhat:
+  SETD.0 AsmUsage
+  CALL printString
+  CALL newLine
+  BRI prompt
+
+; The mnemonic is in CommandLine's place - AsmLine - and TextRest is what followed it.
+; Puts the bytes down and steps the cursor past them.
+assembleOne:
+  CALL takeMnemonic
+  CALL findByName
+  BNQ assembleUnknown
+
+  ; WHATEVER IT NEEDS IS READ BEFORE ANYTHING IS WRITTEN. Emitting the opcode first and
+  ; discovering the missing value afterwards leaves half an instruction in memory, which the
+  ; next line usually covers up and the last line of a session does not.
+  SETD.0 AsmShape
+  LDA.0
+  BRA assemblePut           ; 0, nothing to read.
+  DECA
+  BRA assembleWantAddress   ; 1
+  DECA
+  BRA assembleWantByte      ; 2
+  DECA
+  BRA assemblePut           ; 3, a selector and nothing else.
+  DECA
+  BRA assembleWantByte      ; 4
+  DECA
+  BRA assembleWantAddress   ; 5
+  BRI assemblePut           ; 6, two selectors.
+
+assembleWantByte:
+  SETD.1 TextRest
+  LDD.0.1
+  CALL textHexWord
+  BNQ assembleNeedsValue
+  BRI assemblePut
+
+assembleWantAddress:
+  SETD.1 TextRest
+  LDD.0.1
+  CALL textHexWord
+  BNQ assembleNeedsValue
+
+assemblePut:
+  ; Point the controller at the cursor. Every byte written steps it on by itself.
+  SETD.0 DumpBank
+  LDA.0
+  OUTA 0xE3
+  SETD.0 DumpAt
+  LDA.0
+  OUTA 0xE4
+  INCD.0
+  LDA.0
+  OUTA 0xE5
+
+  SETD.0 AsmOpcode
+  LDA.0
+  OUTA 0xE9
+
+  ; What follows depends only on the shape, exactly as it does when reading one back.
+  SETD.0 AsmShape
+  LDA.0
+  BRA assembleDone          ; 0
+  DECA
+  BRA assembleAddress       ; 1
+  DECA
+  BRA assembleByte          ; 2
+  DECA
+  BRA assembleSelector      ; 3
+  DECA
+  BRA assembleSelByte       ; 4
+  DECA
+  BRA assembleSelAddress    ; 5
+
+  SETD.0 AsmSelOne
+  LDA.0
+  OUTA 0xE9
+  SETD.0 AsmSelTwo
+  LDA.0
+  OUTA 0xE9
+  BRI assembleDone
+
+assembleSelector:
+  SETD.0 AsmSelOne
+  LDA.0
+  OUTA 0xE9
+  BRI assembleDone
+
+assembleSelByte:
+  SETD.0 AsmSelOne
+  LDA.0
+  OUTA 0xE9
+  BRI assembleByte
+
+assembleSelAddress:
+  SETD.0 AsmSelOne
+  LDA.0
+  OUTA 0xE9
+  BRI assembleAddress
+
+assembleByte:
+  SETD.0 TextValue
+  INCD.0
+  LDA.0
+  OUTA 0xE9
+  BRI assembleDone
+
+assembleAddress:
+  SETD.0 TextValue
+  LDA.0
+  OUTA 0xE9
+  INCD.0
+  LDA.0
+  OUTA 0xE9
+
+assembleDone:
+  ; Past what was just written. The length is the shape's, out of the same table the
+  ; disassembler reads, so the two can never disagree about how much room one takes.
+  SETD.0 ShapeLength
+  SETD.1 AsmShape
+  LDB.1
+assembleStep:
+  BRB assembleStepped
+  INCD.0
+  DECB
+  BRI assembleStep
+assembleStepped:
+  LDA.0
+  SETD.0 DumpAt
+  CALL stepCursor
+  RET
+
+assembleUnknown:
+  SETD.0 NoSuchOp
+  CALL printString
+  CALL newLine
+  RET
+
+assembleNeedsValue:
+  SETD.0 NeedsValue
+  CALL printString
+  CALL newLine
+  RET
+
+; DP0 is a two byte address and A is how far to move it on.
+stepCursor:
+  DPUP.0 0d01
+  LDB.0
+  CCF
+  ADD
+  STQ.0
+  DPDN.0 0d01
+  LDA.0
+  RSTB
+  ADD
+  STQ.0
+  RET
+
+; The typed mnemonic into four padded characters and up to two selectors, which is the shape
+; the table holds. Folded to upper case, because the assembler does not care about the case
+; of a mnemonic and neither should this.
+;
+; A selector that was not typed is Data Pointer 0, exactly as an omitted one means in a
+; source file. That is worth matching rather than demanding: half the instruction set names
+; a pointer, and most code only ever uses the first.
+takeMnemonic:
+  RSTA
+  SETD.1 AsmSelOne
+  STA.1
+  SETD.1 AsmSelTwo
+  STA.1
+  INIA 0d4
+  SETD.1 AsmLeft
+  STA.1
+
+  SETD.0 AsmLine
+  SETD.1 AsmName
+
+takeMnemonicChar:
+  SETD.2 AsmLeft
+  LDA.2
+  BRA takeMnemonicPad       ; Four is as long as a mnemonic gets.
+  LDA.0
+  BRA takeMnemonicPad       ; The word ended.
+  INIB 0d46                 ; A dot, so the selectors start here.
+  XOR
+  BRQ takeMnemonicPad
+
+  ; Nothing below compares against A, so it survives all of this and is stored at the end.
+  INIB 0d97                 ; a
+  CCF
+  SUB
+  BRC takeMnemonicPut       ; It borrowed, so this is below 'a'.
+  INIB 0d123                ; One past z.
+  CCF
+  SUB
+  BNC takeMnemonicPut       ; No borrow, so it is 'z' or later.
+  INIB 0x20
+  CCF
+  SUB
+  MVQA                      ; Upper case, which is how the table holds them.
+
+takeMnemonicPut:
+  STA.1
+  INCD.0
+  INCD.1
+  SETD.2 AsmLeft
+  LDA.2
+  DECA
+  STA.2
+  BRI takeMnemonicChar
+
+takeMnemonicPad:
+  SETD.2 AsmLeft
+  LDA.2
+  BRA takeMnemonicSelectors
+  INIA 0x20
+  STA.1
+  INCD.1
+  SETD.2 AsmLeft
+  LDA.2
+  DECA
+  STA.2
+  BRI takeMnemonicPad
+
+takeMnemonicSelectors:
+  RSTA
+  STA.1                     ; The four are a string now, like the ones in the table.
+
+  LDA.0
+  INIB 0d46
+  XOR
+  BNQ takeMnemonicEnd       ; No dot, so both selectors stay at nought.
+  INCD.0
+  LDA.0
+  INIB 0d48
+  CCF
+  SUB
+  MVQA
+  SETD.1 AsmSelOne
+  STA.1
+
+  INCD.0
+  LDA.0
+  INIB 0d46
+  XOR
+  BNQ takeMnemonicEnd
+  INCD.0
+  LDA.0
+  INIB 0d48
+  CCF
+  SUB
+  MVQA
+  SETD.1 AsmSelTwo
+  STA.1
+
+takeMnemonicEnd:
+  RET
+
+; Looks the four characters up. AsmOpcode and AsmShape are filled in and Q is zero, or Q is
+; not zero and there is no such instruction.
+;
+; The same table the disassembler reads, searched the other way round. That is the point of
+; it being a table rather than two lists: what can be written can be read back, and what can
+; be read back can be written, and neither can drift from the other.
+findByName:
+  SETD.3 Instructions
+  SETD.0 InstructionCount
+  LDA.0
+  SETD.1 AsmLeft
+  STA.1
+
+findByNameStep:
+  PSHD.3
+  POPD.0
+  DPUP.0 0d02
+  SETD.2 AsmName
+  INIA 0d4
+  SETD.1 AsmCount
+  STA.1
+
+findByNameChar:
+  LDA.0
+  LDB.2
+  XOR
+  BNQ findByNameNext
+  INCD.0
+  INCD.2
+  SETD.1 AsmCount
+  LDA.1
+  DECA
+  STA.1
+  BNA findByNameChar
+
+  PSHD.3
+  POPD.0
+  LDA.0
+  SETD.1 AsmOpcode
+  STA.1
+  PSHD.3
+  POPD.0
+  INCD.0
+  LDA.0
+  SETD.1 AsmShape
+  STA.1
+  RSTA
+  RSTB
+  CCF
+  ADD
+  RET
+
+findByNameNext:
+  DPUP.3 0d07
+  SETD.1 AsmLeft
+  LDA.1
+  DECA
+  STA.1
+  BNA findByNameStep
+  RSTA
+  INIB 0d1
+  CCF
+  ADD
+  RET
+
 ; Is there such a bank? Q is zero if there is not.
 ;
 ; ASKING THE CONTROLLER FOR A BANK THAT IS NOT THERE IS REFUSED, and a refusal nobody
@@ -2008,7 +2392,7 @@ UnknownText:
 MonitorName:
 "monitor"
 MonitorHelp:
-"x examine, d disassemble, s set, b bank, g go, exit leaves"
+"x examine, d disassemble, a assemble, s set, b bank, g go, exit leaves"
 ExamineName:
 "x"
 DisName:
@@ -2029,6 +2413,18 @@ ReadOnlyText:
 "that bank will not be written"
 GoUsage:
 "g <address>"
+AsmName2:
+"a"
+AsmPrompt:
+": "
+DotText:
+"."
+AsmUsage:
+"a <address>, then instructions, then a dot"
+NoSuchOp:
+"no such instruction"
+NeedsValue:
+"that one needs a value after it"
 DirName:
 "dir"
 LoadName:
@@ -2102,6 +2498,22 @@ BankWas:
   0x00
 BankFlags:
   0x00
+AsmSelOne:
+  0x00
+AsmSelTwo:
+  0x00
+AsmLeft:
+  0x00
+AsmCount:
+  0x00
+AsmOpcode:
+  0x00
+AsmShape:
+  0x00
+AsmName:
+  #Reserve 0d5
+AsmLine:
+  #Reserve 0d41
 ShowAsCode:
   0x00
 DumpRecord:

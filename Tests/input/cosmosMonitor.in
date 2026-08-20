@@ -15,6 +15,20 @@ s 8000 26 48 D1 00 26 0A D1 00 18 12
 d 8000
 g 8000
 d 8000
+b data
+s 8100 68 65 6C 6C 6F 2C 20 74 79 70 65 64 0A 00
+b program
+a 8200
+SETD.0 8100
+SWI 10
+lda.2
+LDD.0.1
+frobnicate
+INIA
+SWI 12
+.
+d 8200
+g 8200
 exit
 dir
 exit

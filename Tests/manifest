@@ -225,6 +225,12 @@ cosmosRun            | CosmOS/Source/cosmos.asm           | run      | cosmosRun
 # It also asks to write into bank 2, the controller's own table, which is published read
 # only. That used to stop the machine, and the recorded output of this test contained the
 # crash without anybody noticing, which is what blessing a result without reading it buys.
+#
+# It ends with a whole program typed in: a string poked into Data Memory, instructions
+# assembled into Program Memory, and the result run - which prints something no assembler
+# ever saw. The mnemonics deliberately include a lower case one, both selector forms, an
+# instruction that does not exist and one missing its value, so that the refusals are
+# recorded next to the successes and a failed line is shown writing nothing.
 cosmosMonitor        | CosmOS/Source/cosmos.asm           | run      | cosmosMonitor.in   | -     | disks/cosmos.img
 # The original hello.asm, brought over as an application. It is not much of a program,
 # but it is the one that talks to the hardware directly: it writes to port 0x00 instead

@@ -719,9 +719,31 @@ bank 01
 | --- | --- |
 | `x [addr]` | Sixty-four bytes, as hex and as characters |
 | `d [addr]` | Eight instructions, disassembled |
+| `a addr` | Assemble instructions, until a line that is just a dot |
 | `s addr b b …` | Put those bytes there |
 | `b program\|data\|n` | Which bank to look at |
 | `g addr` | Go there |
+
+`a` writes the assembler's own syntax: a selector rides on the mnemonic as `LDA.0` or `LDD.0.1`, and leaving one off means Data Pointer 0 exactly as it does in a source file, so nothing learned at the monitor has to be unlearned when writing a program. Case does not matter, and the whole line is refused before anything is written, so a mistyped instruction leaves no half of itself behind.
+
+```
+* b data
+* s 8100 68 65 6C 6C 6F 2C 20 74 79 70 65 64 0A 00
+* b program
+* a 8200
+8200: SETD.0 8100
+8204: SWI 10
+8206: SWI 12
+8208: .
+* g 8200
+hello, typed
+```
+
+A program and its data, both entered by hand, calling a system service and returning to the prompt they were written at. Note the two banks: instructions go into Program Memory and the string into Data Memory, because that is what a Harvard machine means and the monitor will not guess for you.
+
+**Numbers here are hexadecimal and bare.** A source file writes `0x2000` or `0d16` because it has both and must say which; the monitor has one and says so once.
+
+**What cannot be written is a label**, and that is the whole difference between this and the assembler proper. A label is a promise to fill an address in later, and later is what a line at a time does not have. It is also why the same instruction table serves both directions here: what `a` writes, `d` reads back, and neither can drift from the other or from the assembler they were generated from.
 
 `x` and `d` share one cursor and each leaves it past what it showed, so without an address either carries on — reading through memory is one letter at a time, and you can switch between bytes and instructions without retyping where you are. `s` deliberately does not move it.
 
