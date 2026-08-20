@@ -1,0 +1,16 @@
+CosmOS
+> loaded, starting at 2000
+> two stops, and what the registers were at each
+break at 200E
+A 11 B 22 Q 00 S 00 
+DP0 1030 DP1 05CC DP2 039A DP3 2000 
+press a key 
+break at 2018
+A 44 B 55 Q 00 S 00 
+DP0 1000 DP1 05CC DP2 039A DP3 2000 
+press a key 
+carried on to the end
+finished
+> halted
+Execution halted.
+[exit 0]

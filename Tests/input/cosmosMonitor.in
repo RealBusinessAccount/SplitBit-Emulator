@@ -9,6 +9,8 @@ b data
 x 1000
 b 2
 x 0
+s 0 FF
+b program
 s 8000 26 48 D1 00 26 0A D1 00 18 12
 d 8000
 g 8000

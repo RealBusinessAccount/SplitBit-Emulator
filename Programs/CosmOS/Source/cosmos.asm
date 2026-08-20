@@ -985,6 +985,127 @@ serviceNoDisk:
   STA.2
   RETI
 
+; A breakpoint. Shows every register as the interrupted program had them, waits for a key,
+; and returns as though nothing happened.
+;
+; EVERY VALUE COMES OUT OF THE FRAME, not out of the registers, because by the time this
+; runs the registers belong to the handler. The frame is what the program had, and RETI is
+; going to give it all back, so what is shown is what will be resumed with.
+;
+; DP3 holds the frame throughout. It survives a CALL, and console.asm promises not to
+; disturb it, which is what lets the printing routines be used between one field and the
+; next. The Stack Pointer comes back to the same place after a balanced call, so the frame
+; stays where it was found.
+;
+;   +1 Status  +2 Q  +3 A  +4 B  +5 DP3  +7 DP2  +9 DP1  +11 DP0  +13 where it resumes
+handleBreak:
+  MVSD.3
+
+  ; Where it broke, which is two before where it resumes: the SWI and the vector it names.
+  SETD.0 BreakText
+  CALL printString
+  PSHD.3
+  POPD.0
+  DPUP.0 0d13
+  LDA.0
+  PSHA                  ; The high half, while the low one is worked on.
+  INCD.0
+  LDA.0
+  INIB 0d2
+  CCF
+  SUB                   ; Two back from where it resumes: the SWI and the vector it names.
+  MVQA
+  POPB
+  BRC breakBorrowed     ; It borrowed, so the high half comes down by one.
+  BRI breakAddress
+breakBorrowed:
+  DECB
+breakAddress:
+  PSHA                  ; low
+  PSHB                  ; high
+  POPA
+  CALL printByteHex
+  POPA
+  CALL printByteHex
+  CALL newLine
+
+  SETD.0 ARegText
+  PSHD.3
+  POPD.1
+  DPUP.1 0d3
+  CALL breakByte
+  SETD.0 BRegText
+  PSHD.3
+  POPD.1
+  DPUP.1 0d4
+  CALL breakByte
+  SETD.0 QRegText
+  PSHD.3
+  POPD.1
+  DPUP.1 0d2
+  CALL breakByte
+  SETD.0 SRegText
+  PSHD.3
+  POPD.1
+  DPUP.1 0d1
+  CALL breakByte
+  CALL newLine
+
+  SETD.0 DP0Text
+  PSHD.3
+  POPD.1
+  DPUP.1 0d11
+  CALL breakWord
+  SETD.0 DP1Text
+  PSHD.3
+  POPD.1
+  DPUP.1 0d9
+  CALL breakWord
+  SETD.0 DP2Text
+  PSHD.3
+  POPD.1
+  DPUP.1 0d7
+  CALL breakWord
+  SETD.0 DP3Text
+  PSHD.3
+  POPD.1
+  DPUP.1 0d5
+  CALL breakWord
+  CALL newLine
+
+  ; Anything typed carries on. Reading the data port waits however the console is set, which
+  ; is one key if the program asked for key mode and a whole line if it did not - and either
+  ; way it is the program's own console being borrowed for a moment.
+  SETD.0 ResumeText
+  CALL printString
+  INA 0x00
+  CALL newLine
+  RETI
+
+; DP0 names a field and DP1 points at it in the frame. The caller does the stepping, with
+; DPUP and a number written into the program, because a routine cannot hand a pointer back:
+; CALL saves DP0 to DP2 and RET puts them back, so a walk done in here would be undone on
+; the way out. Written that way first, and every field showed the frame's first byte.
+breakByte:
+  CALL printString
+  LDA.1
+  CALL printByteHex
+  INIA 0x20
+  OUTA 0x00
+  RET
+
+; The same for the two byte fields, most significant first the way the frame holds them.
+breakWord:
+  CALL printString
+  LDA.1
+  CALL printByteHex
+  INCD.1
+  LDA.1
+  CALL printByteHex
+  INIA 0x20
+  OUTA 0x00
+  RET
+
 ; A and B together are a number. Prints it in decimal without leading zeroes, which covers
 ; a line number and a byte count both, so there is no need for one service each.
 handlePrintNumber:
@@ -1279,6 +1400,16 @@ dumpNoBank:
 ; The cursor is left alone. Somebody poking a byte is usually looking at something else, and
 ; having the address they were reading move underneath them would be a poor reward.
 doSet:
+  ; A bank can be present and still refuse to be written: the controller's own table is
+  ; published read only, and writing to it is refused. A refusal nobody catches stops the
+  ; machine, which is a poor answer to somebody looking around with b and then typing s.
+  CALL bankPresent
+  SETD.0 BankFlags
+  LDA.0
+  INIB 0x02                 ; The read only bit of that bank's record.
+  AND
+  BNQ setReadOnly
+
   SETD.1 TextRest
   LDD.0.1
   CALL textHexWord
@@ -1308,6 +1439,12 @@ setByte:
   PSHD.3
   POPD.0
   BRI setByte
+
+setReadOnly:
+  SETD.0 ReadOnlyText
+  CALL printString
+  CALL newLine
+  BRI prompt
 
 setWhat:
   SETD.0 SetUsage
@@ -1694,6 +1831,8 @@ bankPresent:
   LDA.0
   OUTA 0xE2
   INA 0xE9              ; The flags byte of that bank's record.
+  SETD.0 BankFlags
+  STA.0                 ; Kept whole, since present is not the only thing it says.
   INIB 0x01
   AND
   RET
@@ -1788,6 +1927,26 @@ NothingLoaded:
 Finished:
 "finished"
 
+BreakText:
+"break at "
+ARegText:
+"A "
+BRegText:
+"B "
+QRegText:
+"Q "
+SRegText:
+"S "
+DP0Text:
+"DP0 "
+DP1Text:
+"DP1 "
+DP2Text:
+"DP2 "
+DP3Text:
+"DP3 "
+ResumeText:
+"press a key "
 MonitorPrompt:
 "* "
 UnknownText:
@@ -1813,6 +1972,8 @@ BankIs:
 "bank "
 SetUsage:
 "s <address> <byte> <byte> ..."
+ReadOnlyText:
+"that bank will not be written"
 GoUsage:
 "g <address>"
 DirName:
@@ -1885,6 +2046,8 @@ Mode:
 DumpCount:
   0x00
 BankWas:
+  0x00
+BankFlags:
   0x00
 ShowAsCode:
   0x00
@@ -2006,4 +2169,5 @@ CommandLine:
   osFileDelete   handleFileDelete
   osFileRename   handleFileRename
   osPrintNumber  handlePrintNumber
+  osBreak        handleBreak
   Device 0x20    diskDone

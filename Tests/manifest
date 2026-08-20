@@ -221,6 +221,10 @@ cosmosRun            | CosmOS/Source/cosmos.asm           | run      | cosmosRun
 # The last part is what the mode is FOR: a program typed in as bytes, run with g, and the
 # prompt that comes back is the monitor's own. A program giving the machine back lands where
 # it was started from, so looking at something and running it do not interrupt each other.
+#
+# It also asks to write into bank 2, the controller's own table, which is published read
+# only. That used to stop the machine, and the recorded output of this test contained the
+# crash without anybody noticing, which is what blessing a result without reading it buys.
 cosmosMonitor        | CosmOS/Source/cosmos.asm           | run      | cosmosMonitor.in   | -     | disks/cosmos.img
 # The original hello.asm, brought over as an application. It is not much of a program,
 # but it is the one that talks to the hardware directly: it writes to port 0x00 instead
@@ -270,6 +274,13 @@ cosmosFiles          | CosmOS/Source/cosmos.asm           | run      | cosmosFil
 # name, and with several words, since what arrives is the rest of the line rather than a
 # list and it is the program's business what to make of it.
 cosmosSay            | CosmOS/Source/cosmos.asm           | run      | cosmosSay.in       | -     | disks/cosmos.img
+# A program stopping itself to be looked at. Two breakpoints, so what is checked is not only
+# that one fires but that the SECOND one does - which is the whole difference between this
+# design and one that overwrites an instruction, since an overwritten instruction has to be
+# put back to continue and putting it back is the same act as disarming the breakpoint.
+# Every value shown comes out of the interrupt frame rather than the registers, because by
+# the time the handler runs the registers are the handler's.
+cosmosBreak          | CosmOS/Source/cosmos.asm           | run      | cosmosBreak.in     | -     | disks/cosmos.img
 # The editor, which is the first program on this machine that makes a file a person typed:
 # every byte on every other image here was put there by the host tool. It is run twice in
 # one session, and that is the test rather than a flourish - the second run reads back what
@@ -291,6 +302,7 @@ app-Life             | CosmOS/Apps/Life.asm               | assemble | -        
 app-Snake            | CosmOS/Apps/Snake.asm              | assemble | -                  | -
 app-Keys             | CosmOS/Apps/Keys.asm               | assemble | -                  | -
 app-Say              | CosmOS/Apps/Say.asm                | assemble | -                  | -
+app-Break            | CosmOS/Apps/Break.asm              | assemble | -                  | -
 app-Edit             | CosmOS/Apps/Edit.asm               | assemble | -                  | -
 app-Files            | CosmOS/Apps/Files.asm              | assemble | -                  | -
 

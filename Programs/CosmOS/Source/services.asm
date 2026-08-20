@@ -51,3 +51,17 @@
 ; number, in decimal, without leading zeroes. A and B together, so one service covers both
 ; a line number and a byte count and there is no need for two.
   osPrintNumber  0d24
+
+; ---- Stopping to look ----
+;
+; A breakpoint. Put SWI osBreak anywhere in a program and the system shows every register as
+; the program had them, waits for a key, and carries on.
+;
+; NOTHING IS OVERWRITTEN, which is what makes this simple. A breakpoint that replaced an
+; instruction would have to put it back to continue, and putting it back disarms the
+; breakpoint - so firing twice would need the instruction to be stepped over and the
+; breakpoint replaced behind it, and this machine has no way to step one instruction. An SWI
+; costs two bytes of the program and fires for ever, because there was never anything to
+; restore. The price is that it is part of the program: a build with breakpoints in it has
+; different addresses from one without.
+  osBreak        0d25

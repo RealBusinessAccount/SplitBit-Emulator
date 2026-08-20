@@ -560,6 +560,7 @@ Those numbers are written down once, in `Programs/CosmOS/Source/services.asm`, w
 | osFileDelete | DP0 names a file. Q is zero if it went. |
 | osFileRename | DP0 is the name a file has, DP1 the name it should have. Q is zero if it moved. |
 | osPrintNumber | A and B together are a number. Prints it in decimal, without leading zeroes. |
+| osBreak | Stops the program, shows every register as it had them, waits for a key, and carries on. |
 
 ```
 #Include services.asm
@@ -567,6 +568,23 @@ Those numbers are written down once, in `Programs/CosmOS/Source/services.asm`, w
   SETD.0 Message
   SWI osPrintString
 ```
+
+### Stopping To Look:
+
+`SWI osBreak` is a breakpoint. It shows every register as the program had them, waits for a key, and returns as though nothing happened.
+
+```
+break at 200E
+A 11 B 22 Q 00 S 00
+DP0 1030 DP1 05AE DP2 039A DP3 2000
+press a key
+```
+
+Every value comes out of the interrupt frame rather than out of the registers, because by the time the handler runs the registers belong to the handler. The frame is what the program had and what RETI is about to give back, so what is shown is what will be resumed with. The address is two before where it resumes: the `SWI` and the vector it names.
+
+**Nothing is overwritten, and that is the whole of why it is simple.** A breakpoint poked into a running program has to replace an instruction, and putting that instruction back in order to continue is the same act as disarming the breakpoint. Firing a second time would mean stepping over the restored instruction and putting the breakpoint back behind it, and this machine has no way to step a single instruction. Two bytes of `SWI` cost a little space and fire for ever, because there was never anything to restore.
+
+The price is that a breakpoint is part of the program. A build with breakpoints in it has different addresses from a build without — the same bargain every machine makes that has a break instruction.
 
 ### The Disk Without A Filesystem:
 
@@ -668,6 +686,7 @@ Whoever does the loading keeps its own code and data below the addresses the loa
 | Keys | The console interrupting rather than being asked. The only one that brings a vector of its own, which is what the version two format exists for. |
 | Say | Prints whatever it was told, which is the shortest thing that shows osArgument working. |
 | Files | Writes a file, reads it back, renames it and deletes it, in 645 bytes, including nothing but the service names. It is what says a program does not need a filesystem inside it. |
+| Break | Stops itself twice with SWI osBreak, so that the registers can be seen changing between one stop and the next. |
 | Edit | A line editor. |
 
 ### The Monitor:

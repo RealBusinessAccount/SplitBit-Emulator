@@ -26,6 +26,35 @@ CosmOS
 0010  03 FF 08 00 00 00 00 00 01 20 01 00 00 00 00 00  ......... ......
 0020  00 FF 00 00 00 00 00 00 00 FF 00 00 00 00 00 00  ................
 0030  00 FF 00 00 00 00 00 00 00 FF 00 00 00 00 00 00  ................
-* Fault: The device on port 233 refused the access at Program Address 0x1359, and nothing is installed to deal with it.
+* that bank will not be written
+* bank 00
+* * 8000  26 48        INIA 48
+8002  D1 00        OUTA 00
+8004  26 0A        INIA 0A
+8006  D1 00        OUTA 00
+8008  18 12        SWI 12
+800A  00           ADD
+800B  00           ADD
+800C  00           ADD
+* H
+finished
+* 8000  26 48        INIA 48
+8002  D1 00        OUTA 00
+8004  26 0A        INIA 0A
+8006  D1 00        OUTA 00
+8008  18 12        SWI 12
+800A  00           ADD
+800B  00           ADD
+800C  00           ADD
+* > greet.sbx               210
+hello.sbx               52
+Life.sbx                1411
+Snake.sbx               2175
+Keys.sbx                663
+Say.sbx                 155
+Break.sbx               128
+notes.txt               21
+8 files
+> halted
 Execution halted.
-[exit 1]
+[exit 0]

@@ -91,6 +91,11 @@ for i in 1 2 3 4 5 6 7 8; do "$TOOL" put "$DISKS/sbfs.img" "filler$i.txt" >/dev/
 "$ROOT/Assembler" -I "$ROOT/Programs/CosmOS/Source" \
     "$ROOT/Programs/CosmOS/Apps/Say.asm" -o "$WORK/Say.sbx" >/dev/null
 "$TOOL" put "$DISKS/cosmos.img" "$WORK/Say.sbx" >/dev/null
+# Break.sbx stops itself twice and shows what the registers were each time. It needs no disk
+# of its own: it only prints.
+"$ROOT/Assembler" -I "$ROOT/Programs/CosmOS/Source" \
+    "$ROOT/Programs/CosmOS/Apps/Break.asm" -o "$WORK/Break.sbx" >/dev/null
+"$TOOL" put "$DISKS/cosmos.img" "$WORK/Break.sbx" >/dev/null
 printf 'this is not a program' > notes.txt
 "$TOOL" put "$DISKS/cosmos.img" notes.txt >/dev/null
 
