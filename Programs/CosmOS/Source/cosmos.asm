@@ -1049,6 +1049,35 @@ breakAddress:
   POPD.1
   DPUP.1 0d1
   CALL breakByte
+
+  ; And which bits of it those are, since a debug dump that makes you look the number up is
+  ; only half of one. Halt is not among them: the machine is plainly not halted.
+  PSHD.3
+  POPD.1
+  DPUP.1 0d1
+  LDA.1
+  PSHA
+  INIB 0x01
+  AND
+  BRQ breakNoCarry
+  SETD.0 CarryText
+  CALL printString
+breakNoCarry:
+  POPA
+  PSHA
+  INIB 0x02
+  AND
+  BRQ breakNoFault
+  SETD.0 FaultText
+  CALL printString
+breakNoFault:
+  POPA
+  INIB 0x04
+  AND
+  BRQ breakNoInts
+  SETD.0 IntsText
+  CALL printString
+breakNoInts:
   CALL newLine
 
   SETD.0 DP0Text
@@ -1071,6 +1100,22 @@ breakAddress:
   POPD.1
   DPUP.1 0d5
   CALL breakWord
+
+  ; The Stack Pointer is not in the frame, because the frame is where the Stack Pointer is.
+  ; What the program had is fourteen bytes above this one, that being what entering an
+  ; interrupt puts down.
+  SETD.0 SPText
+  CALL printString
+  PSHD.3
+  POPD.0
+  DPUP.0 0d14
+  PSHD.0
+  POPB
+  POPA
+  CALL printByteHex
+  PSHB
+  POPA
+  CALL printByteHex
   CALL newLine
 
   ; Anything typed carries on. Reading the data port waits however the console is set, which
@@ -1936,7 +1981,7 @@ BRegText:
 QRegText:
 "Q "
 SRegText:
-"S "
+"status "
 DP0Text:
 "DP0 "
 DP1Text:
@@ -1945,6 +1990,14 @@ DP2Text:
 "DP2 "
 DP3Text:
 "DP3 "
+SPText:
+"SP "
+CarryText:
+"carry "
+FaultText:
+"fault "
+IntsText:
+"interrupts "
 ResumeText:
 "press a key "
 MonitorPrompt:

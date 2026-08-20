@@ -575,12 +575,16 @@ Those numbers are written down once, in `Programs/CosmOS/Source/services.asm`, w
 
 ```
 break at 200E
-A 11 B 22 Q 00 S 00
-DP0 1030 DP1 05AE DP2 039A DP3 2000
+A 11 B 22 Q 00 status 00
+DP0 1030 DP1 05EF DP2 039A DP3 2000 SP FFFF
 press a key
 ```
 
 Every value comes out of the interrupt frame rather than out of the registers, because by the time the handler runs the registers belong to the handler. The frame is what the program had and what RETI is about to give back, so what is shown is what will be resumed with. The address is two before where it resumes: the `SWI` and the vector it names.
+
+**The Stack Pointer is the exception, because it is not in the frame** — the frame is *where* the Stack Pointer is. What the program had is fourteen bytes above the frame, that being what entering an interrupt puts down, so it is worked out rather than read. Breaking inside a subroutine shows it ten lower than breaking outside one, which is the size of a CALL frame and a quick way to see how deep you are.
+
+The status byte is shown as a number and then as the bits that are up — `carry`, `fault`, `interrupts` — because a dump that makes you look the number up is only half a dump.
 
 **Nothing is overwritten, and that is the whole of why it is simple.** A breakpoint poked into a running program has to replace an instruction, and putting that instruction back in order to continue is the same act as disarming the breakpoint. Firing a second time would mean stepping over the restored instruction and putting the breakpoint back behind it, and this machine has no way to step a single instruction. Two bytes of `SWI` cost a little space and fire for ever, because there was never anything to restore.
 

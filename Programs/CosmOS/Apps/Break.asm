@@ -14,8 +14,9 @@
 ; addresses from a build without, which is the same bargain every machine makes that has a
 ; break instruction.
 ;
-; Correct output is two stops, showing A and B changing between them, and the addresses of
-; the two SWIs.
+; Correct output is two stops. A and B differ between them, the addresses differ, and the
+; Stack Pointer differs too, because the second one is inside a subroutine and a call has
+; put ten bytes down by then.
 
 #Include services.asm
 
@@ -32,15 +33,20 @@ start:
   SETD.0 Marker
   SWI osBreak
 
-  ; Something for the second stop to show as different.
-  INIA 0d68
-  INIB 0d85
-  SETD.0 Banner
-  SWI osBreak
+  ; The second stop is inside a subroutine, so that the Stack Pointer is visibly not where
+  ; it was: a call puts ten bytes down before this one gets there.
+  CALL deeper
 
   SETD.0 DoneText
   SWI osPrintString
   SWI osExit
+
+deeper:
+  INIA 0d68
+  INIB 0d85
+  SETD.0 Banner
+  SWI osBreak
+  RET
 
 #Data
 
