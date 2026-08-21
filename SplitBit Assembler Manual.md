@@ -24,7 +24,7 @@ Any token beginning with a '0' is read as a numerical literal, so a malformed on
 
 A string may be up to 255 characters. Each one is written down with a zero byte on the end, which is what lets a program find where it stops, and it means two strings written one after the other are not one longer string: there is a zero between them. A run of bytes longer than a string can hold has to be written as literals, or put there by the program itself while it runs.
 
-**Strings belong in the Data Segment, and only there.** This is a Harvard machine: no instruction reads Program Memory, so a string put in the Program Segment could not be read by the program carrying it, and only the memory controller could reach it at all. The assembler refuses one rather than emitting bytes nothing can use. Single byte literals are a different matter and may go in either segment — a table of bytes a program branches through is a reasonable thing to want in Program Memory.
+**Strings belong in the Data Segment, and only there.** This is a Harvard machine: no instruction reads Program Memory, so a string put in the Program Segment could not be read by the program carrying it, and only the memory controller could reach it at all. The assembler refuses one rather than emitting bytes nothing can use. Single byte literals are a different matter and may go in either segment - a table of bytes a program branches through is a reasonable thing to want in Program Memory.
 
 The one exception to the single byte rule is #Align and #Reserve, whose numbers are never emitted as bytes and may go up to 0xFFFF. See Moving The Cursor Along.
 
@@ -233,7 +233,7 @@ A line with a name and nothing after it declares the name and its number without
   osExit   0d17
 ```
 
-The numbers are there because this is the case where a number has to be agreed. Everything else in a Vector Segment is numbered by the assembler, which can only see one program at a time — and that is exactly the situation where it cannot help. See Numbers You Write Down below.
+The numbers are there because this is the case where a number has to be agreed. Everything else in a Vector Segment is numbered by the assembler, which can only see one program at a time - and that is exactly the situation where it cannot help. See Numbers You Write Down below.
 
 Five names already mean something:
 
@@ -282,7 +282,7 @@ The software vector space is divided so the two kinds cannot meet:
 
 You may give a number only in the pinned range. Below it belongs to the machine, and above it is where the assembler is allocating, so a number claimed there could be handed to something else in the same breath.
 
-**Why the split exists**, because it is not obvious and the reason is a real mistake that used to be possible. When both kinds came out of one range, the numbers a program got for its own traps depended on what it had included: adding a line that included a file naming three services pushed every trap after it along by three, and a program that had *not* included that file was given the first number in the range — which was a service. Installing its own handler there would have quietly replaced one. Now numbers that must agree are written down, and numbers that need not agree come from somewhere nobody else is looking, so a program's own vectors are its own regardless of how it was built.
+**Why the split exists**, because it is not obvious and the reason is a real mistake that used to be possible. When both kinds came out of one range, the numbers a program got for its own traps depended on what it had included: adding a line that included a file naming three services pushed every trap after it along by three, and a program that had *not* included that file was given the first number in the range - which was a service. Installing its own handler there would have quietly replaced one. Now numbers that must agree are written down, and numbers that need not agree come from somewhere nobody else is looking, so a program's own vectors are its own regardless of how it was built.
 
 The assembler will refuse a number outside the pinned range, two names given the same number, a number on `Boot`, `SoftReset` or `BadOpcode`, whose numbers are the machine's, and a number that contradicts one the same name was already given.
 
@@ -491,23 +491,23 @@ wrote hello.bin: program 17, data 14, labels 2
 
 Loading and running are separate commands in CosmOS, so the source file is the argument to `run`.
 
-**Its output must be byte for byte what the host assembler produces from the same source**, and `Tests/native.sh` checks exactly that: it assembles `Programs/Examples/hello.asm` both ways and compares the files, then runs the one the machine built. This is the discipline SplitDisk and `sbfs.asm` already work under — two implementations of one written specification, each one checking the other. "It ran" is not good enough for an assembler, because a binary with a label one byte out runs right up until it jumps into the middle of an instruction.
+**Its output must be byte for byte what the host assembler produces from the same source**, and `Tests/native.sh` checks exactly that: it assembles `Programs/Examples/hello.asm` both ways and compares the files, then runs the one the machine built. This is the discipline SplitDisk and `sbfs.asm` already work under - two implementations of one written specification, each one checking the other. "It ran" is not good enough for an assembler, because a binary with a label one byte out runs right up until it jumps into the middle of an instruction.
 
 ### How It Differs Inside:
 
 The host assembler reads every token of every file into one array and works on that. **That design cannot port and never could**: `cosmos.asm` alone is 56,047 bytes of source against 64K of Data Memory, and its token array would be several times that. So the native one streams its source through a 256 byte window, twice, and keeps only the label table between the passes.
 
-Two passes are enough because **every length is known without resolving anything**. How many bytes a token comes to falls out of what the token is — an instruction's from its shape, a value's is one, a string's is its characters and a zero — and never from the value of anything named. So the first pass works out exactly where every label lands and the second never needs a fixup list. A forward reference stops being a special case and becomes the reason there are two passes at all.
+Two passes are enough because **every length is known without resolving anything**. How many bytes a token comes to falls out of what the token is - an instruction's from its shape, a value's is one, a string's is its characters and a zero - and never from the value of anything named. So the first pass works out exactly where every label lands and the second never needs a fixup list. A forward reference stops being a special case and becomes the reason there are two passes at all.
 
 One thing is genuinely easier here than on a host. The host assembler searches a list of include directories, because a host has directories; **SBFS is flat**, so an include is a file name and there is nowhere else to look.
 
 ### Building Applications:
 
-`#Include` splices another file in where it stands, so the reader is a stack of readers: the current file's whole state goes aside, the new one opens, and the end of it pops the old one back. A file is included **once** — including it twice is not an error, it just does nothing, which is what lets two libraries depend on a third.
+`#Include` splices another file in where it stands, so the reader is a stack of readers: the current file's whole state goes aside, the new one opens, and the end of it pops the old one back. A file is included **once** - including it twice is not an error, it just does nothing, which is what lets two libraries depend on a third.
 
 `#Base` says where a segment is loaded, and a program that says so gets the SBEX loadable header instead of the SPBT boot one, with a `.sbx` name rather than a `.bin`. `#Reserve` and `#Align` lay down runs of zeroes; how many an `#Align` comes to depends on where the cursor has reached, which is why both passes keep a cursor rather than the second one keeping only a write pointer.
 
-Names in `#Vectors` are read and numbered, pinned where the source pins them, so `SWI osPrintString` resolves. **What a name after `SWI` means is settled by what it follows**, not by anything about the name — the Vector Segment may live in a file included further down and may not have been read yet.
+Names in `#Vectors` are read and numbered, pinned where the source pins them, so `SWI osPrintString` resolves. **What a name after `SWI` means is settled by what it follows**, not by anything about the name - the Vector Segment may live in a file included further down and may not have been read yet.
 
 That is everything an application needs:
 
@@ -535,7 +535,7 @@ A `#Vectors` line that names a **handler** says this program implements that vec
 
 `Device` is named by the port it is plugged into, because that is what decides which vector it arrives through. `Device`, `Boot`, `SoftReset`, `BadOpcode`, `GuardViolation` and `BankFault` are matched **without regard to case**, the way mnemonics are: they are part of the language rather than names the programmer chose.
 
-**A declaration and an implementation are the same entry.** `services.asm` says a service is called `osPrintString` and has number 16; `cosmos.asm` says `osPrintString` is handled by `handlePrintString`. Both sides include the first file, so the name is met twice and the second time fills in the handler. That is what lets one shared file serve both a program that calls a service and the system that implements it — and it is why the first pass declares and the second implements, a handler being an address and no address being known until every label has been placed.
+**A declaration and an implementation are the same entry.** `services.asm` says a service is called `osPrintString` and has number 16; `cosmos.asm` says `osPrintString` is handled by `handlePrintString`. Both sides include the first file, so the name is met twice and the second time fills in the handler. That is what lets one shared file serve both a program that calls a service and the system that implements it - and it is why the first pass declares and the second implements, a handler being an address and no address being known until every label has been placed.
 
 ### Self Hosting:
 
@@ -551,13 +551,13 @@ wrote Asm.sbx: program 7533, data 4099, labels 555
 
 Both come out **byte for byte identical** to what the host assembler builds from the same source. `make run-cosmos` puts every source file on the disk, so this can be done rather than read about.
 
-**The check that matters most is the third one.** A binary that matches could still have been built by an assembler wrong in some way this particular source happens not to exercise. So `Tests/native.sh` boots the CosmOS that CosmOS built and has *that* assemble CosmOS again — and the second generation is identical to the first, down to the cycle count. It is a fixed point, which means the machinery has been through itself.
+**The check that matters most is the third one.** A binary that matches could still have been built by an assembler wrong in some way this particular source happens not to exercise. So `Tests/native.sh` boots the CosmOS that CosmOS built and has *that* assemble CosmOS again - and the second generation is identical to the first, down to the cycle count. It is a fixed point, which means the machinery has been through itself.
 
 After that the host is a convenience rather than a necessity.
 
 CosmOS takes about 80 million cycles, which is eighty seconds of emulated time and under a second under `--fast`. Most of that is the label table: a straight walk of 475 names, several thousand times. Sorting it or bucketing it on the first character are both easy, and neither was worth writing before there was something to measure.
 
-**The hardest thing it assembles is not the operating system, it is itself** — 555 labels and 6,770 bytes of name against CosmOS's 475 and 5,881, and a larger output. That is what the buffer sizes are cut to.
+**The hardest thing it assembles is not the operating system, it is itself** - 555 labels and 6,770 bytes of name against CosmOS's 475 and 5,881, and a larger output. That is what the buffer sizes are cut to.
 
 ### What It Does Not Do Yet:
 

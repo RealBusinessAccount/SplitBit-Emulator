@@ -477,7 +477,7 @@ A file's size is settled when it is made, because nothing can grow one afterward
 
 ### Saving Something Twice:
 
-Which is why saving a document is not the same as writing a file, and why sbfsSaveFile exists rather than each tool doing it. A file that has grown will usually not fit where it was, so saving it means putting it somewhere else and letting go of where it was — and **the obvious order is a trap**:
+Which is why saving a document is not the same as writing a file, and why sbfsSaveFile exists rather than each tool doing it. A file that has grown will usually not fit where it was, so saving it means putting it somewhere else and letting go of where it was - and **the obvious order is a trap**:
 
 ```
   delete the old one
@@ -494,7 +494,7 @@ A create can be refused for want of a run long enough even on a disk with plenty
   rename the temporary
 ```
 
-**That is what renaming is for.** It looks like a convenience and it is the safety mechanism: it is the only one of the three operations that moves no data — a name lives in the directory entry, so renaming writes twenty two bytes into one block — which makes it the only one that can be left until last and relied on not to fail.
+**That is what renaming is for.** It looks like a convenience and it is the safety mechanism: it is the only one of the three operations that moves no data - a name lives in the directory entry, so renaming writes twenty two bytes into one block - which makes it the only one that can be left until last and relied on not to fail.
 
 Finding room is a walk through the directory rather than a lookup, because there is no allocation table. With files laid down contiguously the directory already says which blocks are spoken for, and a second copy of that would be a second thing to keep right. The free count in the superblock is kept up to date but it is a note rather than the truth: it can be worked out again from the directory, and the directory is the one to believe.
 
@@ -545,7 +545,7 @@ readLine cuts a line short if it is longer than the buffer, and then reads the r
 
 ## What A Program May Ask The System For:
 
-A loaded program is on its own hardware and can do anything the machine can do — it is a fence, not a wall. But the things it usually wants are things the system is already doing, and asking is both shorter and the only way to reach code that was assembled separately. `CALL` needs a label, and a label has to be in the same assembly; `SWI` needs only a number both sides agree on.
+A loaded program is on its own hardware and can do anything the machine can do - it is a fence, not a wall. But the things it usually wants are things the system is already doing, and asking is both shorter and the only way to reach code that was assembled separately. `CALL` needs a label, and a label has to be in the same assembly; `SWI` needs only a number both sides agree on.
 
 Those numbers are written down once, in `Programs/CosmOS/Source/services.asm`, which both the system and the program include. Neither side ever types a number.
 
@@ -584,17 +584,17 @@ press a key
 
 Every value comes out of the interrupt frame rather than out of the registers, because by the time the handler runs the registers belong to the handler. The frame is what the program had and what RETI is about to give back, so what is shown is what will be resumed with. The address is two before where it resumes: the `SWI` and the vector it names.
 
-**The Stack Pointer is the exception, because it is not in the frame** — the frame is *where* the Stack Pointer is. What the program had is fourteen bytes above the frame, that being what entering an interrupt puts down, so it is worked out rather than read. Breaking inside a subroutine shows it ten lower than breaking outside one, which is the size of a CALL frame and a quick way to see how deep you are.
+**The Stack Pointer is the exception, because it is not in the frame** - the frame is *where* the Stack Pointer is. What the program had is fourteen bytes above the frame, that being what entering an interrupt puts down, so it is worked out rather than read. Breaking inside a subroutine shows it ten lower than breaking outside one, which is the size of a CALL frame and a quick way to see how deep you are.
 
-The status byte is shown as a number and then as the bits that are up — `carry`, `fault`, `interrupts` — because a dump that makes you look the number up is only half a dump.
+The status byte is shown as a number and then as the bits that are up - `carry`, `fault`, `interrupts` - because a dump that makes you look the number up is only half a dump.
 
 **Nothing is overwritten, and that is the whole of why it is simple.** A breakpoint poked into a running program has to replace an instruction, and putting that instruction back in order to continue is the same act as disarming the breakpoint. Firing a second time would mean stepping over the restored instruction and putting the breakpoint back behind it, and this machine has no way to step a single instruction. Two bytes of `SWI` cost a little space and fire for ever, because there was never anything to restore.
 
-The price is that a breakpoint is part of the program. A build with breakpoints in it has different addresses from a build without — the same bargain every machine makes that has a break instruction.
+The price is that a breakpoint is part of the program. A build with breakpoints in it has different addresses from a build without - the same bargain every machine makes that has a break instruction.
 
 ### The Disk Without A Filesystem:
 
-A program that wants a file does not need to know what a filesystem is. Before these existed it had to include the whole of `sbfs.asm` — two and a half kilobytes of a private copy of code the system already had running — and then mount a disk that was already mounted.
+A program that wants a file does not need to know what a filesystem is. Before these existed it had to include the whole of `sbfs.asm` - two and a half kilobytes of a private copy of code the system already had running - and then mount a disk that was already mounted.
 
 There is no service to mount one, and that is not an omission. The system mounts the disk before it reads its first prompt, and there is one disk with one buffer registered as one bank; a program mounting it again was only ever an artefact of owning a second copy of the library. That call disappears rather than moving.
 
@@ -625,7 +625,7 @@ readLoop:
   ...                       ; DP3 is how many of its bytes are the file's.
 ```
 
-**There is no open and no close.** Every call names the file and says which block it wants, so nothing is held between them: a program that stops halfway leaves nothing behind, and there is no handle to run out of. The system does remember where the last file it was asked about lives, so reading four hundred blocks searches the directory once rather than four hundred times — but that is a speed and not a promise, and a caller never has to know about it.
+**There is no open and no close.** Every call names the file and says which block it wants, so nothing is held between them: a program that stops halfway leaves nothing behind, and there is no handle to run out of. The system does remember where the last file it was asked about lives, so reading four hundred blocks searches the directory once rather than four hundred times - but that is a speed and not a promise, and a caller never has to know about it.
 
 `osFileInfo` answers in **blocks rather than bytes**, and that is forced rather than chosen. A file on a sixteen megabyte disk can be twenty four bits long and a Data Pointer holds sixteen. Blocks fit; the bytes in the last one come back from `osFileBlock` when the reader gets there.
 
@@ -643,9 +643,9 @@ readLoop:
 
 Running off the end is how a reader finds out it has finished, so it gets an answer of its own rather than being reported as a disk that failed.
 
-`Programs/CosmOS/Apps/Stream.asm` reads an 84,000 byte file through a 256 byte buffer, then reads a small file both ways — whole with `osFileRead` and streamed — and checks that the two agree.
+`Programs/CosmOS/Apps/Stream.asm` reads an 84,000 byte file through a 256 byte buffer, then reads a small file both ways - whole with `osFileRead` and streamed - and checks that the two agree.
 
-`Programs/CosmOS/Apps/Files.asm` does the whole round trip — write, read, report, rename, delete — in 645 bytes, and includes nothing but the service names.
+`Programs/CosmOS/Apps/Files.asm` does the whole round trip - write, read, report, rename, delete - in 645 bytes, and includes nothing but the service names.
 
 `osArgument` is how a program is told what it is for. Everything written before it did the same thing however it was started, which is fine for a program that greets you and no use to one that edits a named document. What arrives is the whole rest of the line, spaces and all, rather than a list of words: what counts as an argument is the program's business, and handing over what was typed is the system's.
 
@@ -653,7 +653,7 @@ A handler is entered with the caller's registers exactly as they were, because a
 
 ### How A Service Answers:
 
-The same thing that makes an interrupt safe makes a service mute. RETI restores every register from the frame, so whatever a handler worked out is thrown away on the way out — which is exactly right for a device interrupting at a moment nobody chose, and useless for a service that was asked a question.
+The same thing that makes an interrupt safe makes a service mute. RETI restores every register from the frame, so whatever a handler worked out is thrown away on the way out - which is exactly right for a device interrupting at a moment nobody chose, and useless for a service that was asked a question.
 
 A service answers by **writing into its own frame**, over the saved register, and letting RETI put it back. MVSD copies the Stack Pointer into a Data Pointer and the frame sits just above it, so returning a byte in Q is three instructions:
 
@@ -668,7 +668,7 @@ answer:
 
 **Which registers a service may answer in is the convention CALL already has: Q and DP3.** A subroutine cannot hand back A, B or Data Pointers 0 to 2 because RET puts them back; a service *could* write over any of them and should not, for exactly the reason that list exists. A caller is entitled to find what it kept still there.
 
-**Only the handler itself can do this.** The offsets are from wherever the Stack Pointer is, and a CALL moves it by ten — so a routine called by a handler that tried the same thing would be writing into its own return address. The poke belongs inline, next to the RETI.
+**Only the handler itself can do this.** The offsets are from wherever the Stack Pointer is, and a CALL moves it by ten - so a routine called by a handler that tried the same thing would be writing into its own return address. The poke belongs inline, next to the RETI.
 
 A service that has nothing to say does nothing, and the caller's registers arrive back untouched. That is worth knowing from the other side too: a service cannot corrupt a register by accident, only by deciding to.
 
@@ -698,11 +698,11 @@ A program that only wants to be run needs nothing here and says version one. A p
 
 Each vector is four bytes: the address of the slot in the vector table, then the address to put in it, both most significant byte first. Naming the slot rather than the vector number means the loader does no arithmetic and does not have to know where either vector table begins, and one entry can be a software or a hardware vector without saying which it is.
 
-**A version two file is refused by a loader that cannot install them.** That is the point of the version rather than an inconvenience of it. A program whose handlers were quietly dropped would load, run, and then go wrong somewhere with nothing to connect the failure back to loading — a game waiting for keys that no longer arrive. Failing once, at load, with a reason, is worth more than running.
+**A version two file is refused by a loader that cannot install them.** That is the point of the version rather than an inconvenience of it. A program whose handlers were quietly dropped would load, run, and then go wrong somewhere with nothing to connect the failure back to loading - a game waiting for keys that no longer arrive. Failing once, at load, with a reason, is worth more than running.
 
 **Whoever installs them takes them back.** A vector points into the program that supplied it, so one left in the table after that program has gone aims an interrupt at whatever occupies those addresses next. CosmOS keeps its own copy of what a program brought, puts them in when the program is run and not when it is loaded, and restores what was underneath them when the program gives the machine back. Restoring, rather than clearing: a program is allowed to install a handler over one the system was already using, and when it goes, what it covered up has to come back rather than become a hole.
 
-`Boot` in a loadable program fills in the entry field, since that is what it means, and is not installed as vector 0 — where the machine starts is not a loaded program's business. Without one, a program begins at the first byte of its code.
+`Boot` in a loadable program fills in the entry field, since that is what it means, and is not installed as vector 0 - where the machine starts is not a loaded program's business. Without one, a program begins at the first byte of its code.
 
 ### Where A Program Says It Lives:
 
@@ -726,7 +726,7 @@ Whoever does the loading keeps its own code and data below the addresses the loa
 
 ## Programs That Come With The System:
 
-`Programs/CosmOS/Apps` holds what the shell can load. Several are old programs written for the bare machine that needed five edits each to become loadable ones — the Fibonacci and sieve programs, `greet`, and `hello`. The rest were written for the system as it is now, and each of those exists to show one thing working:
+`Programs/CosmOS/Apps` holds what the shell can load. Several are old programs written for the bare machine that needed five edits each to become loadable ones - the Fibonacci and sieve programs, `greet`, and `hello`. The rest were written for the system as it is now, and each of those exists to show one thing working:
 
 | Program | What it is for |
 | --- | --- |
@@ -743,7 +743,7 @@ Whoever does the loading keeps its own code and data below the addresses the loa
 
 The monitor is **part of the shell**, not a program the shell loads, and that is the whole reason it works. A loaded program occupies the one place a loaded program goes, so a monitor that was an application could never look at any other application: loading the thing you wanted to inspect would replace the thing doing the inspecting.
 
-`monitor` turns it on and the prompt changes from `>` to `*`. It is **a mode, not a detour** — the shell's own commands still work, and the mode persists until you say otherwise:
+`monitor` turns it on and the prompt changes from `>` to `*`. It is **a mode, not a detour** - the shell's own commands still work, and the mode persists until you say otherwise:
 
 ```
 > load Snake.sbx
@@ -759,14 +759,14 @@ bank 01
 
 **A program giving the machine back lands at the prompt it was started from**, so `g` into something, letting it run, and having it exit puts you back at `*` rather than at the shell. That falls out of the mode being a variable the prompt reads rather than a second loop: every way back to the prompt goes through one place, including `osExit`. Looking at a program and running it therefore do not interrupt each other, which is the thing a monitor is for.
 
-`exit` leaves whatever you are in — the monitor if you are in it, the machine if you are not.
+`exit` leaves whatever you are in - the monitor if you are in it, the machine if you are not.
 
 | | |
 | --- | --- |
 | `x [addr]` | Sixty-four bytes, as hex and as characters |
 | `d [addr]` | Eight instructions, disassembled |
 | `a addr` | Assemble instructions, until a line that is just a dot |
-| `s addr b b …` | Put those bytes there |
+| `s addr b b ...` | Put those bytes there |
 | `b program\|data\|n` | Which bank to look at |
 | `g addr` | Go there |
 
@@ -791,13 +791,13 @@ A program and its data, both entered by hand, calling a system service and retur
 
 **What cannot be written is a label**, and that is the whole difference between this and the assembler proper. A label is a promise to fill an address in later, and later is what a line at a time does not have. It is also why the same instruction table serves both directions here: what `a` writes, `d` reads back, and neither can drift from the other or from the assembler they were generated from.
 
-`x` and `d` share one cursor and each leaves it past what it showed, so without an address either carries on — reading through memory is one letter at a time, and you can switch between bytes and instructions without retyping where you are. `s` deliberately does not move it.
+`x` and `d` share one cursor and each leaves it past what it showed, so without an address either carries on - reading through memory is one letter at a time, and you can switch between bytes and instructions without retyping where you are. `s` deliberately does not move it.
 
-Everything else here does something; the monitor looks at what the others did. It shows memory as hex and as characters, disassembles it, writes bytes into it, and jumps to an address — all through the memory controller, which is the only thing that can reach Program Memory.
+Everything else here does something; the monitor looks at what the others did. It shows memory as hex and as characters, disassembles it, writes bytes into it, and jumps to an address - all through the memory controller, which is the only thing that can reach Program Memory.
 
 That is why a monitor is worth more on this machine than on most. Data Memory a program can already read for itself with a Data Pointer. The half it cannot see is Program Memory, and that is the half its bugs are in.
 
-**Its instruction table is generated from the assembler's**, by `Tests/instructiontable.py`, and checked against it by `Tests/docs.sh` — along with a second check that the lengths that table implies are the ones the manual's own Bytes column prints. Both matter for the same reason: a disassembler that disagreed about how long an instruction is would not print one line wrong, it would lose its place and print everything after it wrong. Which is what a disassembler does anyway when it starts in the middle of an instruction, and is worth seeing once so it is recognised later.
+**Its instruction table is generated from the assembler's**, by `Tests/instructiontable.py`, and checked against it by `Tests/docs.sh` - along with a second check that the lengths that table implies are the ones the manual's own Bytes column prints. Both matter for the same reason: a disassembler that disagreed about how long an instruction is would not print one line wrong, it would lose its place and print everything after it wrong. Which is what a disassembler does anyway when it starts in the middle of an instruction, and is worth seeing once so it is recognised later.
 
 **Where to put something you typed in yourself** is a question the monitor answers, because the answer moves every time the monitor is rebuilt. `m` says where its own two segments end, and those are the first free addresses:
 
@@ -807,7 +807,7 @@ code from 2000, free from 2607
 data from 1000, free from 1367 up to the stack
 ```
 
-Which is what makes the monitor's real trick possible — a program that no assembler ever saw:
+Which is what makes the monitor's real trick possible - a program that no assembler ever saw:
 
 ```
 > s 8000 26 48 D1 00 26 49 D1 00 26 0A D1 00 18 12
@@ -827,9 +827,9 @@ There are no breakpoints yet, and `g` does not come back. The machinery for both
 
 ### The Editor:
 
-`Edit` is the first program on this machine that makes a file a person typed — every byte on every disk before it was put there by the host tool. It is line oriented in the manner of `ed`: `l` lists, `a` adds at the end, `i` and `c` and `d` take a line number, `w` writes and `q` stops.
+`Edit` is the first program on this machine that makes a file a person typed - every byte on every disk before it was put there by the host tool. It is line oriented in the manner of `ed`: `l` lists, `a` adds at the end, `i` and `c` and `d` take a line number, `w` writes and `q` stops.
 
-It includes nothing but `services.asm` and `text.asm`: the filesystem and the console are the system's, asked for rather than carried. That is what took it from 4,941 bytes to 1,983 without a line of its own logic changing — and the way that was checked is worth knowing, because the recorded output of the `cosmosEdit` test did not move by a single byte across the rewrite.
+It includes nothing but `services.asm` and `text.asm`: the filesystem and the console are the system's, asked for rather than carried. That is what took it from 4,941 bytes to 1,983 without a line of its own logic changing - and the way that was checked is worth knowing, because the recorded output of the `cosmosEdit` test did not move by a single byte across the rewrite.
 
 It keeps the document as a **linked list of lines** rather than one buffer with newlines in it. Each line says where the next one is, how long it is, and then its bytes. Inserting is two pointers changed and nothing moved; with a flat buffer it would mean shifting every byte after the edit, on a machine whose only block move is a device asked politely. The price is that deleted lines are not reused, so a heavy session uses more room than the document needs and writing it out is what tidies up.
 

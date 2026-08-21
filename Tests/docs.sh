@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Checks the manuals against the code.
+# Checks the manuals against the code, and the repository against its own rules.
 #
 # Documentation goes stale quietly. An instruction added without a table row, or a count
 # in a heading that nobody updated, is wrong in a way nothing notices until somebody
@@ -27,6 +27,34 @@ pm = read("SplitBit Programming Manual.md")
 am = read("SplitBit Assembler Manual.md")
 asmc = read("Source/Assembler/assembly.c")
 util = read("Source/Assembler/Assm-util.c")
+
+# ---- Every tracked file is plain ASCII ----
+#
+# A standing rule of this repository, and nothing enforced it, so it drifted: 39 em dashes
+# and an ellipsis had collected in the two manuals, all of them typed by something that
+# helpfully substituted a nicer character.
+#
+# GIT LS-FILES IS READ NUL SEPARATED, and that is not fussiness. The obvious shell version
+# of this check - looping over $(git ls-files) - splits on whitespace, so it looked for a
+# file called "SplitBit" and reported the repository clean while both manuals had drifted.
+# A check that cannot see the files with spaces in their names is worse than no check.
+import subprocess
+
+tracked = subprocess.run(["git", "ls-files", "-z"], capture_output=True).stdout
+for name in tracked.split(b"\0"):
+    if not name:
+        continue
+    path = name.decode()
+    try:
+        text = open(path, encoding="utf-8").read()
+    except (UnicodeDecodeError, OSError):
+        continue
+    for number, line in enumerate(text.split("\n"), 1):
+        odd = sorted({c for c in line if ord(c) > 127})
+        if odd:
+            problems.append("%s line %d is not plain ASCII: %s"
+                            % (path, number, ", ".join("%r (U+%04X)" % (c, ord(c)) for c in odd)))
+            break
 
 # ---- Every instruction has a row, and every row is an instruction ----
 #
