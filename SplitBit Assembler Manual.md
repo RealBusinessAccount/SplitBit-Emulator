@@ -207,6 +207,58 @@ A program that genuinely wants a segment at the bottom of memory says so:
 
 `#Base` is the one directive that takes zero. `#Align` and `#Reserve` are counts, and a count of nothing is a typo, so they still require at least one.
 
+## Loading A Program From A Disk:
+
+A program that was not the one the machine booted from carries sixteen bytes in front of it saying where it belongs.
+
+| Offset | Size | Holds |
+| --- | --- | --- |
+| 0 | 4 | SBEX |
+| 4 | 1 | Version. One, or two if it brings vectors. |
+| 5 | 1 | How many vectors follow the data. Zero in a version one file. |
+| 6 | 2 | Where the code goes in Program Memory. |
+| 8 | 2 | Where to start running. |
+| 10 | 2 | How many bytes of code there are. |
+| 12 | 2 | Where the data goes in Data Memory. |
+| 14 | 2 | How many bytes of data there are. |
+| 16 | | The code, then the data, then the vectors. |
+
+Programs/Loader/loader.asm reads one off a disk, puts the two pieces where the header asks, and jumps to the entry with BRD. Every part of that already existed: the filesystem finds the file, the memory controller writes Program Memory, and BRD turns an address worked out at run time into somewhere to go. The header is the only new thing. Programs/CosmOS does the same as one of its commands, and then takes the machine back afterwards, which the standalone loader has no way to do.
+
+The magic matters for the same reason it does everywhere else on this machine. Without it, loading a text file would put nonsense into Program Memory and then jump into it.
+
+### Bringing Vectors:
+
+A program that only wants to be run needs nothing here and says version one. A program that wants a handler installed needs something of whoever loads it, and says version two.
+
+Each vector is four bytes: the address of the slot in the vector table, then the address to put in it, both most significant byte first. Naming the slot rather than the vector number means the loader does no arithmetic and does not have to know where either vector table begins, and one entry can be a software or a hardware vector without saying which it is.
+
+**A version two file is refused by a loader that cannot install them.** That is the point of the version rather than an inconvenience of it. A program whose handlers were quietly dropped would load, run, and then go wrong somewhere with nothing to connect the failure back to loading - a game waiting for keys that no longer arrive. Failing once, at load, with a reason, is worth more than running.
+
+**Whoever installs them takes them back.** A vector points into the program that supplied it, so one left in the table after that program has gone aims an interrupt at whatever occupies those addresses next. CosmOS keeps its own copy of what a program brought, puts them in when the program is run and not when it is loaded, and restores what was underneath them when the program gives the machine back. Restoring, rather than clearing: a program is allowed to install a handler over one the system was already using, and when it goes, what it covered up has to come back rather than become a hole.
+
+`Boot` in a loadable program fills in the entry field, since that is what it means, and is not installed as vector 0 - where the machine starts is not a loaded program's business. Without one, a program begins at the first byte of its code.
+
+### Where A Program Says It Lives:
+
+**Nothing relocates anything.** A program is put exactly where its header asks, and that has to be the address it was assembled for, or every branch and every SETD inside it points somewhere wrong.
+
+A program says where it lives with #Base, at the top of each segment. Every label inside is then resolved from there, so the addresses in the program and the addresses in its header say the same thing. Giving either segment a base is also what makes the assembler write the program out as a loadable one rather than as a boot image, carrying none of the empty space below it.
+
+```
+#Program
+  #Base 0x2000          ; This program's code lives from 0x2000.
+hello:
+  ...
+
+#Data
+  #Base 0x1000          ; And its data from 0x1000.
+```
+
+That is not general placement: a base applies to a whole segment, and only the first thing in one can set it. It is exactly enough for a program that wants to live at one address, which is what a loadable program is. See the Assembler Manual.
+
+Whoever does the loading keeps its own code and data below the addresses the loaded program claims. That is an arrangement between the two of them rather than anything the machine enforces. Programs/CosmOS is where that arrangement is written down as a memory map and kept to.
+
 ## The Vector Segment:
 
 A vector says where to go when something happens: the machine starting up, a program asking for a service, a device wanting attention, or the CPU meeting a byte it cannot decode. The Vector Segment says which of your routines belongs to which vector, and the assembler works out the rest.

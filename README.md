@@ -184,11 +184,13 @@ This catches reads and writes past the end of an array, use after free, leaks, a
 
 ## Documentation:
 
-The **SplitBit Programming Manual** describes the machine: the instruction set, the vector table, interrupts, devices, the memory controller, the console, storage, and what a program may ask the system for.
+Three documents, divided by what they are about rather than by who reads them.
 
-The **SplitBit Assembler Manual** describes the language: literal values, labels, segments, the directives, and the assembler that runs on SplitBit itself.
+The **SplitBit Programming Manual** describes **the machine**: the instruction set, the registers, the vector table, interrupts, devices, the memory controller, the console, storage, and faults. Everything here is true of any SplitBit, whatever is running on it.
 
-`Programs/CosmOS/README.md` describes the operating system from the inside.
+The **SplitBit Assembler Manual** describes **the language and the file formats**: literal values, labels, segments, the directives, the loadable program header, and the assembler that runs on SplitBit itself.
+
+`Programs/CosmOS/README.md` describes **the operating system**: its shell, its applications, what a program may ask it for, and the libraries it owns. A different system on the same machine would answer all of that differently, which is why it is documented with the system rather than with the CPU.
 
 ## License:
 

@@ -25,6 +25,9 @@ def read(path):
 
 pm = read("SplitBit Programming Manual.md")
 am = read("SplitBit Assembler Manual.md")
+# The third manual. CosmOS is a system that runs ON SplitBit rather than part of it, so
+# what it offers a program is documented with it and checked here alongside the other two.
+cr = read("Programs/CosmOS/README.md")
 asmc = read("Source/Assembler/assembly.c")
 util = read("Source/Assembler/Assm-util.c")
 
@@ -167,10 +170,10 @@ else:
 sbex = read("Source/Assembler/sbex.h")
 offsets = {name: int(value)
            for name, value in re.findall(r'^#define (SBEX_[A-Z_]+_AT)\s+(\d+)$', sbex, re.M)}
-if "## Loading A Program From A Disk:" not in pm:
-    problems.append("the Programming Manual has lost its loadable program section")
+if "## Loading A Program From A Disk:" not in am:
+    problems.append("the Assembler Manual has lost its loadable program section")
 else:
-    loading = pm.split("## Loading A Program From A Disk:")[1].split("\n## ")[0]
+    loading = am.split("## Loading A Program From A Disk:")[1].split("\n## ")[0]
     listed = [int(m) for m in re.findall(r'^\| (\d+) \| \d* \|', loading, re.M)]
     for name, offset in sorted(offsets.items(), key=lambda pair: pair[1]):
         if offset not in listed:
@@ -225,10 +228,10 @@ implemented = {name for name in re.findall(r'^\s{2}(os[A-Za-z]+)\s+[a-zA-Z]', ve
                if name in named}
 if not named:
     problems.append("no services could be found in services.asm")
-elif "## What A Program May Ask The System For:" not in pm:
-    problems.append("the Programming Manual has lost its services section")
+elif "## What A Program May Ask The System For:" not in cr:
+    problems.append("the CosmOS README has lost its services section")
 else:
-    section = pm.split("## What A Program May Ask The System For:")[1].split("\n## ")[0]
+    section = cr.split("## What A Program May Ask The System For:")[1].split("\n## ")[0]
     documented = set(re.findall(r'^\| (os[A-Za-z]+) \|', section, re.M))
     for name in sorted(implemented - documented):
         problems.append("%s is a service the system implements and has no row in the"
@@ -244,16 +247,16 @@ else:
 # routine that no longer exists. The other direction is deliberately not checked: the ported
 # programs are covered in the prose rather than given a row each.
 import os
-if "## Programs That Come With The System:" not in pm:
-    problems.append("the Programming Manual has lost its list of programs")
+if "## Included Applications:" not in cr:
+    problems.append("the CosmOS README has lost its list of applications")
 else:
-    listed = pm.split("## Programs That Come With The System:")[1].split("\n### ")[0]
+    listed = cr.split("## Included Applications:")[1].split("\n### ")[0]
     # After the separator, so the table's own heading row is not mistaken for a program.
     listed = listed.split("| --- |")[-1]
     for name in re.findall(r'^\| ([A-Z][A-Za-z0-9-]*) \|', listed, re.M):
         if not os.path.exists("Programs/CosmOS/Apps/%s.asm" % name):
-            problems.append("the manual describes a program called %s, and there is no"
-                            " Programs/CosmOS/Apps/%s.asm" % (name, name))
+            problems.append("the CosmOS README describes an application called %s, and"
+                            " there is no Programs/CosmOS/Apps/%s.asm" % (name, name))
 
 # ---- The monitor's instruction table is the assembler's ----
 #
@@ -324,13 +327,13 @@ for directive in sorted(set(re.findall(r'"(#[A-Za-z]+)"', util))):
 # The first column of the table in each of these sections names something the library has
 # to define. A routine renamed in the source and not in the manual is caught here, which
 # is what keeps the tables a description rather than a memory.
-for heading, library in [("## Reading And Writing The Filesystem:", "Programs/CosmOS/Source/sbfs.asm"),
+for heading, library in [("## The Filesystem Library:", "Programs/CosmOS/Source/sbfs.asm"),
                          ("## The Console Library:", "Programs/CosmOS/Source/console.asm")]:
-    if heading not in pm:
-        problems.append("the Programming Manual has lost its \"%s\" section"
+    if heading not in cr:
+        problems.append("the CosmOS README has lost its \"%s\" section"
                         % heading.strip("# :"))
         continue
-    section = pm.split(heading)[1].split("\n## ")[0]
+    section = cr.split(heading)[1].split("\n## ")[0]
     defined = set(re.findall(r'^([a-zA-Z][A-Za-z0-9]*):', read(library), re.M))
     for name in re.findall(r'^\| ([a-z][A-Za-z0-9]*) \|', section, re.M):
         if name not in defined:

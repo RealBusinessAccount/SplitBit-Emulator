@@ -23,3 +23,6 @@ __pycache__/
 *.bin
 *.sbx
 *.img
+
+# Kate leaves these beside a file it has open.
+.*.kate-swp
