@@ -182,7 +182,7 @@ To rebuild all three tools with the address and undefined behaviour sanitizers a
 make sanitize
 ```
 
-This catches reads and writes past the end of an array, use after free, leaks, and undefined arithmetic. It also fills fresh allocations with a junk pattern, which turns a read of uninitialised memory from something that quietly works into something the tests notice. It takes about twice as long as `make test`, and puts the ordinary binaries back when it finishes.
+This catches reads and writes past the end of an array, use after free, leaks, and undefined arithmetic. It also fills fresh allocations with a junk pattern, which turns a read of uninitialised memory from something that quietly works into something the tests notice. It runs everything `make test` runs, takes about twice as long, and puts the ordinary binaries back when it finishes.
 
 ## Documentation:
 

@@ -109,6 +109,13 @@ test: $(EMU_TARGET) $(ASM_TARGET) $(DSK_TARGET) strict
 # the test suite under them. Slower than 'make test', and worth running before a
 # release or after anything that touches memory handling.
 #
+# THE WHOLE SUITE, which it did not used to be: it built all three tools sanitized and
+# then ran only run.sh and terminal.sh, so SplitDisk was compiled with the sanitizers and
+# never exercised, and native.sh - which drives the assembler and the emulator harder than
+# anything else here - was skipped. Those are the parts where block arithmetic on disk
+# images and buffer indexing in two assemblers live, which is exactly what the sanitizers
+# are for. Adding the three of them costs about six seconds.
+#
 # The sanitizers catch reads and writes off the end of an array, use after free,
 # leaks, and undefined arithmetic. They also fill fresh allocations with a junk
 # pattern, which is what turns a read of uninitialised memory from something that
@@ -124,7 +131,13 @@ sanitize:
 	@echo "Running the test suite under AddressSanitizer and UndefinedBehaviorSanitizer."
 	@./Tests/run.sh
 	@echo
+	@./Tests/disk.sh
+	@echo
 	@./Tests/terminal.sh
+	@echo
+	@./Tests/native.sh
+	@echo
+	@./Tests/docs.sh
 	@$(MAKE) --no-print-directory clean
 	@$(MAKE) --no-print-directory
 	@echo "Sanitizer run finished cleanly. Normal binaries rebuilt."
