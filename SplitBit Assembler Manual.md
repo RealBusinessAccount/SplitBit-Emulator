@@ -485,9 +485,11 @@ There are two assemblers now. This manual has been describing the one that runs 
 
 ```
 > load Asm.sbx
-> run Asm.sbx hello.asm
+> run hello.asm
 wrote hello.bin: program 17, data 14, labels 2
 ```
+
+Loading and running are separate commands in CosmOS, so the source file is the argument to `run`.
 
 **Its output must be byte for byte what the host assembler produces from the same source**, and `Tests/native.sh` checks exactly that: it assembles `Programs/hello.asm` both ways and compares the files, then runs the one the machine built. This is the discipline SplitDisk and `sbfs.asm` already work under — two implementations of one written specification, each one checking the other. "It ran" is not good enough for an assembler, because a binary with a label one byte out runs right up until it jumps into the middle of an instruction.
 

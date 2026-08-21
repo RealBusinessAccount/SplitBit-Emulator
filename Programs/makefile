@@ -69,15 +69,32 @@ $(BUILD)/CosmOS/Apps/%.sbx: CosmOS/Apps/%.asm
 	@mkdir -p $(@D)
 	$(ASM) $(INCLUDES) -M $(@:.sbx=.d) -o $@ $<
 
-cosmos: $(COSMOS) $(APPS)
+# The assembler that runs on the machine. It is not in Apps/ because it is not one file:
+# it has a directory of its own, the way the C assembler does. Its own pieces are found
+# beside it without being told, since an include is looked for next to the file that asked
+# for it before anywhere else; only services.asm needs the include path.
+NATIVE_ASM = $(BUILD)/CosmOS/Assembler/Asm.sbx
+DEPENDENCIES += $(NATIVE_ASM:.sbx=.d)
+
+$(NATIVE_ASM): CosmOS/Assembler/Asm.asm
+	@mkdir -p $(@D)
+	$(ASM) $(INCLUDES) -M $(@:.sbx=.d) -o $@ $<
+
+cosmos: $(COSMOS) $(APPS) $(NATIVE_ASM)
 
 # Made from scratch every time, so that what is on it is what is in Apps/ now and not
 # also whatever used to be.
-$(COSMOS_DISK): $(APPS)
+$(COSMOS_DISK): $(APPS) $(NATIVE_ASM) hello.asm testPrograms/stringKeyword.asm
 	@mkdir -p $(@D)
 	rm -f $@
 	$(DISKTOOL) format $@ 2048 4
 	@for app in $(APPS); do $(DISKTOOL) put $@ $$app; done
+	$(DISKTOOL) put $@ $(NATIVE_ASM)
+	@# SOURCE goes on as well, because an assembler with nothing to assemble is a
+	@# demonstration of nothing. Both of these are single files with no #Include, which
+	@# is what the native assembler handles so far.
+	$(DISKTOOL) put $@ hello.asm
+	$(DISKTOOL) put $@ testPrograms/stringKeyword.asm strings.asm
 
 # The system as well as the disk. Building only the image leaves whatever cosmos.bin was
 # there before, or none at all, and then the disk is booted with a system that does not

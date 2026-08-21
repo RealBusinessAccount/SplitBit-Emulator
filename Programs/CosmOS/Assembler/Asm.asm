@@ -1,6 +1,10 @@
 ; The SplitBit assembler, running on SplitBit.
 ;
-;   run Asm.sbx hello.asm
+;   > load Asm.sbx
+;   > run hello.asm
+;
+; Loading and running are separate commands in this shell, so the file to assemble is the
+; argument to run rather than a second name after the program's.
 ;
 ; Reads assembly source off the disk and writes a binary back to it, with no host involved
 ; anywhere. The output has to be byte for byte what the C assembler produces from the same
@@ -829,7 +833,7 @@ WordData:
 "#Data"
 
 UsageText:
-"say which file: run Asm.sbx hello.asm
+"say which file to assemble, as in: run hello.asm
 "
 NoSourceText:
 "no such file: "
