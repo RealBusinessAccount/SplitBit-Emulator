@@ -13,3 +13,13 @@
 
 # Python leaves these beside the test scripts.
 __pycache__/
+
+# Assembled programs. Every one of these is built by 'make' in Programs/ from a source
+# file that is tracked, so committing them only creates a second answer to the question of
+# what a program does - and the second answer goes stale silently. Nine of the ten that
+# used to be here disagreed with their own source, including the operating system.
+#
+# Not anchored, because a .bin may be built anywhere a .asm lives.
+*.bin
+*.sbx
+*.img
