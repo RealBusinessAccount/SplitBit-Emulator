@@ -1,4 +1,4 @@
-# SplitBit Assembler Manual:
+# The SplitBit Assembler Manual:
 
 SplitBit assembly syntax is similar to many other assembler syntaxes. Whitespace at the start or end of a line is disregarded by the assembler and may be used to make programs more readable to the programmer. The Instruction Mnemonics are listed in the SplitBit Programming Manual, and the assembler is not case sensitive in regard to the mnemonics.
 
