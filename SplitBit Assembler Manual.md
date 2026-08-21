@@ -10,7 +10,7 @@ The first four say what kind of thing follows them. #Base says where a segment i
 
 SplitBit programs must have a Program Segment. You define the start of a program with the #Program Keyword.
 SplitBit programs may have a Data Segment. You may define the start of the data with the #Data Keyword.
-SplitBit programs may have a Vector Segment. You define it with the #Vectors Keyword. See The Vector Segment below.
+SplitBit programs may have a Vector Segment. You define it with the #Vectors Keyword. See The Vector Segment.
 
 ## Literal Values:
 
@@ -301,7 +301,7 @@ hello:
   #Base 0x1000          ; And its data from 0x1000.
 ```
 
-That is not general placement: a base applies to a whole segment, and only the first thing in one can set it. It is exactly enough for a program that wants to live at one address, which is what a loadable program is. See the Assembler Manual.
+That is not general placement: a base applies to a whole segment, and only the first thing in one can set it. It is exactly enough for a program that wants to live at one address, which is what a loadable program is.
 
 Whoever does the loading keeps its own code and data below the addresses the loaded program claims. That is an arrangement between the two of them rather than anything the machine enforces. Programs/CosmOS is where that arrangement is written down as a memory map and kept to.
 
@@ -331,7 +331,7 @@ A line with a name and nothing after it declares the name and its number without
   osExit   0d17
 ```
 
-The numbers are there because this is the case where a number has to be agreed. Everything else in a Vector Segment is numbered by the assembler, which can only see one program at a time - and that is exactly the situation where it cannot help. See Numbers You Write Down below.
+The numbers are there because this is the case where a number has to be agreed. Everything else in a Vector Segment is numbered by the assembler, which can only see one program at a time - and that is exactly the situation where it cannot help. See Numbers You Write Down.
 
 Five names already mean something:
 
@@ -357,7 +357,7 @@ The assembler will refuse two handlers for the same vector, a name used with SWI
 
 ### Numbers You Write Down:
 
-A vector number is worth arguing about in exactly one situation: when two programs that are **not assembled together** have to mean the same thing by a name. A program calling `osExit` was built long before, and separately from, whatever implements it. Nothing the assembler can see ties those two together, because it only ever sees one of them.
+A vector number is worth arguing about in exactly one situation: when two programs that are **not assembled together** have to mean the same thing by a name. A program calling `osExit` was built separately from whatever implements it. Nothing the assembler can see ties those two together, because it only ever sees one of them.
 
 For that case a number may be written between the name and the handler.
 

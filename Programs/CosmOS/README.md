@@ -263,7 +263,7 @@ boundary.
 Applications include `Source/services.asm` to obtain stable names and vector numbers for
 the services CosmOS provides. Neither side ever types a number: the file both of them
 include is the only place any of them is written down. What each service is and what it
-answers in is set out under "What A Program May Ask The System For" below.
+answers in is set out under "What A Program May Ask The System For".
 
 The largest application CosmOS has is the assembler in `Programs/CosmOS/Assembler/`. It
 travels with CosmOS rather than with the emulator, for the same reason the C assembler
