@@ -1,0 +1,25 @@
+CosmOS
+> loaded, starting at 2000
+> 4  keyword 0 [#Program]
+6  label:  0 [Start:]
+7  instr   2 [LDA]
+8  instr   1 [BRA]
+8  label   2 [End]
+9  instr   1 [OUTA]
+9  value   1 [0x00]
+10  instr   2 [INCD]
+11  instr   1 [BRI]
+11  label   2 [Start]
+13  label:  0 [End:]
+14  instr   1 [INIA]
+14  value   1 [0x0A]
+15  instr   1 [OUTA]
+15  value   1 [0x00]
+16  instr   1 [HALT]
+18  keyword 0 [#Data]
+20  string  14 [Hello, World!]
+---- no more tokens
+finished
+> halted
+Execution halted.
+[exit 0]

@@ -78,6 +78,8 @@ test: $(EMU_TARGET) $(ASM_TARGET) $(DSK_TARGET)
 	@echo
 	@./Tests/terminal.sh
 	@echo
+	@./Tests/native.sh
+	@echo
 	@./Tests/docs.sh
 
 # Rebuild both tools with the address and undefined behaviour sanitizers and run

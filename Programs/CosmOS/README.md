@@ -184,6 +184,12 @@ the services CosmOS provides. The currently installed services are:
 | `osFileInfo` | DP0 names a file; Q reports whether it is there and DP3 returns how many blocks it occupies. |
 | `osFileBlock` | DP0 names a file, DP1 a destination, and A with B give which block; Q reports success and DP3 returns how many of the block's bytes belong to the file. |
 
+The largest application CosmOS has is the assembler in `Programs/CosmOS/Assembler/`, which
+is why the streaming services below exist: it reads source a block at a time, twice, and
+keeps only its label table in between. It travels with CosmOS rather than with the emulator,
+for the same reason the C assembler travels with the emulator - it is part of the system it
+is written for.
+
 `osFileInfo` and `osFileBlock` are how an application reads a file too big to hold. A whole
 file arrives through `osFileRead`, which cannot help with anything above 64K, and CosmOS's
 own source is above it. Neither call keeps anything open: each one names the file and says

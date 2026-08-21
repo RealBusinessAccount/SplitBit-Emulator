@@ -160,3 +160,21 @@ awk 'BEGIN { for (i = 0; i < 50; i++) printf "small %05d\n", i }' > small.txt
 "$ROOT/Assembler" -I "$ROOT/Programs/CosmOS/Source" \
     "$ROOT/Programs/CosmOS/Apps/Stream.asm" -o "$WORK/Stream.sbx" >/dev/null
 "$TOOL" put "$DISKS/stream.img" "$WORK/Stream.sbx" >/dev/null
+
+# A disk for the assembler that runs on the machine. It holds a source file and the two
+# programs that check the front end - the reader on its own and the tokenizer on its own -
+# because a fault in either of those would otherwise turn up much later as a mysterious
+# wrong byte in an output file.
+#
+# hello.asm is here rather than something written for the occasion because it is the
+# oldest program in the repository: the first thing this machine ever ran is the first
+# thing it assembles for itself.
+"$TOOL" format "$DISKS/asm.img" 2048 4 >/dev/null
+cp "$ROOT/Programs/hello.asm" hello.asm
+"$TOOL" put "$DISKS/asm.img" hello.asm >/dev/null
+"$ROOT/Assembler" -I "$ROOT/Programs/CosmOS/Source" -I "$ROOT/Programs/CosmOS/Assembler" \
+    "$ROOT/Programs/CosmOS/Assembler/readTest.asm" -o "$WORK/readTest.sbx" >/dev/null
+"$TOOL" put "$DISKS/asm.img" "$WORK/readTest.sbx" >/dev/null
+"$ROOT/Assembler" -I "$ROOT/Programs/CosmOS/Source" -I "$ROOT/Programs/CosmOS/Assembler" \
+    "$ROOT/Programs/CosmOS/Assembler/tokenTest.asm" -o "$WORK/tokenTest.sbx" >/dev/null
+"$TOOL" put "$DISKS/asm.img" "$WORK/tokenTest.sbx" >/dev/null

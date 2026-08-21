@@ -316,6 +316,18 @@ cosmosServices       | CosmOS/Source/cosmos.asm           | run      | cosmosFil
 # notice the file moved - and that one would otherwise pass, since the blocks are still
 # there and still hold the same bytes.
 cosmosStream         | CosmOS/Source/cosmos.asm           | run      | cosmosStream.in    | -     | disks/stream.img
+# The assembler's front end, checked in two pieces before anything is built on it.
+#
+# cosmosSource reads a source file and prints it back. The file crosses a block boundary,
+# so the seam is exercised rather than assumed, and the line count at the end says the
+# reader knows where it is as well as what it holds.
+#
+# cosmosTokens says what each token IS. That is the part worth checking here rather than at
+# the far end: a wrong classification does not produce a wrong byte somewhere obvious, it
+# produces a right looking program of the wrong length with everything after it shifted,
+# and by then the only symptom is a label pointing into the middle of an instruction.
+cosmosSource         | CosmOS/Source/cosmos.asm           | run      | cosmosSource.in    | -     | disks/asm.img
+cosmosTokens         | CosmOS/Source/cosmos.asm           | run      | cosmosTokens.in    | -     | disks/asm.img
 # The programs CosmOS loads, checked on their own so that a failure here reads as "the app
 # does not assemble" rather than as a broken disk image.
 app-greet            | CosmOS/Apps/greet.asm              | assemble | -                  | -
@@ -328,6 +340,11 @@ app-Break            | CosmOS/Apps/Break.asm              | assemble | -        
 app-Edit             | CosmOS/Apps/Edit.asm               | assemble | -                  | -
 app-Files            | CosmOS/Apps/Files.asm              | assemble | -                  | -
 app-Stream           | CosmOS/Apps/Stream.asm             | assemble | -                  | -
+# The assembler that runs on the machine, and its parts. Checked on their own so that a
+# failure reads as "it does not assemble" rather than as a broken disk image.
+asm-Asm              | CosmOS/Assembler/Asm.asm           | assemble | -                  | -
+asm-readTest         | CosmOS/Assembler/readTest.asm      | assemble | -                  | -
+asm-tokenTest        | CosmOS/Assembler/tokenTest.asm     | assemble | -                  | -
 
 # ---- Programs driven by console input ----
 inputTest            | inputTest.asm                      | run      | inputTest.in       | -

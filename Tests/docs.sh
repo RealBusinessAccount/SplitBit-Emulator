@@ -241,21 +241,30 @@ if generated.returncode != 0:
     problems.append("the instruction table generator would not run")
 else:
     wanted = [line.rstrip() for line in generated.stdout.splitlines() if line.strip()]
-    monitor = read("Programs/CosmOS/Source/cosmos.asm")
-    if "\nInstructions:\n" not in monitor:
-        problems.append("the system has lost its instruction table")
-    else:
-        block = monitor.split("\nInstructions:\n")[1]
+    # TWO copies now, and both are checked. The monitor has one and the assembler that
+    # runs on the machine has another, because they are separate programs and there is no
+    # linker to let them share: the monitor's lives in the system's data at an address
+    # that moves every rebuild. Duplication is the cost of having no libraries, and a
+    # check on every copy is what keeps the cost to bytes rather than to correctness.
+    copies = [("the system", "Programs/CosmOS/Source/cosmos.asm", "\nInstructions:\n"),
+              ("the native assembler", "Programs/CosmOS/Assembler/table.asm",
+               "\nAsmInstructions:\n")]
+    for who, path, marker in copies:
+        text = read(path)
+        if marker not in text:
+            problems.append("%s has lost its instruction table" % who)
+            continue
+        block = text.split(marker)[1]
         have = []
         for line in block.splitlines():
             if not line.strip() or not line.startswith("  0x"):
                 break
             have.append(line.rstrip())
         if have != wanted:
-            problems.append("the system's instruction table is not what the assembler's"
+            problems.append("%s's instruction table is not what the assembler's"
                             " instruction set generates: %d entries against %d, first"
                             " difference at %s"
-                            % (len(have), len(wanted),
+                            % (who, len(have), len(wanted),
                                next((a or b for a, b in zip(have + [None] * len(wanted),
                                                             wanted + [None] * len(have))
                                      if a != b), "the end")))

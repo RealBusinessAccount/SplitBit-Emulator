@@ -1,0 +1,3 @@
+load tokenTest.sbx
+run hello.asm
+exit

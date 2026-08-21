@@ -478,3 +478,29 @@ Broken:
 The output is `ready`, `trap`, then `device`.
 
 Note that a vector name and a routine name are kept apart, so naming both `announce` is allowed. If that reads as confusing, name them differently: nothing requires them to match.
+
+## The Assembler That Runs On SplitBit:
+
+There are two assemblers now. This manual has been describing the one that runs on a host and writes a file; `Programs/CosmOS/Assembler/` holds one written in SplitBit assembly that runs on the machine itself, under CosmOS, and reads its source off a SplitBit disk.
+
+```
+> load Asm.sbx
+> run Asm.sbx hello.asm
+wrote hello.bin: program 17, data 14, labels 2
+```
+
+**Its output must be byte for byte what the host assembler produces from the same source**, and `Tests/native.sh` checks exactly that: it assembles `Programs/hello.asm` both ways and compares the files, then runs the one the machine built. This is the discipline SplitDisk and `sbfs.asm` already work under — two implementations of one written specification, each one checking the other. "It ran" is not good enough for an assembler, because a binary with a label one byte out runs right up until it jumps into the middle of an instruction.
+
+### How It Differs Inside:
+
+The host assembler reads every token of every file into one array and works on that. **That design cannot port and never could**: `cosmos.asm` alone is 56,047 bytes of source against 64K of Data Memory, and its token array would be several times that. So the native one streams its source through a 256 byte window, twice, and keeps only the label table between the passes.
+
+Two passes are enough because **every length is known without resolving anything**. How many bytes a token comes to falls out of what the token is — an instruction's from its shape, a value's is one, a string's is its characters and a zero — and never from the value of anything named. So the first pass works out exactly where every label lands and the second never needs a fixup list. A forward reference stops being a special case and becomes the reason there are two passes at all.
+
+One thing is genuinely easier here than on a host. The host assembler searches a list of include directories, because a host has directories; **SBFS is flat**, so an include is a file name and there is nowhere else to look.
+
+### What It Does Not Do Yet:
+
+`#Include`, `#Base`, `#Align`, `#Reserve` and `#Vectors` are **refused by name** rather than ignored. An assembler that quietly skipped a directive would produce a file that looked right and was the wrong length, which is the worst thing it could do; being told "this assembler does not understand that directive yet" costs nothing and hides nothing.
+
+So what it assembles today is a single file with no includes, which is `Programs/hello.asm` — the oldest program in the repository, and now the first one the machine assembles for itself.
