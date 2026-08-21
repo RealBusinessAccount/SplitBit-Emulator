@@ -180,6 +180,17 @@ the services CosmOS provides. The currently installed services are:
 | `osFileDelete` | DP0 names a file to remove; Q reports success. |
 | `osFileRename` | DP0 names an existing file and DP1 its new name; Q reports success. |
 | `osPrintNumber` | A with B give a number to print in decimal without leading zeroes. |
+| `osBreak` | Stops the application, shows every register as it had them, waits for a key, and carries on. |
+| `osFileInfo` | DP0 names a file; Q reports whether it is there and DP3 returns how many blocks it occupies. |
+| `osFileBlock` | DP0 names a file, DP1 a destination, and A with B give which block; Q reports success and DP3 returns how many of the block's bytes belong to the file. |
+
+`osFileInfo` and `osFileBlock` are how an application reads a file too big to hold. A whole
+file arrives through `osFileRead`, which cannot help with anything above 64K, and CosmOS's
+own source is above it. Neither call keeps anything open: each one names the file and says
+which block it wants, so an application that stops halfway leaves nothing behind. Both
+report why they failed rather than only that they did - 1 for no disk, 2 for no such file,
+3 for a block past the end, and 4 for a disk that would not read - because running off the
+end is how a reader learns it has finished.
 
 The filesystem services exist so that an application need not contain a second copy of the
 filesystem in order to keep a file. There is deliberately no service to mount a disk: the

@@ -3,11 +3,11 @@ CosmOS
 > two stops, and what the registers were at each
 break at 200E
 A 11 B 22 Q 00 status 00 
-DP0 1030 DP1 0661 DP2 039A DP3 2000 SP FFFF
+DP0 1030 DP1 0663 DP2 039C DP3 2000 SP FFFF
 press a key 
 break at 2023
 A 44 B 55 Q 00 status 00 
-DP0 1000 DP1 0661 DP2 039A DP3 2000 SP FFF5
+DP0 1000 DP1 0663 DP2 039C DP3 2000 SP FFF5
 press a key 
 carried on to the end
 finished

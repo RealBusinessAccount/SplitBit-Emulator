@@ -559,6 +559,8 @@ Those numbers are written down once, in `Programs/CosmOS/Source/services.asm`, w
 | osFileSave | DP0 names a file, DP1 is the bytes, A and B together are how many. Q is zero if it saved, whether or not it was there before. |
 | osFileDelete | DP0 names a file. Q is zero if it went. |
 | osFileRename | DP0 is the name a file has, DP1 the name it should have. Q is zero if it moved. |
+| osFileInfo | DP0 names a file. Q is zero if it is there, and DP3 comes back holding how many blocks it occupies. |
+| osFileBlock | DP0 names a file, DP1 says where to put a block of it, A and B together are which block counting from zero. Q is zero if it read, and DP3 comes back holding how many of the block's bytes belong to the file. |
 | osPrintNumber | A and B together are a number. Prints it in decimal, without leading zeroes. |
 | osBreak | Stops the program, shows every register as it had them, waits for a key, and carries on. |
 
@@ -599,6 +601,49 @@ There is no service to mount one, and that is not an omission. The system mounts
 Sizes fit the registers exactly, in both directions. A file that can be read into Data Memory is under 64K by definition, so its length is sixteen bits: coming back it is DP3, and going out it is A and B together. Neither direction needs a record in memory whose shape both sides have to agree on.
 
 A file of 256 blocks or more is refused by `osFileRead` rather than partly read, because 64K will not fit in Data Memory and its length will not fit in the pointer that reports it. A length that lies would be worse than a file that will not open.
+
+### Reading A File That Will Not Fit:
+
+`osFileRead` hands over a whole file, which settles the question for anything under 64K and settles nothing above it. CosmOS's own source is above it: the sources together are a hundred kilobytes and Data Memory is sixty four. A machine that is one day going to assemble itself has to be able to read a file bigger than its memory.
+
+So there is a second way to ask. `osFileInfo` says how big something is and `osFileBlock` hands over one block of it, and between them a program reads a file of any size through a buffer of 256 bytes.
+
+```
+  SETD.0 Name
+  SWI osFileInfo            ; DP3 is how many blocks, Q is zero if it is there.
+  BNQ noSuchFile
+
+readLoop:
+  SETD.0 Name
+  SETD.1 Block
+  SETD.2 Index
+  LDA.2
+  INCD.2
+  LDB.2                     ; Which block, most significant first.
+  SWI osFileBlock
+  BNQ readDone              ; Three when there are no more.
+  ...                       ; DP3 is how many of its bytes are the file's.
+```
+
+**There is no open and no close.** Every call names the file and says which block it wants, so nothing is held between them: a program that stops halfway leaves nothing behind, and there is no handle to run out of. The system does remember where the last file it was asked about lives, so reading four hundred blocks searches the directory once rather than four hundred times — but that is a speed and not a promise, and a caller never has to know about it.
+
+`osFileInfo` answers in **blocks rather than bytes**, and that is forced rather than chosen. A file on a sixteen megabyte disk can be twenty four bits long and a Data Pointer holds sixteen. Blocks fit; the bytes in the last one come back from `osFileBlock` when the reader gets there.
+
+`osFileBlock` answers a count in DP3 rather than in a register for the same kind of reason: every block but a short last one holds a whole **256** bytes, and 256 does not fit in a byte. A count that reported a full block as zero would make every reader treat the end of a file as a special case.
+
+**These two say why when the answer is no**, which the other services do not. Everywhere else the only useful thing to do about a failure is to give up, so one value is enough. These exist to be asked questions with, and the difference between the answers is the answer:
+
+| Q | Means |
+| --- | --- |
+| 0 | it worked |
+| 1 | there is no disk |
+| 2 | there is no file of that name |
+| 3 | that block is past the end of the file |
+| 4 | the disk would not read it |
+
+Running off the end is how a reader finds out it has finished, so it gets an answer of its own rather than being reported as a disk that failed.
+
+`Programs/CosmOS/Apps/Stream.asm` reads an 84,000 byte file through a 256 byte buffer, then reads a small file both ways — whole with `osFileRead` and streamed — and checks that the two agree.
 
 `Programs/CosmOS/Apps/Files.asm` does the whole round trip — write, read, report, rename, delete — in 645 bytes, and includes nothing but the service names.
 
@@ -692,6 +737,7 @@ Whoever does the loading keeps its own code and data below the addresses the loa
 | Files | Writes a file, reads it back, renames it and deletes it, in 645 bytes, including nothing but the service names. It is what says a program does not need a filesystem inside it. |
 | Break | Stops itself twice with SWI osBreak, so that the registers can be seen changing between one stop and the next. |
 | Edit | A line editor. |
+| Stream | Reads an 84,000 byte file through a buffer of 256, which is what says a file bigger than Data Memory can be read at all. |
 
 ### The Monitor:
 

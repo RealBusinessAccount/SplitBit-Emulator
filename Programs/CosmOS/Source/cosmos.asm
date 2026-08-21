@@ -581,6 +581,8 @@ doDelete:
   LDA.0
   BRA deleteWhat
 
+  ; What a name means on the disk is about to change, so the remembered file goes.
+  CALL fileForget
   CALL sbfsDelete
   BNQ deleteFailed
   SETD.0 Deleted
@@ -620,6 +622,8 @@ doRename:
 
   SETD.2 RenameFrom
   LDD.0.2
+  ; What a name means on the disk is about to change, so the remembered file goes.
+  CALL fileForget
   CALL sbfsRename
   BNQ renameFailed
   SETD.0 Renamed
@@ -944,6 +948,8 @@ handleFileSave:
   SETD.2 SbfsFileTail
   STB.2
 
+  ; What a name means on the disk is about to change, so the remembered file goes.
+  CALL fileForget
   CALL sbfsSaveFile
   MVQA
   MVSD.2
@@ -964,6 +970,8 @@ handleFileDelete:
   SETD.2 DiskReady
   LDA.2
   BRA serviceNoDisk
+  ; What a name means on the disk is about to change, so the remembered file goes.
+  CALL fileForget
   CALL sbfsDelete
   MVQA
   MVSD.2
@@ -976,6 +984,8 @@ handleFileRename:
   SETD.2 DiskReady
   LDA.2
   BRA serviceNoDisk
+  ; What a name means on the disk is about to change, so the remembered file goes.
+  CALL fileForget
   CALL sbfsRename
   MVQA
   MVSD.2
@@ -987,6 +997,225 @@ serviceNoDisk:
   MVSD.2
   DPUP.2 0d02
   INIA 0d1
+  STA.2
+  RETI
+
+; ---- Reading a file that will not fit ----
+;
+; A file bigger than Data Memory cannot be handed over whole, and CosmOS's own source is
+; now that file, so these two are how anything reads one: ask how many blocks, then ask for
+; each block in turn. There is no open and no close. A program that stops halfway through
+; leaves nothing behind, because there was never anything to leave.
+
+; Finds a file, or remembers that it already did. DP0 names it. Q is zero if it is there,
+; and then SbfsFileStart, SbfsFileBlocks and SbfsFileTail describe it exactly the way
+; sbfsFind leaves them - whether the search happened or not, which is the whole point.
+fileLookup:
+  SETD.2 FileCacheValid
+  LDA.2
+  BRA fileLookupSearch
+
+  SETD.1 FileCacheName
+  CALL textSame
+  BNQ fileLookupSearch
+
+  ; The same file as last time. The description still has to be put back, because anything
+  ; that went to the disk in between - a directory listing, a program being loaded - left
+  ; its own answer in those three.
+  SETD.0 SbfsFileStart
+  SETD.2 FileCacheStart
+  CALL sbfsSetWord
+  SETD.0 SbfsFileBlocks
+  SETD.2 FileCacheBlocks
+  CALL sbfsSetWord
+  SETD.0 FileCacheTail
+  LDA.0
+  SETD.0 SbfsFileTail
+  STA.0
+  RSTA
+  RSTB
+  CCF
+  ADD                       ; Q is zero: found.
+  RET
+
+fileLookupSearch:
+  CALL sbfsFind
+  BNQ fileLookupMissing
+
+  ; Remember it. DP0 still names the file: a CALL puts the pointers back, which is the one
+  ; place that convention is a convenience rather than an obstacle.
+  SETD.1 FileCacheName
+  CALL sbfsKeepName
+  SETD.0 FileCacheStart
+  SETD.2 SbfsFileStart
+  CALL sbfsSetWord
+  SETD.0 FileCacheBlocks
+  SETD.2 SbfsFileBlocks
+  CALL sbfsSetWord
+  SETD.0 SbfsFileTail
+  LDA.0
+  SETD.0 FileCacheTail
+  STA.0
+
+  ; Marked good last, so that a cache half filled is never a cache believed.
+  INIA 0d1
+  SETD.0 FileCacheValid
+  STA.0
+
+  RSTA
+  RSTB
+  CCF
+  ADD                       ; Q is zero: found.
+  RET
+
+fileLookupMissing:
+  RET                       ; Q is not zero, and sbfsFind is what made it so.
+
+; Throws the remembered file away. Everything that can change what a name means on the disk
+; calls this before it does: a file saved over may have moved, a deleted one is gone, and a
+; renamed one answers to something else. A remembered start block that survived any of
+; those is a pointer at whatever took its place.
+;
+; Q is deliberately untouched, so this can be dropped into a handler without disturbing the
+; answer that handler is in the middle of working out.
+fileForget:
+  RSTA
+  SETD.0 FileCacheValid
+  STA.0
+  RET
+
+; DP0 names it. Q is zero if it is there, and DP3 comes back holding how many blocks it
+; occupies, counting a part one on the end.
+;
+; Blocks, not bytes, and that is forced rather than chosen: a file on a sixteen megabyte
+; disk is up to twenty four bits long, which does not fit in a pointer. Blocks do, and the
+; bytes in the last one come back from osFileBlock when the reader gets there.
+handleFileInfo:
+  SETD.2 DiskReady
+  LDA.2
+  BRA fileInfoNoDisk
+
+  CALL fileLookup
+  BNQ fileInfoMissing
+
+  CALL sbfsFileExtent
+  SETD.2 SbfsWantBlocks
+  LDA.2
+  INCD.2
+  LDB.2
+
+  MVSD.2
+  DPUP.2 0d05               ; The saved DP3, high byte first.
+  STA.2
+  INCD.2
+  STB.2
+
+  MVSD.2
+  DPUP.2 0d02
+  RSTA
+  STA.2                     ; And the saved Q: it is there.
+  RETI
+
+fileInfoNoDisk:
+  MVSD.2
+  DPUP.2 0d02
+  INIA 0d1
+  STA.2
+  RETI
+
+fileInfoMissing:
+  MVSD.2
+  DPUP.2 0d02
+  INIA 0d2
+  STA.2
+  RETI
+
+; DP0 names it, DP1 says where to put it, and A and B together are which block, counting
+; from zero. Q is zero if it read, and DP3 comes back holding how many of the block's bytes
+; belong to the file.
+handleFileBlock:
+  ; Which block, before anything else, because finding out whether there is a disk needs A
+  ; and there is nowhere else the number is written down.
+  SETD.2 SbfsIndex
+  STA.2
+  INCD.2
+  STB.2
+
+  SETD.2 DiskReady
+  LDA.2
+  BRA fileBlockNoDisk
+
+  CALL fileLookup
+  BNQ fileBlockMissing
+
+  ; Running off the end is how a reader finds out it has finished, so it gets an answer of
+  ; its own rather than being told the disk failed.
+  CALL sbfsFileExtent
+  SETD.0 SbfsIndex
+  SETD.2 SbfsWantBlocks
+  CALL sbfsCompareWord
+  BNC fileBlockPastEnd      ; The Carry is set only when the index is the smaller.
+
+  CALL sbfsReadOne          ; DP1 still says where. A CALL puts the pointers back.
+  BNQ fileBlockFailed
+
+  ; How much of it is the file's. Every block but a short last one is a whole 256, and 256
+  ; is why this answers in a pointer instead of a register.
+  SETD.2 SbfsFileTail
+  LDA.2
+  BRA fileBlockWhole        ; Nothing partial on the end, so they are all whole.
+  SETD.0 SbfsIndex
+  SETD.2 SbfsFileBlocks
+  CALL sbfsCompareWord
+  BNQ fileBlockWhole        ; Not the last one.
+
+  SETD.2 SbfsFileTail
+  LDB.2
+  RSTA
+  BRI fileBlockAnswer
+
+fileBlockWhole:
+  INIA 0x01
+  RSTB
+
+fileBlockAnswer:
+  MVSD.2
+  DPUP.2 0d05
+  STA.2
+  INCD.2
+  STB.2
+
+  MVSD.2
+  DPUP.2 0d02
+  RSTA
+  STA.2
+  RETI
+
+fileBlockNoDisk:
+  MVSD.2
+  DPUP.2 0d02
+  INIA 0d1
+  STA.2
+  RETI
+
+fileBlockMissing:
+  MVSD.2
+  DPUP.2 0d02
+  INIA 0d2
+  STA.2
+  RETI
+
+fileBlockPastEnd:
+  MVSD.2
+  DPUP.2 0d02
+  INIA 0d3
+  STA.2
+  RETI
+
+fileBlockFailed:
+  MVSD.2
+  DPUP.2 0d02
+  INIA 0d4
   STA.2
   RETI
 
@@ -2465,6 +2694,37 @@ RunArgument:
 PrintNumber:
   0x00 0x00
 
+; ---- Where the last file anybody asked about lives ----
+;
+; osFileBlock is handed a name every time it is called, because a stateless service has no
+; handle to leak and nothing left open by a program that stops in the middle. Taken at its
+; word that means searching the directory once per block, so reading a four hundred block
+; file walks the directory four hundred times over to be told the same thing.
+;
+; So the last answer is kept. A call naming the same file as the one before it skips the
+; search and puts these back where sbfs keeps them. MEASURED, on the 329 block file the
+; streaming test reads: 7% of the whole run saved when the file is the first entry in the
+; directory, 11% when it is the sixteenth. Modest, and worth having for the shape rather
+; than the size - what it really removes is a cost that grows with how full the disk is,
+; on the one operation that is repeated once per block. NOTHING IS EVER TRUSTED THAT WAS NOT
+; PUT HERE BY A SEARCH: this is a copy of an answer, not a second place where the truth
+; about a file is written, and every path that could make it wrong calls fileForget. That
+; is what makes it a speed rather than a promise - a cache that has been thrown away is
+; indistinguishable from one that was never filled.
+;
+; The name is twenty three bytes for a name of twenty two, so that a name filling the
+; field still has a zero after it and can be compared as a string.
+FileCacheValid:
+  0x00
+FileCacheName:
+  #Reserve 0d23
+FileCacheStart:
+  0x00 0x00
+FileCacheBlocks:
+  0x00 0x00
+FileCacheTail:
+  0x00
+
 ; ---- The vectors a loaded program brought with it ----
 ;
 ; Six bytes each: where it goes, what goes there, and what was there before. The last two
@@ -2633,6 +2893,8 @@ CommandLine:
   osFileSave     handleFileSave
   osFileDelete   handleFileDelete
   osFileRename   handleFileRename
+  osFileInfo     handleFileInfo
+  osFileBlock    handleFileBlock
   osPrintNumber  handlePrintNumber
   osBreak        handleBreak
   Device 0x20    diskDone

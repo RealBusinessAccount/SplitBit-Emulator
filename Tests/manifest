@@ -300,6 +300,22 @@ cosmosEdit           | CosmOS/Source/cosmos.asm           | run      | cosmosEdi
 # with files and carries the filesystem inside it. That difference is the whole case for the
 # service layer, and this is where it is checked rather than argued.
 cosmosServices       | CosmOS/Source/cosmos.asm           | run      | cosmosFiles2.in    | -     | disks/services.img
+# Streaming, which is what a file bigger than memory needs. The disk here holds 84000
+# bytes in one file and the machine has 64K of Data Memory, so there is no arrangement of
+# osFileRead that could get at it: the program reads it through a buffer of one block.
+#
+# THE CHECK THAT MATTERS IS THE SECOND ONE. A small file is read both ways - whole with
+# osFileRead, and streamed - and the two checksums have to agree, so streaming is measured
+# against the path that already worked rather than against a number somebody wrote down.
+# The checksum is Fletcher's rather than a sum, because a sum is the same whatever order
+# the bytes arrived in and the order is exactly what streaming has to get right.
+#
+# The rest of it is the lookup the system keeps so that reading four hundred blocks of one
+# file does not search the directory four hundred times. Two files read alternately catch a
+# memory that does not notice the name changed, and a rename catches one that does not
+# notice the file moved - and that one would otherwise pass, since the blocks are still
+# there and still hold the same bytes.
+cosmosStream         | CosmOS/Source/cosmos.asm           | run      | cosmosStream.in    | -     | disks/stream.img
 # The programs CosmOS loads, checked on their own so that a failure here reads as "the app
 # does not assemble" rather than as a broken disk image.
 app-greet            | CosmOS/Apps/greet.asm              | assemble | -                  | -
@@ -311,6 +327,7 @@ app-Say              | CosmOS/Apps/Say.asm                | assemble | -        
 app-Break            | CosmOS/Apps/Break.asm              | assemble | -                  | -
 app-Edit             | CosmOS/Apps/Edit.asm               | assemble | -                  | -
 app-Files            | CosmOS/Apps/Files.asm              | assemble | -                  | -
+app-Stream           | CosmOS/Apps/Stream.asm             | assemble | -                  | -
 
 # ---- Programs driven by console input ----
 inputTest            | inputTest.asm                      | run      | inputTest.in       | -

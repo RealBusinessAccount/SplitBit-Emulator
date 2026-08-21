@@ -1,0 +1,16 @@
+CosmOS
+> loaded, starting at 2000
+> big.txt is 329 blocks
+read 329 blocks, checksum 57368, stopped with 3
+small.txt streamed is 15216, read whole is 15216
+the same
+the same block twice with another file between: the same
+renamed small.txt
+the old name now answers 2
+the new name answers 0
+a name that was never there answers 2
+a block past the end answers 3
+finished
+> halted
+Execution halted.
+[exit 0]

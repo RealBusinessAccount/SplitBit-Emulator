@@ -138,3 +138,21 @@ printf 'the second one' > two.txt
 "$ROOT/Assembler" -I "$ROOT/Programs/CosmOS/Source" \
     "$ROOT/Programs/CosmOS/Apps/Files.asm" -o "$WORK/Files.sbx" >/dev/null
 "$TOOL" put "$DISKS/services.img" "$WORK/Files.sbx" >/dev/null
+
+# A disk for streaming, and the only one here that has to be big: the file on it is bigger
+# than the machine's Data Memory, which is the entire point of the services it checks.
+#
+# THE FILE IS GENERATED RATHER THAN TAKEN FROM THE REPOSITORY. Concatenating the CosmOS
+# sources would be a truer picture of what streaming is for, and would change the recorded
+# checksum every time a line of CosmOS was edited - so a real difference would arrive in a
+# crowd of meaningless ones, which is the same trap the cycle counts used to set. This is
+# 84000 bytes, which is 328 whole blocks and 32 bytes over, so the short block at the end
+# is exercised rather than assumed.
+"$TOOL" format "$DISKS/stream.img" 1024 2 >/dev/null
+awk 'BEGIN { for (i = 0; i < 4000; i++) printf "streaming line %05d\n", i }' > big.txt
+awk 'BEGIN { for (i = 0; i < 50; i++) printf "small %05d\n", i }' > small.txt
+"$TOOL" put "$DISKS/stream.img" big.txt >/dev/null
+"$TOOL" put "$DISKS/stream.img" small.txt >/dev/null
+"$ROOT/Assembler" -I "$ROOT/Programs/CosmOS/Source" \
+    "$ROOT/Programs/CosmOS/Apps/Stream.asm" -o "$WORK/Stream.sbx" >/dev/null
+"$TOOL" put "$DISKS/stream.img" "$WORK/Stream.sbx" >/dev/null

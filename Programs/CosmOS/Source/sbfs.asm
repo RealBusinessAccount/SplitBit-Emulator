@@ -473,6 +473,48 @@ sbfsReadDone:
   ADD                   ; Q is zero: read.
   RET
 
+; Reads one block of the file sbfsFind found, the one SbfsIndex names counting from zero,
+; into Data Memory at DP1. Q is zero if it worked.
+;
+; This is the whole of streaming: a file too big to hold is read a block at a time by
+; asking for each in turn, and nothing has to be kept between the calls but the number.
+; sbfsRead is what this would be if it were called in a loop, which is why the two look
+; alike; it stays as it is because reading a whole small file is what most callers want
+; and doing it in one call is both shorter and faster.
+;
+; The whole block comes across, including a last one that the file only partly fills, so
+; the bytes past the end of it are whatever else was on the disk there. SbfsFileTail says
+; where the file stops and it is the caller's business to respect it, the same bargain
+; sbfsRead offers.
+;
+; An index past the end of the file is not caught here. It reads whatever block that
+; works out to, which is somebody else's file or free space; the caller knows how many
+; blocks there are, because sbfsFileExtent tells it.
+sbfsReadOne:
+  PSHD.1
+  POPD.3                ; Where it goes. DP3 is the one pointer a CALL does not put back.
+
+  SETD.0 SbfsBlock
+  SETD.2 SbfsFileStart
+  CALL sbfsSetWord
+  SETD.0 SbfsBlock
+  SETD.2 SbfsIndex
+  CALL sbfsAddWord
+
+  CALL sbfsReadBlock
+  BNQ sbfsReadOneDone   ; The read failed, and Q says so.
+
+  PSHD.3
+  POPD.1
+  CALL sbfsBufferOut
+
+  RSTA
+  RSTB
+  CCF
+  ADD                   ; Q is zero: read.
+sbfsReadOneDone:
+  RET
+
 ; ---- Writing ----
 
 ; Where the first block that can hold a file is: past the superblock and the directory.
@@ -1239,6 +1281,8 @@ SbfsMatchLeft:
   0x00
 SbfsLeft:
   0x00
+SbfsIndex:
+  0x00 0x00
 
 ; ---- What a walk through the directory keeps between calls ----
 

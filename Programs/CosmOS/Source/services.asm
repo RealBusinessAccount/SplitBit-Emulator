@@ -45,6 +45,35 @@
   osFileDelete   0d22   ; DP0 names it. Q is zero if it went.
   osFileRename   0d23   ; DP0 is the name it has, DP1 the name it should have. Q is zero if it moved.
 
+; ---- Reading a file that will not fit ----
+;
+; osFileRead answers with a whole file in Data Memory, which settles it for anything under
+; 64K and settles nothing above. These two are the other way of asking: how big is it, and
+; then give me one block of it at a time. Nothing is kept between the calls but the number
+; of the block wanted, so there is no handle to open, none to close, and nothing left
+; behind by a program that stops in the middle. The system remembers where the last file it
+; was asked about lives, so asking for four hundred blocks of one file costs one search of
+; the directory rather than four hundred; that is a speed, not a promise, and a caller
+; never has to know about it.
+;
+; THESE TWO SAY WHY WHEN THE ANSWER IS NO, which the others do not. Everywhere else the
+; only useful thing to do about a failure is to give up, so one value is enough. These
+; exist to be asked questions with - is it there, is there any more of it - and the
+; difference between "no disk", "no such file" and "that was the last block" is the answer
+; rather than an excuse.
+;
+;   1  there is no disk
+;   2  there is no file of that name
+;   3  that block is past the end of the file      (osFileBlock only)
+;   4  the disk would not read it                  (osFileBlock only)
+  osFileInfo     0d26   ; DP0 names it. Q is zero if it is there, DP3 is how many blocks.
+  osFileBlock    0d27   ; DP0 names it, DP1 says where, A and B are which block from zero.
+                        ; Q is zero if it read, DP3 is how many of its bytes are the file's:
+                        ; a whole 0d256 except in a last block that is short. That count is
+                        ; why DP3 answers and not a register - 0d256 does not fit in a byte,
+                        ; and a count that lied about a full block would make every reader
+                        ; treat the end of a file as a special case.
+
 ; ---- And with the console ----
 ;
 ; printString is already up there. This is the other half of what a program prints: a
