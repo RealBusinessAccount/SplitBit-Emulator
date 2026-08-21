@@ -76,7 +76,7 @@ cosmos: $(COSMOS) $(APPS)
 $(COSMOS_DISK): $(APPS)
 	@mkdir -p $(@D)
 	rm -f $@
-	$(DISKTOOL) format $@ 256 2
+	$(DISKTOOL) format $@ 2048 4
 	@for app in $(APPS); do $(DISKTOOL) put $@ $$app; done
 
 # The system as well as the disk. Building only the image leaves whatever cosmos.bin was

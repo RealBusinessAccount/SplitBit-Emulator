@@ -59,7 +59,11 @@ for i in 1 2 3 4 5 6 7 8; do "$TOOL" put "$DISKS/sbfs.img" "filler$i.txt" >/dev/
 # to the hardware, so something has to check that one still gives the machine back.
 #
 # notes.txt is there so that loading something that is not a program can be tried too.
-"$TOOL" format "$DISKS/cosmos.img" 256 2 >/dev/null
+# 512K, and four directory blocks for 32 files. It was 64K and 16, which was ample for a
+# disk that held programs and nothing else - but the native assembler reads SOURCE from
+# here, and the CosmOS sources alone are 104,142 bytes against the 65,536 a 256 block disk
+# holds. A machine that is going to assemble itself has to be able to hold its own source.
+"$TOOL" format "$DISKS/cosmos.img" 2048 4 >/dev/null
 "$ROOT/Assembler" -I "$ROOT/Programs/CosmOS/Source" \
     "$ROOT/Programs/CosmOS/Apps/greet.asm" -o "$WORK/greet.sbx" >/dev/null
 "$TOOL" put "$DISKS/cosmos.img" "$WORK/greet.sbx" >/dev/null
