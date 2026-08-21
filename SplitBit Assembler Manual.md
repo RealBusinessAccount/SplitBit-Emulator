@@ -417,7 +417,7 @@ Assembler [options] <sourcefile>
 
 | Option | Meaning |
 | -- | -- |
-| -o, --output \<file\> | Write the output to this path. Without it, the output is named after the source file, with a .bin extension, in the directory the assembler was run from. |
+| -o, --output \<file\> | Write the output to this path. Without it, the output is named after the source file, in the directory the assembler was run from, taking .bin if it is a boot image and .sbx if it is a loadable program. |
 | -I, --include \<dir\> | Look in this directory for included files. May be given more than once, and the directories are searched in the order given. |
 | -M, --depend \<file\> | Write out which source files went into the output, as a make rule. |
 | -h, --help | Print the options and stop. |

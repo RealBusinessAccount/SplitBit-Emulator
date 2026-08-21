@@ -101,7 +101,7 @@ If the CPU reads a byte that is not an instruction, it goes to the fault handler
 | `-M <file>` | Write out which source files the output depends on, as a make rule. |
 | `-h`, `--help` | Show help and usage information. |
 
-Without `-o` the output takes the source file's name with a `.bin` extension, in the directory you called the assembler from. Included files are looked for beside the file that includes them, and then along the directories given with `-I`.
+Without `-o` the output takes the source file's name, in the directory you called the assembler from, with the extension the format asks for: `.bin` for a boot image and `.sbx` for a loadable program. Included files are looked for beside the file that includes them, and then along the directories given with `-I`.
 
 ## Managing Disks: SplitDisk
 

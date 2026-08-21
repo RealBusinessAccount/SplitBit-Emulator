@@ -20,7 +20,16 @@ int dataLength = 0;
 uint8_t Program[0xFFFF], Data[0xFFFF];
 
 
+// What an assembled file is called when nobody said. The extension follows the FORMAT
+// rather than being always .bin: a boot image is what the machine starts from and a
+// loadable program is what a running system loads, and this repository has called them
+// .bin and .sbx apart for long enough that a .bin holding SBEX is a small lie.
+//
+// The assembler that runs on SplitBit already chose this way. Two assemblers naming their
+// output differently from the same source is exactly the sort of difference that wastes an
+// afternoon.
 char* createOutputFileName(const char *inputFilePath) {
+    const char *extension = programIsLoadable() ? ".sbx" : ".bin";
     // Make a copy of inputFilePath, since basename may modify it
     char *pathCopy = strdup(inputFilePath);
     if (!pathCopy) {
@@ -37,26 +46,25 @@ char* createOutputFileName(const char *inputFilePath) {
     // Check if the filename ends with ".asm"
     char *outputFileName;
     if (len > 4 && strcmp(fileName + len - 4, ".asm") == 0) {
-        // Allocate memory for the new file name with ".bin" extension
-        outputFileName = malloc(len - 4 + 5);  // Remove ".asm" (4 chars) and add ".bin" (4 chars + null terminator)
+        // Remove ".asm" (4 chars) and add the extension (4 chars plus a null terminator).
+        outputFileName = malloc(len - 4 + 5);
         if (!outputFileName) {
             fprintf(stderr, "Error: Memory allocation failed for output file name.\n");
             free(pathCopy);
             exit(1);
         }
-        // Copy the filename up to ".asm" and add ".bin"
         strncpy(outputFileName, fileName, len - 4);
-        strcpy(outputFileName + len - 4, ".bin");
+        strcpy(outputFileName + len - 4, extension);
     } else {
-        // If there's no ".asm" extension, add ".bin" to the full filename
-        outputFileName = malloc(len + 5);  // Original length + ".bin" + null terminator
+        // No ".asm" to replace, so the extension goes on the end of the whole name.
+        outputFileName = malloc(len + 5);
         if (!outputFileName) {
             fprintf(stderr, "Error: Memory allocation failed for output file name.\n");
             free(pathCopy);
             exit(1);
         }
         strcpy(outputFileName, fileName);
-        strcat(outputFileName, ".bin");
+        strcat(outputFileName, extension);
     }
 
     free(pathCopy);  // Free the temporary path copy
