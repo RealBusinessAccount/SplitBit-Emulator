@@ -15,7 +15,14 @@ DEPFLAGS = -MMD -MP
 # strdup, dirname and getopt. Asking for POSIX.1-2008 by name means the build does
 # not rely on the compiler happening to default to a mode where those are visible,
 # and it survives someone overriding CFLAGS, which is why it is kept separate.
-POSIXFLAGS = -D_POSIX_C_SOURCE=200809L
+#
+# _XOPEN_SOURCE=700 IS POSIX.1-2008, plus the XSI extensions. The plain
+# _POSIX_C_SOURCE=200809L was here and is not quite enough: realpath is an XSI interface,
+# so under -std=c11 -pedantic it went undeclared and the assembler would not compile. The
+# ordinary build never noticed, because without -std=c11 the compiler's own default
+# already declares it. The README makes a claim about the strict build, so 'make strict'
+# below settles it rather than leaving it to be discovered.
+POSIXFLAGS = -D_XOPEN_SOURCE=700
 
 # Directories
 SRC_DIR_EMU = Source/Emulator
@@ -70,8 +77,23 @@ $(OBJ_DIR)/%.o: $(SRC_DIR_ASM)/%.c
 # Pull in the header dependencies written out by the compiler above.
 -include $(EMU_OBJS:.o=.d) $(ASM_OBJS:.o=.d) $(DSK_OBJS:.o=.d)
 
+# ---- The strict build the README promises ----
+#
+# "The sources are ISO C and build clean under -std=c11 -pedantic with -Wall -Wextra."
+# That is a claim somebody may check by typing it, so the suite checks it first. It was
+# false when this target was written: realpath went undeclared under a feature test macro
+# that did not reach far enough, which the ordinary -Os build never saw.
+STRICT = -std=c11 -pedantic -Wall -Wextra -Werror $(POSIXFLAGS)
+
+strict:
+	@for source in $(SRC_DIR_EMU)/*.c $(SRC_DIR_ASM)/*.c $(SRC_DIR_DSK)/*.c; do \
+		$(CC) $(STRICT) -c $$source -o /dev/null || exit 1; \
+	done
+	@echo "The sources build clean under -std=c11 -pedantic."
+
 # Run the test suite against the programs in Programs/
-test: $(EMU_TARGET) $(ASM_TARGET) $(DSK_TARGET)
+test: $(EMU_TARGET) $(ASM_TARGET) $(DSK_TARGET) strict
+	@echo
 	@./Tests/run.sh
 	@echo
 	@./Tests/disk.sh

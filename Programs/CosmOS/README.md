@@ -223,7 +223,7 @@ HI
 
 Typed in as bytes, checked by disassembling it back, and run. It ends with `SWI osExit`, which is how it gives the machine to the shell rather than to nothing.
 
-There are no breakpoints yet, and `g` does not come back. The machinery for both already exists and nothing has used it: SplitBit has 192 undecodable bytes, and an invalid opcode dispatches through the `BadOpcode` vector carrying **the address of the offending byte**. A breakpoint is a spare byte written over an instruction and a handler waiting for it.
+`g` does not come back: what it runs has to give the machine to the shell itself, which `SWI osExit` is how a program does. Breakpoints are not the monitor's - they are `SWI osBreak`, written into the program rather than poked over it, and described under Stopping To Look.
 
 ### The Editor:
 
@@ -354,7 +354,7 @@ A file of 256 blocks or more is refused by `osFileRead` rather than partly read,
 
 ### Reading A File That Will Not Fit:
 
-`osFileRead` hands over a whole file, which settles the question for anything under 64K and settles nothing above it. CosmOS's own source is above it: the sources together are a hundred kilobytes and Data Memory is sixty four. A machine that is one day going to assemble itself has to be able to read a file bigger than its memory.
+`osFileRead` hands over a whole file, which settles the question for anything under 64K and settles nothing above it. CosmOS's own source is above it: the sources together are a hundred kilobytes and Data Memory is sixty four. A machine that assembles itself has to be able to read a file bigger than its memory, and this is what that stands on.
 
 So there is a second way to ask. `osFileInfo` says how big something is and `osFileBlock` hands over one block of it, and between them a program reads a file of any size through a buffer of 256 bytes.
 
@@ -552,13 +552,16 @@ than merely checking its filesystem code against itself.
 
 CosmOS is early software for an experimental computer. It runs one application at a
 time, has no privilege levels or process isolation, does not relocate applications, and
-provides a line assembler but not yet a native assembler for source files, nor a linker. Its present purpose is to make
-SplitBit usable from inside the machine: inspect it, manage persistent files, load
-programs, provide common services, and return reliably to a command prompt.
+has no linker. Its purpose is to make SplitBit usable from inside the machine: inspect
+it, manage persistent files, load programs, provide common services, and return reliably
+to a command prompt.
 
-The intended long-term milestone is self-hosting: editing SplitBit assembly source under
-CosmOS, assembling and linking it natively, and eventually rebuilding CosmOS and its own
-development tools on the machine.
+**Self-hosting is done.** `Assembler/` reads source off a SplitBit disk and writes a boot
+image or a loadable program back to it, byte for byte what the host assembler builds from
+the same source. It assembles CosmOS, and it assembles itself, and the CosmOS it built
+assembles CosmOS again to the same bytes. What is left of that milestone is a linker, and
+editing source under CosmOS comfortably enough to want to: `Edit` is line oriented and
+knows nothing about assembly.
 
 ## Additional Information:
 

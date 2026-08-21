@@ -49,8 +49,20 @@ $(BUILD)/%.bin: %.asm
 	$(ASM) $(INCLUDES) -M $(@:.bin=.d) -o $@ $<
 
 # Assemble and run a single program, as in 'make run-hello'.
-run-%: $(BUILD)/%.bin
-	$(EMU) $<
+#
+# THE NAME IS THE PROGRAM'S, NOT ITS PATH. This used to be a pattern rule against
+# $(BUILD)/%.bin, which worked while every program sat at the top of this directory and
+# stopped working the moment they were filed into Examples/ - 'make run-hello' had nothing
+# to match. Somebody trying the one command the header advertises should not be the way
+# that is discovered, so the name is now looked up among the programs instead.
+run-%:
+	@target=`echo $(BINARIES) | tr ' ' '\n' | grep -E "(^|/)$*\.bin$$" | head -1`; \
+	if [ -z "$$target" ]; then \
+		echo "There is no program called '$*'. What there is:"; \
+		echo $(PROGRAMS) | tr ' ' '\n' | sed 's|.*/||;s|\.asm$$||;s|^|  |'; \
+		exit 1; \
+	fi; \
+	$(MAKE) --no-print-directory "$$target" && $(EMU) "$$target"
 
 # ---- CosmOS ----
 #
