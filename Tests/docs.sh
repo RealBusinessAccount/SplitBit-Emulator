@@ -59,6 +59,36 @@ for name in tracked.split(b"\0"):
                             % (path, number, ", ".join("%r (U+%04X)" % (c, ord(c)) for c in odd)))
             break
 
+# ---- Every link in the documents goes somewhere ----
+#
+# A link that does not resolve is the same kind of wrong as a stale claim: it looks like
+# information and is not, and nobody notices until a stranger clicks it. The manuals have
+# SPACES IN THEIR NAMES, so a link to one carries %20 and has to be unquoted before it can
+# be looked for - which is the sort of thing that would otherwise be got wrong once and
+# then reported as fine.
+import os
+import urllib.parse
+
+for name in tracked.split(b"\0"):
+    if not name or not name.endswith(b".md"):
+        continue
+    path = name.decode()
+    here = os.path.dirname(path)
+    for match in re.finditer(r"\[[^\]]*\]\(([^)]+)\)", read(path)):
+        target = match.group(1)
+        if target.startswith(("http://", "https://", "#", "mailto:")):
+            continue
+        # A raw space ends the link early in most renderers, so the file existing is not
+        # enough - the manuals have spaces in their names and must carry %20.
+        if " " in target:
+            problems.append("%s links to \"%s\", which has a space in it: most renderers"
+                            " stop at the space. Write it as %%20."
+                            % (path, target))
+            continue
+        wanted = urllib.parse.unquote(target.split("#")[0])
+        if not os.path.exists(os.path.normpath(os.path.join(here, wanted))):
+            problems.append("%s links to %s, and there is nothing there" % (path, target))
+
 # ---- Every instruction has a row, and every row is an instruction ----
 #
 # A mnemonic begins with a letter, which is what keeps the offset and size columns of the

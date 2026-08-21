@@ -2,7 +2,7 @@
 
 SplitBit is an 8 bit computer that does not exist: a CPU with its own instruction set, split Program and Data memories, an interrupt and vector system, a bus that programs can enumerate, a memory controller that can write code into memory, and a disk. This repository is a C implementation of the machine, an assembler for it, a tool for its disks, and the software that runs on it, which now includes an operating system and an assembler written in SplitBit's own assembly language.
 
-**SplitBit assembles SplitBit.** `Programs/CosmOS/Assembler/` runs on the machine, reads source off a SplitBit disk, and writes a boot image or a loadable program back to it with no host involved. It builds the operating system it is running under, and it builds itself, both byte for byte identical to what the C assembler produces from the same source. The test suite then boots the CosmOS that CosmOS built and has *that* one assemble CosmOS again, and the second generation is identical to the first, so the machinery has been through itself. After that the host is a convenience rather than a necessity.
+**SplitBit assembles SplitBit.** [`Programs/CosmOS/Assembler/`](Programs/CosmOS/Assembler) runs on the machine, reads source off a SplitBit disk, and writes a boot image or a loadable program back to it with no host involved. It builds the operating system it is running under, and it builds itself, both byte for byte identical to what the C assembler produces from the same source. The test suite then boots the CosmOS that CosmOS built and has *that* one assemble CosmOS again, and the second generation is identical to the first, so the machinery has been through itself. After that the host is a convenience rather than a necessity.
 
 ```
 > load Asm.sbx
@@ -16,15 +16,15 @@ wrote Asm.sbx: program 7533, data 4099, labels 555
 
 | Directory | What it holds |
 | --- | --- |
-| `Source/Emulator` | The machine: CPU, memory controller, devices, console, disk |
-| `Source/Assembler` | The assembler that runs on a host |
-| `Source/DiskTool` | SplitDisk, which reads and writes SplitBit's filesystem |
-| `Programs/Examples` | Programs to read: hello, a calculator, Fibonacci, a prime sieve, Life |
-| `Programs/Libraries` | Code included by name rather than linked, since there is no linker |
-| `Programs/Loader` | The standalone loader CosmOS grew out of |
-| `Programs/CosmOS` | The operating system, its applications, and the native assembler |
-| `Programs/testPrograms` | What the test suite drives |
-| `Tests` | The suite: the manifest, the recorded output, and the scripts that check it |
+| [`Source/Emulator`](Source/Emulator) | The machine: CPU, memory controller, devices, console, disk |
+| [`Source/Assembler`](Source/Assembler) | The assembler that runs on a host |
+| [`Source/DiskTool`](Source/DiskTool) | SplitDisk, which reads and writes SplitBit's filesystem |
+| [`Programs/Examples`](Programs/Examples) | Programs to read: hello, a calculator, Fibonacci, a prime sieve, Life |
+| [`Programs/Libraries`](Programs/Libraries) | Code included by name rather than linked, since there is no linker |
+| [`Programs/Loader`](Programs/Loader) | The standalone loader CosmOS grew out of |
+| [`Programs/CosmOS`](Programs/CosmOS) | The operating system, its applications, and the native assembler |
+| [`Programs/testPrograms`](Programs/testPrograms) | What the test suite drives |
+| [`Tests`](Tests) | The suite: the manifest, the recorded output, and the scripts that check it |
 
 ## The Machine:
 
@@ -186,11 +186,11 @@ This catches reads and writes past the end of an array, use after free, leaks, a
 
 Three documents, divided by what they are about rather than by who reads them.
 
-The **SplitBit Programming Manual** describes **the machine**: the instruction set, the registers, the vector table, interrupts, devices, the memory controller, the console, storage, and faults. Everything here is true of any SplitBit, whatever is running on it.
+**[SplitBit Programming Manual](SplitBit%20Programming%20Manual.md)** describes **the machine**: the instruction set, the registers, the vector table, interrupts, devices, the memory controller, the console, storage, and faults. Everything here is true of any SplitBit, whatever is running on it.
 
-The **SplitBit Assembler Manual** describes **the language and the file formats**: literal values, labels, segments, the directives, the loadable program header, and the assembler that runs on SplitBit itself.
+**[SplitBit Assembler Manual](SplitBit%20Assembler%20Manual.md)** describes **the language and the file formats**: literal values, labels, segments, the directives, the loadable program header, and the assembler that runs on SplitBit itself.
 
-`Programs/CosmOS/README.md` describes **the operating system**: its shell, its applications, what a program may ask it for, and the libraries it owns. A different system on the same machine would answer all of that differently, which is why it is documented with the system rather than with the CPU.
+[Programs/CosmOS/README.md](Programs/CosmOS/README.md) describes **the operating system**: its shell, its applications, what a program may ask it for, and the libraries it owns. A different system on the same machine would answer all of that differently, which is why it is documented with the system rather than with the CPU.
 
 ## License:
 
