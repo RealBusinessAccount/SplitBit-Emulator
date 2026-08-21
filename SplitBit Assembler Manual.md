@@ -207,6 +207,52 @@ A program that genuinely wants a segment at the bottom of memory says so:
 
 `#Base` is the one directive that takes zero. `#Align` and `#Reserve` are counts, and a count of nothing is a typo, so they still require at least one.
 
+## The Boot Image Format:
+
+A boot image is what the machine starts from: the Program and Data segments in one file,
+with nothing to say where they go, because they go at the bottom of each memory. It is what
+the assembler writes when a program does not say where it lives, and what the emulator is
+given on the command line.
+
+Every value in it is stored most significant byte first, which is the same order the CPU reads addresses out of Program Memory.
+
+A file begins with a nine byte header:
+
+| Offset | Size | Field |
+| -- | -- | -- |
+| 0 | 4 | The characters `SPBT`, so that a file which is not a boot image is recognised as such straight away. |
+| 4 | 1 | The format version. This document describes version 1. |
+| 5 | 4 | Required feature flags. |
+
+The feature flags are how a boot image states that it needs something the base machine does not provide. An emulator that cannot provide everything an image asks for refuses to run it, rather than running it and going quietly wrong. No feature bits are defined yet, so the field is currently zero in every image.
+
+After the header come the segments. The Program Segment comes first and then the Data Segment, each beginning with a three character marker, `PRG` or `DAT`, followed by a two byte length. The system loads each memory with the bytes that follow, in sequence, starting from address 0x0000.
+
+A third segment may follow them, marked `VEC`, holding the vectors a program named in its Vector Segment. It is four bytes an entry: two saying where in Program Memory the vector sits, and two saying where its handler is. A program that named no vectors has no such segment, and a file that simply ends after its Data Segment is one written before vectors existed. Either way the reader treats the end of the file as an empty table, which is why adding this cost no format version and left every image already written still loadable.
+
+Here is the hello world program from the Programming Manual, assembled and dumped as hex:
+
+```
+53 50 42 54 01 00 00 00 00 50 52 47 00 11 42 00 12 00 0c d1 00 40 00 10 00 00 26 0a d1 00 ff 44
+41 54 00 0e 48 65 6c 6c 6f 2c 20 57 6f 72 6c 64 21 00
+```
+
+Taken apart:
+
+| Bytes | Meaning |
+| -- | -- |
+| `53 50 42 54` | `SPBT` |
+| `01` | Format version 1 |
+| `00 00 00 00` | No features required |
+| `50 52 47` | `PRG` |
+| `00 11` | The Program Segment is 17 bytes long |
+| `42 00 12 00 0c d1 00 40 00 10 00 00 26 0a d1 00 ff` | The Program Segment |
+| `44 41 54` | `DAT` |
+| `00 0e` | The Data Segment is 14 bytes long |
+| `48 65 6c 6c 6f 2c 20 57 6f 72 6c 64 21 00` | The Data Segment |
+
+The `42 00` at the start of the Program Segment is worth a look: `42` is LDA, and the `00` after it is the Data Pointer selector the assembler filled in, because the program did not name one.
+
 ## Loading A Program From A Disk:
 
 A program that was not the one the machine booted from carries sixteen bytes in front of it saying where it belongs.

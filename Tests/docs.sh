@@ -351,17 +351,22 @@ import tempfile
 # says what it could not find; these two were the exception, and a rename here produced an
 # IndexError and a traceback instead of a sentence. That is a worse answer than a stale
 # manual, because whoever reads it learns nothing about which heading moved.
+# THE TWO HALVES ARE IN DIFFERENT MANUALS NOW, and that makes this a better check than it
+# was. The program belongs with the machine, where it arrives just after the instruction
+# list; the hex dump belongs with the boot image format it is an example of, which is the
+# assembler's business. So this settles three things against each other at once: what the
+# Programming Manual prints, what the Assembler Manual prints, and what the assembler does.
 exampleAnchor = "### Example Program: Hello World"
 dumpAnchor = "assembled and dumped as hex:"
 if exampleAnchor not in pm:
     problems.append("the Programming Manual has lost its \"Example Program: Hello World\""
                     " heading, so the worked example cannot be found")
-elif dumpAnchor not in pm:
-    problems.append("the Programming Manual no longer says \"%s\" before the hex dump, so"
+elif dumpAnchor not in am:
+    problems.append("the Assembler Manual no longer says \"%s\" before the hex dump, so"
                     " there is nothing to compare the worked example against" % dumpAnchor)
 else:
     source = pm.split(exampleAnchor)[1].split("```")[1]
-    claimed = pm.split(dumpAnchor)[1].split("```")[1].split()
+    claimed = am.split(dumpAnchor)[1].split("```")[1].split()
     with tempfile.TemporaryDirectory() as work:
         asm = os.path.join(work, "hello.asm")
         binary = os.path.join(work, "hello.bin")

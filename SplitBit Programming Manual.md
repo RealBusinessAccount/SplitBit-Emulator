@@ -1,4 +1,14 @@
-# General Description:
+# The SplitBit Programming Manual
+
+This describes the machine: what the CPU has, what its instructions do, how something gets
+its attention, and what a SplitBit is made of. Everything here is true of any SplitBit,
+whatever happens to be running on it.
+
+The **Assembler Manual** describes the language you write for it and the two file formats
+it produces. `Programs/CosmOS/README.md` describes CosmOS, which is one operating system
+that runs on this machine rather than part of the machine itself.
+
+# The Machine
 
 SplitBit is a small 8 bit CPU.
 It is a Harvard Architecture machine with a separate 64k memory space for its Program and another for its Data.
@@ -157,7 +167,7 @@ LDD and STD are how a program follows an address it has stored, rather than one 
 
 # Making It Do Something
 
-## Input and Output In the Emulator:
+## Making It Print Something:
 
 Port 0 is the console: writing sends a byte to standard output and reading takes one from standard input. It answers on two more ports than that, which are described under The Console and which a program can ignore entirely if all it wants is to read and write bytes. Everything else this machine has is listed under Devices, and a program that wants to know what is actually there asks the bus registry rather than assuming.
 
@@ -186,47 +196,6 @@ End:
 ```
 
 Nothing in that program names a Data Pointer, so all of it runs through Data Pointer 0.
-
-### Structure of a SplitBit Binary File:
-
-The Program and Data values are both stored in a single file for loading into the system. Every multi byte value in the format is stored most significant byte first, which is the same order the CPU reads addresses out of Program Memory.
-
-A file begins with a nine byte header:
-
-| Offset | Size | Field |
-| -- | -- | -- |
-| 0 | 4 | The characters `SPBT`, so that a file which is not a SplitBit binary is recognised as such straight away. |
-| 4 | 1 | The format version. This document describes version 1. |
-| 5 | 4 | Required feature flags. |
-
-The feature flags are how a binary states that it needs something the base machine does not provide. An emulator that cannot provide everything a binary asks for refuses to run it, rather than running it and going quietly wrong. No feature bits are defined yet, so the field is currently zero in every binary.
-
-After the header come the segments. The Program Segment comes first and then the Data Segment, each beginning with a three character marker, `PRG` or `DAT`, followed by a two byte length. The system loads each memory with the bytes that follow, in sequence, starting from address 0x0000.
-
-A third segment may follow them, marked `VEC`, holding the vectors a program named in its Vector Segment. It is four bytes an entry: two saying where in Program Memory the vector sits, and two saying where its handler is. A program that named no vectors has no such segment, and a file that simply ends after its Data Segment is one written before vectors existed. Either way the reader treats the end of the file as an empty table, which is why adding this cost no format version and left every binary already written still loadable.
-
-Here is the hello world program above, assembled and dumped as hex:
-
-```
-53 50 42 54 01 00 00 00 00 50 52 47 00 11 42 00 12 00 0c d1 00 40 00 10 00 00 26 0a d1 00 ff 44
-41 54 00 0e 48 65 6c 6c 6f 2c 20 57 6f 72 6c 64 21 00
-```
-
-Taken apart:
-
-| Bytes | Meaning |
-| -- | -- |
-| `53 50 42 54` | `SPBT` |
-| `01` | Format version 1 |
-| `00 00 00 00` | No features required |
-| `50 52 47` | `PRG` |
-| `00 11` | The Program Segment is 17 bytes long |
-| `42 00 12 00 0c d1 00 40 00 10 00 00 26 0a d1 00 ff` | The Program Segment |
-| `44 41 54` | `DAT` |
-| `00 0e` | The Data Segment is 14 bytes long |
-| `48 65 6c 6c 6f 2c 20 57 6f 72 6c 64 21 00` | The Data Segment |
-
-The `42 00` at the start of the Program Segment is worth a look: `42` is LDA, and the `00` after it is the Data Pointer selector the assembler filled in, because the program did not name one.
 
 ## The Console:
 
@@ -645,7 +614,7 @@ So the fence protects code from a mistaken loader. It is not general memory prot
 
 ### Loading A Program:
 
-Everything the controller does adds up to one thing a SplitBit machine could not do before: run code that was not in the binary it started from.
+Everything the controller does adds up to one thing a SplitBit machine could not do before: run code that was not in the boot image it started from.
 
 The sequence is short. Put the bytes of a routine somewhere, blit them into Program Memory, write their address into a vector, and call it.
 
