@@ -1,4 +1,5 @@
-; Sixteen bit arithmetic, for an assembler that counts in addresses.
+; The small things every other part of the assembler needs: sixteen bit arithmetic, for
+; something that counts in addresses, and one string comparison.
 ;
 ; sbfs.asm has routines like these and the assembler cannot use them: it does not include
 ; the filesystem, because it reaches the disk through the system's services instead. That
@@ -40,6 +41,25 @@ numAdd:
   LDA.0
   LDB.2
   ADD                       ; Carries in from the low half. Nothing between touches it.
+  MVQA
+  STA.0
+  RET
+
+; The two byte number at DP0 becomes itself less the one at DP2.
+numTake:
+  DPUP.0 0d01
+  DPUP.2 0d01
+  LDA.0
+  LDB.2
+  CCF
+  SUB
+  MVQA
+  STA.0
+  DPDN.0 0d01
+  DPDN.2 0d01
+  LDA.0
+  LDB.2
+  SUB                       ; Borrows in from the low half.
   MVQA
   STA.0
   RET
@@ -90,6 +110,25 @@ numCompare:
   CCF
   SUB
 numCompareDone:
+  RET
+
+; Q is zero if the strings at DP0 and DP1 are the same, both ending in a zero byte.
+;
+; Down here rather than with the label table, where it started, because four separate
+; parts want it: labels, vector names, which file has already been included, and which
+; directive a keyword is.
+sameText:
+  LDA.0
+  LDB.1
+  CCF
+  SUB
+  BNQ sameTextDone
+  LDA.0
+  BRA sameTextDone          ; They ended together, so they matched all the way.
+  INCD.0
+  INCD.1
+  BRI sameText
+sameTextDone:
   RET
 
 ; The two byte number at DP0 becomes zero.

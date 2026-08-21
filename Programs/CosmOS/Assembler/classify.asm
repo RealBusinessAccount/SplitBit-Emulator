@@ -20,9 +20,8 @@
 
 ; Works out what TokText is. Q is zero if it is something the assembler understands.
 clsToken:
-  RSTA
   SETD.0 ClsLength
-  STA.0
+  CALL numZero
 
   SETD.0 TokString
   LDA.0
@@ -62,8 +61,7 @@ clsTryValue:
   SETD.0 ClsType
   STA.0
   INIA 0d1
-  SETD.0 ClsLength
-  STA.0
+  CALL clsSetLength
   BRI clsYes
 
 clsIsString:
@@ -72,11 +70,18 @@ clsIsString:
   STA.0
   ; A string is its characters and the zero byte after them, which is why two strings
   ; written in a row are two strings rather than one long one.
-  SETD.0 TokLength
-  LDA.0
-  INCA
+  ;
+  ; SIXTEEN BITS, and this is the token that needs them: a string may be 255 characters,
+  ; which with its zero is 256, and 256 does not fit in a byte. Everything else here is 0,
+  ; 1, 2 or 3.
   SETD.0 ClsLength
-  STA.0
+  CALL numZero
+  SETD.2 TokLength
+  LDA.2
+  SETD.0 ClsLength
+  CALL numAddByte
+  SETD.0 ClsLength
+  CALL numStep
   BRI clsYes
 
 clsTryLabel:
@@ -98,8 +103,7 @@ clsUse:
   SETD.0 ClsType
   STA.0
   INIA 0d2
-  SETD.0 ClsLength
-  STA.0
+  CALL clsSetLength
 
 clsYes:
   RSTA
@@ -187,8 +191,7 @@ clsSelectorsFit:
   SETD.0 ClsWanted
   LDA.0
   INCA
-  SETD.0 ClsLength
-  STA.0                     ; The opcode and its selectors. The operand is its own token.
+  CALL clsSetLength         ; The opcode and its selectors. The operand is its own token.
   RSTA
   RSTB
   CCF
@@ -409,106 +412,182 @@ clsSameDone:
 ; Is TokText a well formed literal? Q is zero if it is, and ClsValue is what it comes to.
 ; Anything beginning with a zero has to be one, so a failure here is an error rather than
 ; an invitation to try the next test.
+;
+; A LITERAL IS ONE BYTE WHEREVER IT GOES, so this is the byte-wide door onto clsWord below.
+; The directives are the wide one: #Base takes an address and #Reserve a count, and neither
+; would fit through here.
 clsValue:
-  SETD.0 TokText
+  CALL clsWord
+  BNQ clsValueNo
+  SETD.0 ClsWord
+  LDA.0
+  BNA clsValueTooBig        ; Something in the high byte, so it will not fit in one.
   INCD.0
   LDA.0
-  INIB 0x78                 ; 'x'
-  XOR
-  BRQ clsValueHex
-  SETD.0 TokText
-  INCD.0
-  LDA.0
-  INIB 0x64                 ; 'd'
-  XOR
-  BRQ clsValueDecimal
-
-  SETD.0 BadPrefix
-  CALL clsComplain
-  BRI clsValueNo
-
-clsValueHex:
-  INIA 0d16
-  SETD.0 ClsBase
-  STA.0
-  BRI clsValueDigits
-
-clsValueDecimal:
-  INIA 0d10
-  SETD.0 ClsBase
-  STA.0
-
-clsValueDigits:
-  SETD.0 TokLength
-  LDA.0
-  INIB 0d3
-  CCF
-  SUB
-  BRC clsValueEmpty         ; Only the prefix, so there are no digits at all.
-
-  RSTA
   SETD.0 ClsValue
   STA.0
-  SETD.0 TokText
-  INCD.0
-  INCD.0
-  SETD.1 ClsWalk
-  STD.0.1
-
-clsValueLoop:
-  SETD.1 ClsWalk
-  LDD.0.1
-  LDA.0
-  BRA clsValueGood
-  CALL clsDigit
-  BNQ clsValueBadDigit
-
-  ; value = value * base + digit, and anything that will not fit in a byte is refused
-  ; rather than wrapped, because a literal is one byte wherever it goes.
-  SETD.0 ClsDigitValue
-  LDA.0
-  SETD.2 ClsValue
-  LDB.2
-  PSHA
-  SETD.0 ClsBase
-  LDA.0
-  CALL clsMultiply
-  BNQ clsValueTooBig
-  POPA
-  SETD.0 ClsProduct
-  LDB.0
-  CCF
-  ADD
-  BRC clsValueTooBig
-  MVQA
-  SETD.0 ClsValue
-  STA.0
-
-  SETD.0 ClsWalk
-  CALL numStep
-  BRI clsValueLoop
-
-clsValueGood:
   RSTA
   RSTB
   CCF
   ADD
   RET
 
-clsValueEmpty:
-  SETD.0 NoDigits
-  CALL clsComplain
-  BRI clsValueNo
-clsValueBadDigit:
-  SETD.0 BadDigit
-  CALL clsComplain
-  BRI clsValueNo
 clsValueTooBig:
-  POPA
   SETD.0 TooBig
   CALL clsComplain
-
 clsValueNo:
+  RSTA
+  INIB 0d1
+  CCF
+  ADD
+  RET
+
+; Reads TokText as a sixteen bit number, into ClsWord. Q is zero if it is a well formed one.
+;
+; Both bases are here rather than in two routines because the only difference is which
+; digits count and what to multiply by, and a number is written the same way wherever it
+; appears - an address after #Base, a count after #Reserve, a byte in a segment.
+clsWord:
+  SETD.0 TokText
+  INCD.0
+  LDA.0
+  INIB 0x78                 ; 'x'
+  XOR
+  BRQ clsWordHex
+  SETD.0 TokText
+  INCD.0
+  LDA.0
+  INIB 0x64                 ; 'd'
+  XOR
+  BRQ clsWordDecimal
+
+  SETD.0 BadPrefix
+  CALL clsComplain
+  BRI clsWordNo
+
+clsWordHex:
+  INIA 0d16
+  SETD.0 ClsBase
+  STA.0
+  BRI clsWordDigits
+
+clsWordDecimal:
+  INIA 0d10
+  SETD.0 ClsBase
+  STA.0
+
+clsWordDigits:
+  SETD.0 TokLength
+  LDA.0
+  INIB 0d3
+  CCF
+  SUB
+  BRC clsWordEmpty          ; Only the prefix, so there are no digits at all.
+
+  SETD.0 ClsWord
+  CALL numZero
+  SETD.0 TokText
+  INCD.0
+  INCD.0
+  SETD.1 ClsWalk
+  STD.0.1
+
+clsWordLoop:
+  SETD.1 ClsWalk
+  LDD.0.1
+  LDA.0
+  BRA clsWordGood
+  CALL clsDigit
+  BNQ clsWordBadDigit
+
+  CALL clsWordTimesBase
+  BNQ clsWordTooBig
+
+  ; And the digit on the end. A sum that comes out smaller than what went into it is a sum
+  ; that went past sixteen bits, which is the only test needed and costs one comparison.
+  RSTA
+  SETD.0 ClsDigitWord
+  STA.0
+  INCD.0
+  SETD.2 ClsDigitValue
+  LDA.2
+  STA.0
+  SETD.0 ClsWord
+  SETD.2 ClsDigitWord
+  CALL numAdd
+  SETD.0 ClsWord
+  SETD.2 ClsDigitWord
+  CALL numCompare
+  BRC clsWordTooBig
+
+  SETD.0 ClsWalk
+  CALL numStep
+  BRI clsWordLoop
+
+clsWordGood:
+  RSTA
+  RSTB
+  CCF
+  ADD
+  RET
+
+clsWordEmpty:
+  SETD.0 NoDigits
+  CALL clsComplain
+  BRI clsWordNo
+clsWordBadDigit:
+  SETD.0 BadDigit
+  CALL clsComplain
+  BRI clsWordNo
+clsWordTooBig:
+  SETD.0 TooBigWord
+  CALL clsComplain
+clsWordNo:
+  RSTA
+  INIB 0d1
+  CCF
+  ADD
+  RET
+
+; ClsWord becomes itself times ClsBase. Q is not zero if that went past sixteen bits.
+;
+; By repeated addition, because this machine has no multiply. The base is ten or sixteen,
+; so it is at most sixteen additions per digit, and a number in a source file has four or
+; five digits.
+clsWordTimesBase:
+  SETD.0 ClsAccum
+  CALL numZero
+  SETD.0 ClsMulLeft
+  SETD.2 ClsBase
+  LDA.2
+  STA.0
+
+clsWordMulLoop:
+  SETD.0 ClsMulLeft
+  LDA.0
+  BRA clsWordMulDone
+  DECA
+  STA.0
+  SETD.0 ClsAccum
+  SETD.2 ClsWord
+  CALL numAdd
+  SETD.0 ClsAccum
+  SETD.2 ClsWord
+  CALL numCompare
+  BRC clsWordMulOver        ; It came out smaller than what was added, so it wrapped.
+  BRI clsWordMulLoop
+
+clsWordMulDone:
+  SETD.0 ClsWord
+  SETD.2 ClsAccum
+  CALL numSet
+  RSTA
+  RSTB
+  CCF
+  ADD
+  RET
+
+clsWordMulOver:
   RSTA
   INIB 0d1
   CCF
@@ -592,43 +671,17 @@ clsDigitNo:
   ADD
   RET
 
-; B times A into ClsProduct. Q is not zero if it would not fit in a byte, which is the
-; only answer a literal can use: there is no wider literal to promote it to.
-clsMultiply:
-  SETD.0 ClsMulLeft
-  STA.0
-  RSTA
-  SETD.0 ClsProduct
-  STA.0
-clsMultiplyLoop:
-  SETD.0 ClsMulLeft
-  LDA.0
-  BRA clsMultiplyDone
-  DECA
-  STA.0
-  SETD.0 ClsProduct
-  LDA.0
-  CCF
-  ADD
-  BRC clsMultiplyOver
-  MVQA
-  SETD.0 ClsProduct
-  STA.0
-  BRI clsMultiplyLoop
-clsMultiplyDone:
-  RSTA
-  RSTB
-  CCF
-  ADD
-  RET
-clsMultiplyOver:
-  RSTA
-  INIB 0d1
-  CCF
-  ADD
-  RET
-
 ; ---- Odds and ends ----
+
+; ClsLength becomes the byte in A. Everything but a string is a small number, and this is
+; how a small number is written into a sixteen bit field.
+clsSetLength:
+  SETD.0 ClsLength
+  RSTB
+  STB.0
+  INCD.0
+  STA.0
+  RET
 
 ; The character in A, folded to upper case, into ClsByte.
 clsUpper:
@@ -726,7 +779,7 @@ clsComplain:
 ClsType:
   0x00
 ClsLength:
-  0x00
+  0x00 0x00
 ClsOpcode:
   0x00
 ClsShape:
@@ -743,11 +796,15 @@ ClsName:
   #Reserve 0d5
 ClsValue:
   0x00
+ClsWord:
+  0x00 0x00
+ClsAccum:
+  0x00 0x00
+ClsDigitWord:
+  0x00 0x00
 ClsBase:
   0x00
 ClsDigitValue:
-  0x00
-ClsProduct:
   0x00
 ClsMulLeft:
   0x00
@@ -786,6 +843,8 @@ BadDigit:
 "that is not a digit in the base the prefix asked for"
 TooBig:
 "a literal too large to fit in one byte"
+TooBigWord:
+"a number too large to fit in sixteen bits"
 TooManySelectors:
 "more Data Pointer selectors than that instruction has pointers to name"
 BadSelector:

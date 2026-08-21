@@ -54,11 +54,9 @@ tokenLoop:
 
   SETD.0 ClsLength
   LDA.0
-  RSTB
-  PSHA
-  POPB
-  RSTA
-  SWI osPrintNumber
+  INCD.0
+  LDB.0
+  SWI osPrintNumber         ; Sixteen bits: a string of 255 characters is 256 bytes long.
 
   SETD.0 OpenMark
   SWI osPrintString

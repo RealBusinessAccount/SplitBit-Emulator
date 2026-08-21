@@ -501,8 +501,25 @@ Two passes are enough because **every length is known without resolving anything
 
 One thing is genuinely easier here than on a host. The host assembler searches a list of include directories, because a host has directories; **SBFS is flat**, so an include is a file name and there is nowhere else to look.
 
+### Building Applications:
+
+`#Include` splices another file in where it stands, so the reader is a stack of readers: the current file's whole state goes aside, the new one opens, and the end of it pops the old one back. A file is included **once** — including it twice is not an error, it just does nothing, which is what lets two libraries depend on a third.
+
+`#Base` says where a segment is loaded, and a program that says so gets the SBEX loadable header instead of the SPBT boot one, with a `.sbx` name rather than a `.bin`. `#Reserve` and `#Align` lay down runs of zeroes; how many an `#Align` comes to depends on where the cursor has reached, which is why both passes keep a cursor rather than the second one keeping only a write pointer.
+
+Names in `#Vectors` are read and numbered, pinned where the source pins them, so `SWI osPrintString` resolves. **What a name after `SWI` means is settled by what it follows**, not by anything about the name — the Vector Segment may live in a file included further down and may not have been read yet.
+
+That is everything an application needs:
+
+```
+> load Asm.sbx
+> run Say.asm
+wrote Say.sbx: program 46, data 93, labels 7
+> load Say.sbx
+> run built by the machine itself
+it says: built by the machine itself
+```
+
 ### What It Does Not Do Yet:
 
-`#Include`, `#Base`, `#Align`, `#Reserve` and `#Vectors` are **refused by name** rather than ignored. An assembler that quietly skipped a directive would produce a file that looked right and was the wrong length, which is the worst thing it could do; being told "this assembler does not understand that directive yet" costs nothing and hides nothing.
-
-So what it assembles today is a single file with no includes, which is `Programs/hello.asm` — the oldest program in the repository, and now the first one the machine assembles for itself.
+A `#Vectors` line that names a **handler** rather than only declaring a name. That needs a Vector Segment in the output file and the version two header that carries it, so a program bringing its own interrupt handlers cannot be built on the machine yet. It is refused by name rather than ignored, as everything unfinished here is: an assembler that quietly skipped a directive would produce a file that looked right and was the wrong length, which is the worst thing it could do.

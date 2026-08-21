@@ -84,17 +84,23 @@ cosmos: $(COSMOS) $(APPS) $(NATIVE_ASM)
 
 # Made from scratch every time, so that what is on it is what is in Apps/ now and not
 # also whatever used to be.
-$(COSMOS_DISK): $(APPS) $(NATIVE_ASM) hello.asm testPrograms/stringKeyword.asm
+$(COSMOS_DISK): $(APPS) $(NATIVE_ASM) hello.asm testPrograms/stringKeyword.asm \
+                CosmOS/Apps/Say.asm CosmOS/Source/services.asm
 	@mkdir -p $(@D)
 	rm -f $@
 	$(DISKTOOL) format $@ 2048 4
 	@for app in $(APPS); do $(DISKTOOL) put $@ $$app; done
 	$(DISKTOOL) put $@ $(NATIVE_ASM)
 	@# SOURCE goes on as well, because an assembler with nothing to assemble is a
-	@# demonstration of nothing. Both of these are single files with no #Include, which
-	@# is what the native assembler handles so far.
+	@# demonstration of nothing. hello.asm and strings.asm are boot images built from one
+	@# file; Say.asm is an application, which needs the include and the service names.
+	@#
+	@# Assembling Say.asm writes Say.sbx over the one the host tool put there, so the
+	@# machine ends up running a program it built itself.
 	$(DISKTOOL) put $@ hello.asm
 	$(DISKTOOL) put $@ testPrograms/stringKeyword.asm strings.asm
+	$(DISKTOOL) put $@ CosmOS/Apps/Say.asm
+	$(DISKTOOL) put $@ CosmOS/Source/services.asm
 
 # The system as well as the disk. Building only the image leaves whatever cosmos.bin was
 # there before, or none at all, and then the disk is booted with a system that does not

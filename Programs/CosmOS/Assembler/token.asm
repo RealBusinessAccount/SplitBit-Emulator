@@ -25,6 +25,18 @@
 ; the line it STARTED on - captured before the token is read, because a token ending in a
 ; newline has already moved the reader on to the next line by the time it is finished.
 tokNext:
+  SETD.0 TokHeld
+  LDA.0
+  BRA tokFresh
+  RSTA
+  STA.0
+  RSTA
+  RSTB
+  CCF
+  ADD                       ; The one that was handed back, exactly as it was.
+  RET
+
+tokFresh:
   RSTA
   SETD.0 TokString
   STA.0
@@ -129,6 +141,36 @@ tokEnded:
   INIB 0d1
   CCF
   ADD                       ; Q is not zero: the source is finished.
+  RET
+
+; Puts the held character back into the file it came from, leaving nothing in hand.
+;
+; This is what #Include calls before the reader puts the current file aside. The character
+; the tokenizer is holding was read from that file and has not been used, so it goes back
+; into it; there is then nothing to carry across the include and nothing to hand back at a
+; moment that might land in the middle of a word.
+tokUnread:
+  SETD.0 TokPending
+  LDA.0
+  BRA tokUnreadDone
+  CALL srcStepBack
+  RSTA
+  SETD.0 TokPending
+  STA.0
+tokUnreadDone:
+  RET
+
+; Hands the token just read back, so that the next tokNext produces it again.
+;
+; ONE TOKEN, and only where nothing has changed it since. The Vector Segment needs it: a
+; name there may be followed by a number, by a handler, or by the next line's name, and
+; which it is cannot be known without looking. Do NOT use it after anything that alters
+; TokText - a label definition with its colon written over would come back as a use of the
+; name rather than as a definition of it.
+tokBack:
+  INIA 0d1
+  SETD.0 TokHeld
+  STA.0
   RET
 
 ; The next character, into TokChar. Q is zero if there was one. Takes the held one first.
@@ -241,6 +283,8 @@ TokString:
 TokChar:
   0x00
 TokPending:
+  0x00
+TokHeld:
   0x00
 
 ; As long as a token may be, and one more for the zero. The other assembler stops at the

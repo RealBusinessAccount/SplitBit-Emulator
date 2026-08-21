@@ -10,6 +10,10 @@
 # Then it runs what the machine built, because a file that matches and does not work would
 # mean both assemblers were wrong together.
 #
+# It checks a boot image and three loadable programs. The loadable ones are the harder case
+# and the interesting one: they include another file, they are based somewhere other than
+# zero, and every service they call is a name declared in that included file.
+#
 # Written by Anachronaut
 
 set -u
@@ -55,8 +59,21 @@ mkdir -p "$WORK"
 "$TOOL" put "$WORK/native.img" "$ROOT/Programs/hello.asm" hello.asm >/dev/null
 "$TOOL" put "$WORK/native.img" "$WORK/Asm.sbx" Asm.sbx >/dev/null
 
-printf 'load Asm.sbx\nrun hello.asm\nexit\n' \
-    | "$EMU" --fast --cycles 50000000 -D "$WORK/native.img" "$WORK/cosmos.bin" \
+# The applications, and the file of service names they all include. These are the reason
+# the second milestone exists: an assembler that cannot follow an #Include cannot build
+# anything that asks the system for anything.
+APPS="Say greet Files"
+"$TOOL" put "$WORK/native.img" "$ROOT/Programs/CosmOS/Source/services.asm" services.asm >/dev/null
+for app in $APPS; do
+    "$TOOL" put "$WORK/native.img" "$ROOT/Programs/CosmOS/Apps/$app.asm" "$app.asm" >/dev/null
+done
+
+{
+    echo "load Asm.sbx"
+    echo "run hello.asm"
+    for app in $APPS; do echo "run $app.asm"; done
+    echo "exit"
+} | "$EMU" --fast --cycles 600000000 -D "$WORK/native.img" "$WORK/cosmos.bin" \
     > "$WORK/session.txt" 2>&1
 
 # ---- It got as far as writing something ----
@@ -75,8 +92,24 @@ check "byte for byte" cmp -s "$WORK/native.bin" "$WORK/reference.bin"
 check "and it runs" grep -q "^Hello, World!$" "$WORK/ran.txt"
 
 # ---- The report it printed says what it did ----
-REPORT="$(grep -o 'program [0-9]*, data [0-9]*, labels [0-9]*' "$WORK/session.txt" || true)"
+REPORT="$(grep -o 'program [0-9]*, data [0-9]*, labels [0-9]*' "$WORK/session.txt" | head -1 || true)"
 check "it counted right" grep -q "program 17, data 14, labels 2" "$WORK/session.txt"
+
+# ---- And the applications, which need an include, a base and the service names ----
+#
+# A loadable program is the harder case and the one that matters: #Include splices another
+# file in, #Base moves every label to where the program will really live, and every SWI in
+# them names a vector declared in a file the source never mentions by number.
+for app in $APPS; do
+    "$ASM" -I "$ROOT/Programs/CosmOS/Source" -o "$WORK/ref-$app.sbx" \
+        "$ROOT/Programs/CosmOS/Apps/$app.asm" >/dev/null
+    rm -f "$WORK/got-$app.sbx"
+    "$TOOL" get "$WORK/native.img" "$app.sbx" "$WORK/got-$app.sbx" >/dev/null 2>&1
+    if [ -f "$WORK/got-$app.sbx" ]; then
+        REPORT="$(wc -c < "$WORK/got-$app.sbx" | tr -d ' ') bytes"
+    fi
+    check "$app byte for byte" cmp -s "$WORK/got-$app.sbx" "$WORK/ref-$app.sbx"
+done
 
 echo
 if [ "$FAIL" -eq 0 ]; then

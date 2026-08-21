@@ -173,7 +173,7 @@ labFindLoop:
   LDD.0.1
   SETD.1 LabSought
   LDD.1.1
-  CALL labSame
+  CALL sameText
   BRQ labFindGot
 
   SETD.0 LabWhich
@@ -223,21 +223,6 @@ labEntryAt:
   SETD.0 LabEntry
   SETD.2 LabOffset
   CALL numAdd
-  RET
-
-; Q is zero if the strings at DP0 and DP1 are the same, both ending in a zero byte.
-labSame:
-  LDA.0
-  LDB.1
-  CCF
-  SUB
-  BNQ labSameDone
-  LDA.0
-  BRA labSameDone           ; They ended together, so they matched all the way.
-  INCD.0
-  INCD.1
-  BRI labSame
-labSameDone:
   RET
 
 ; How long the string at DP0 is, counting the zero on the end, into LabLength.
