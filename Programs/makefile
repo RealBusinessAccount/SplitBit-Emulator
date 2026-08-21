@@ -86,10 +86,11 @@ cosmos: $(COSMOS) $(APPS) $(NATIVE_ASM)
 # also whatever used to be.
 $(COSMOS_DISK): $(APPS) $(NATIVE_ASM) testPrograms/stringKeyword.asm \
                 CosmOS/Apps/hello.asm CosmOS/Apps/Say.asm CosmOS/Apps/Keys.asm \
-                CosmOS/Source/services.asm CosmOS/Source/console.asm
+                CosmOS/Source/services.asm CosmOS/Source/console.asm \
+                $(wildcard CosmOS/Source/*.asm) $(wildcard CosmOS/Assembler/*.asm)
 	@mkdir -p $(@D)
 	rm -f $@
-	$(DISKTOOL) format $@ 2048 4
+	$(DISKTOOL) format $@ 4096 8
 	@for app in $(APPS); do $(DISKTOOL) put $@ $$app; done
 	$(DISKTOOL) put $@ $(NATIVE_ASM)
 	@# SOURCE goes on as well, because an assembler with nothing to assemble is a
@@ -112,6 +113,16 @@ $(COSMOS_DISK): $(APPS) $(NATIVE_ASM) testPrograms/stringKeyword.asm \
 	$(DISKTOOL) put $@ CosmOS/Source/services.asm
 	$(DISKTOOL) put $@ CosmOS/Source/console.asm
 	$(DISKTOOL) put $@ testPrograms/stringKeyword.asm strings.asm
+	@# And the whole of CosmOS, and the whole of the assembler, so that the machine can
+	@# build the system it is running on and then build the thing that built it:
+	@#
+	@#   > load Asm.sbx
+	@#   > run cosmos.asm
+	@#   > run Asm.asm
+	@#
+	@# Both come out byte for byte what the host tool makes from the same source.
+	@for f in CosmOS/Source/*.asm CosmOS/Assembler/*.asm; do \
+		$(DISKTOOL) put $@ $$f >/dev/null; done
 
 # The system as well as the disk. Building only the image leaves whatever cosmos.bin was
 # there before, or none at all, and then the disk is booted with a system that does not

@@ -537,8 +537,28 @@ A `#Vectors` line that names a **handler** says this program implements that vec
 
 **A declaration and an implementation are the same entry.** `services.asm` says a service is called `osPrintString` and has number 16; `cosmos.asm` says `osPrintString` is handled by `handlePrintString`. Both sides include the first file, so the name is met twice and the second time fills in the handler. That is what lets one shared file serve both a program that calls a service and the system that implements it — and it is why the first pass declares and the second implements, a handler being an address and no address being known until every label has been placed.
 
+### Self Hosting:
+
+It assembles CosmOS, and it assembles itself.
+
+```
+> load Asm.sbx
+> run cosmos.asm
+wrote cosmos.bin: program 7036, data 2448, labels 475
+> run Asm.asm
+wrote Asm.sbx: program 7533, data 4099, labels 555
+```
+
+Both come out **byte for byte identical** to what the host assembler builds from the same source. `make run-cosmos` puts every source file on the disk, so this can be done rather than read about.
+
+**The check that matters most is the third one.** A binary that matches could still have been built by an assembler wrong in some way this particular source happens not to exercise. So `Tests/native.sh` boots the CosmOS that CosmOS built and has *that* assemble CosmOS again — and the second generation is identical to the first, down to the cycle count. It is a fixed point, which means the machinery has been through itself.
+
+After that the host is a convenience rather than a necessity.
+
+CosmOS takes about 80 million cycles, which is eighty seconds of emulated time and under a second under `--fast`. Most of that is the label table: a straight walk of 475 names, several thousand times. Sorting it or bucketing it on the first character are both easy, and neither was worth writing before there was something to measure.
+
+**The hardest thing it assembles is not the operating system, it is itself** — 555 labels and 6,770 bytes of name against CosmOS's 475 and 5,881, and a larger output. That is what the buffer sizes are cut to.
+
 ### What It Does Not Do Yet:
 
-Nothing in the language. Every directive this manual describes is understood, and `Tests/native.sh` checks a boot image and four loadable programs — the last of them bringing a vector — against the host assembler byte for byte on every run.
-
-What is left is scale rather than grammar: whether it can assemble CosmOS itself, which is 104,142 bytes of source across several files and 453 labels.
+Nothing in the language. Every directive this manual describes is understood, and every one of them is checked against the host assembler byte for byte on every test run.

@@ -345,6 +345,7 @@ app-Stream           | CosmOS/Apps/Stream.asm             | assemble | -        
 asm-Asm              | CosmOS/Assembler/Asm.asm           | assemble | -                  | -
 asm-readTest         | CosmOS/Assembler/readTest.asm      | assemble | -                  | -
 asm-tokenTest        | CosmOS/Assembler/tokenTest.asm     | assemble | -                  | -
+asm-scratch          | CosmOS/Assembler/scratch.asm       | assemble | -                  | -
 
 # ---- Programs driven by console input ----
 inputTest            | inputTest.asm                      | run      | inputTest.in       | -

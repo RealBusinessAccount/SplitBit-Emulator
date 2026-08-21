@@ -117,6 +117,56 @@ for app in $APPS; do
     check "$app byte for byte" cmp -s "$WORK/got-$app.sbx" "$WORK/ref-$app.sbx"
 done
 
+# ---- Self hosting ----
+#
+# The two things that make this more than a demonstration: the machine assembling the
+# operating system it is running on, and the assembler assembling itself. Both have to come
+# out byte for byte identical to what the host tool builds from the same source.
+#
+# THE FIXED POINT IS THE THIRD CHECK AND THE ONE THAT MATTERS MOST. A binary that matches
+# could still have been built by an assembler that is wrong in some way the source happens
+# not to exercise; a binary that BUILDS ITSELF AGAIN and comes out the same has been through
+# its own machinery. The host is no longer necessary after this point - it is a convenience.
+
+SOURCES="cosmos console sbfs services text"
+PARTS="Asm numbers source token classify labels vectors table"
+
+"$TOOL" format "$WORK/self.img" 4096 8 >/dev/null
+for f in $SOURCES; do
+    "$TOOL" put "$WORK/self.img" "$ROOT/Programs/CosmOS/Source/$f.asm" "$f.asm" >/dev/null
+done
+for f in $PARTS; do
+    "$TOOL" put "$WORK/self.img" "$ROOT/Programs/CosmOS/Assembler/$f.asm" "$f.asm" >/dev/null
+done
+"$TOOL" put "$WORK/self.img" "$WORK/Asm.sbx" Asm.sbx >/dev/null
+
+printf 'load Asm.sbx\nrun cosmos.asm\nrun Asm.asm\nexit\n' \
+    | "$EMU" --fast --cycles 4000000000 -D "$WORK/self.img" "$WORK/cosmos.bin" \
+    > "$WORK/self.txt" 2>&1
+
+rm -f "$WORK/built-cosmos.bin" "$WORK/built-Asm.sbx"
+"$TOOL" get "$WORK/self.img" cosmos.bin "$WORK/built-cosmos.bin" >/dev/null 2>&1
+"$TOOL" get "$WORK/self.img" Asm.sbx "$WORK/built-Asm.sbx" >/dev/null 2>&1
+
+REPORT="$(grep -o 'program 7036, data 2448, labels [0-9]*' "$WORK/self.txt" || true)"
+check "CosmOS builds CosmOS" cmp -s "$WORK/built-cosmos.bin" "$WORK/cosmos.bin"
+REPORT="$(grep -o 'program 7533, data [0-9]*, labels [0-9]*' "$WORK/self.txt" || true)"
+check "and builds itself" cmp -s "$WORK/built-Asm.sbx" "$WORK/Asm.sbx"
+
+# ---- And the second generation is the first ----
+#
+# Boot the CosmOS that CosmOS built, and have that assemble CosmOS again.
+if [ -s "$WORK/built-cosmos.bin" ]; then
+    "$TOOL" delete "$WORK/self.img" cosmos.bin >/dev/null 2>&1
+    printf 'load Asm.sbx\nrun cosmos.asm\nexit\n' \
+        | "$EMU" --fast --cycles 4000000000 -D "$WORK/self.img" "$WORK/built-cosmos.bin" \
+        > "$WORK/second.txt" 2>&1
+    rm -f "$WORK/second-cosmos.bin"
+    "$TOOL" get "$WORK/self.img" cosmos.bin "$WORK/second-cosmos.bin" >/dev/null 2>&1
+fi
+REPORT="a fixed point"
+check "second generation" cmp -s "$WORK/second-cosmos.bin" "$WORK/built-cosmos.bin"
+
 echo
 if [ "$FAIL" -eq 0 ]; then
     echo "All $PASS native assembler checks passed."
@@ -125,5 +175,10 @@ else
     echo
     echo "The session was:"
     sed 's/^/    /' "$WORK/session.txt"
+    if [ -f "$WORK/self.txt" ]; then
+        echo
+        echo "And the self hosting run:"
+        sed 's/^/    /' "$WORK/self.txt"
+    fi
     exit 1
 fi

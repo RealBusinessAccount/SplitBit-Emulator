@@ -80,5 +80,6 @@ NoFileText:
 ; The libraries go last, after both segments have been based. An included file that carries
 ; code brings its own #Program and #Data lines with it, and a #Base has to come before
 ; anything is in the segment it bases - so the bases are set here and the code arrives after.
+#Include scratch.asm
 #Include numbers.asm
 #Include source.asm

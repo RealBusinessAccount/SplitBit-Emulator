@@ -225,9 +225,9 @@ vecWriteHandler:
 
 ; Where entry number VecWhich sits, into VecSlot. Twenty eight bytes an entry.
 vecSlotAt:
-  SETD.0 VecNames
-  SETD.1 VecSlot
-  STD.0.1
+  SETD.0 VecSlot
+  SETD.2 ScratchVecNames
+  CALL numSet
   SETD.0 VecSlotLeft
   SETD.2 VecWhich
   CALL numSet
@@ -293,5 +293,3 @@ VecFull:
 VecName:
   #Reserve 0d23
 
-VecNames:
-  #Reserve 0d1792

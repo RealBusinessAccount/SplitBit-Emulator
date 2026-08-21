@@ -169,6 +169,7 @@ NoFileText:
 "no such file
 "
 
+#Include scratch.asm
 #Include numbers.asm
 #Include source.asm
 #Include token.asm

@@ -278,9 +278,9 @@ srcStepBackAt:
 
 ; Where the slot for the current depth is, into SrcSlot.
 srcSlot:
-  SETD.0 SrcStack
-  SETD.1 SrcSlot
-  STD.0.1                   ; WHERE the stack is, not what is in it.
+  SETD.0 SrcSlot
+  SETD.2 ScratchSrcStack
+  CALL numSet               ; WHERE the stack is, not what is in it.
   SETD.0 SrcSlotLeft
   SETD.2 SrcDepth
   LDA.2
@@ -388,9 +388,9 @@ srcRemember:
 ; Where name number IncLeft sits, into IncSlot. Fixed fields of 23 bytes: there are few of
 ; these and they are short, so an arena would cost more code than it saved.
 srcSeenSlot:
-  SETD.0 IncNames
-  SETD.1 IncSlot
-  STD.0.1
+  SETD.0 IncSlot
+  SETD.2 ScratchIncNames
+  CALL numSet
   SETD.0 IncSlotLeft
   SETD.2 IncLeft
   LDA.2
@@ -549,10 +549,4 @@ TooDeepText:
 "included files are nested deeper than this assembler will follow
 "
 
-; Six levels of nesting, at 293 bytes each. CosmOS itself nests three deep.
-SrcStack:
-  #Reserve 0d1758
 
-; Sixteen names of 23 bytes, which is more separate files than anything here includes.
-IncNames:
-  #Reserve 0d368

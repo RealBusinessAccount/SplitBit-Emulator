@@ -25,12 +25,12 @@ labReset:
   CALL numZero
   SETD.0 LabUsed
   CALL numZero
-  SETD.0 LabArena
-  SETD.1 LabNext
-  STD.0.1
-  SETD.0 LabIndex
-  SETD.1 LabBase
-  STD.0.1
+  SETD.0 LabNext
+  SETD.2 ScratchLabArena
+  CALL numSet
+  SETD.0 LabBase
+  SETD.2 ScratchLabIndex
+  CALL numSet
   RET
 
 ; Adds the name at DP0, meaning the address in A and B. Q is zero if it went in.
@@ -294,13 +294,16 @@ LabLenWalk:
 LabEnd:
   0x00 0x00
 
-; How many labels there may be, and how many bytes of name between them. Sized for a
-; single program rather than for CosmOS: raising either is changing a number here, and
-; running into one says so rather than writing past the end of the table.
+; How many labels there may be, and how many bytes of name between them.
+;
+; SIZED FOR THE ASSEMBLER ITSELF, which turns out to be the largest thing it is asked to
+; build: 555 labels and about 6,800 bytes of name, against CosmOS's 475 and 5,881. Running into
+; either limit says so rather than writing past the end of the table. The buffers live
+; above the program rather than inside it - see the scratch map in Asm.asm.
 LabLimit:
-  0x01 0x00
+  0x03 0x00
 LabRoom:
-  0x08 0x00
+  0x20 0x00
 
 LabNamed:
 ": "
@@ -316,7 +319,3 @@ LabFull:
 LabNoRoom:
 "no room left for label names"
 
-LabIndex:
-  #Reserve 0d1024
-LabArena:
-  #Reserve 0d2048

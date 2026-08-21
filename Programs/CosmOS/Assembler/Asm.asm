@@ -1358,9 +1358,9 @@ layOutImage:
   CALL checkImageRoom
   BNQ layOutNo
 
-  SETD.0 Image
-  SETD.1 ImgWalk
-  STD.0.1
+  SETD.0 ImgWalk
+  SETD.2 ScratchImage
+  CALL numSet
   SETD.0 MagicSPBT
   INIA 0d4
   CALL putBytes
@@ -1412,9 +1412,9 @@ layOutLoadable:
   CALL checkImageRoom
   BNQ layOutNo
 
-  SETD.0 Image
-  SETD.1 ImgWalk
-  STD.0.1
+  SETD.0 ImgWalk
+  SETD.2 ScratchImage
+  CALL numSet
   SETD.0 MagicSBEX
   INIA 0d4
   CALL putBytes
@@ -1674,9 +1674,9 @@ writeVectorsHeader:
   SETD.0 Loadable
   LDA.0
   BRA writeVectorsNone
-  SETD.0 Image
-  SETD.1 ImgWalk
-  STD.0.1
+  SETD.0 ImgWalk
+  SETD.2 ScratchImage
+  CALL numSet
   SETD.0 ImgWalk
   INIA 0d4
   CALL numAddByte
@@ -1693,9 +1693,9 @@ writeVectorsNone:
   SETD.0 Loadable
   LDA.0
   BRA writeVectorsOut
-  SETD.0 Image
-  SETD.1 ImgWalk
-  STD.0.1
+  SETD.0 ImgWalk
+  SETD.2 ScratchImage
+  CALL numSet
   SETD.0 ImgWalk
   INIA 0d8
   CALL numAddByte
@@ -1773,7 +1773,8 @@ vectorNotEntry:
 
 writeImage:
   SETD.0 OutName
-  SETD.1 Image
+  SETD.1 ScratchImage
+  LDD.1.1
   SETD.2 ImgTotal
   LDA.2
   INCD.2
@@ -2046,9 +2047,10 @@ DropWalk:
   0x00 0x00
 
 ; How big a binary this can build. Everything the assembler makes has to fit here at once,
-; because a file is written in one call and there is nowhere to put half of one.
+; because a file is written in one call and there is nowhere to put half of one. CosmOS
+; itself comes to 9,564 bytes.
 ImgRoom:
-  0x10 0x00
+  0x34 0x00
 
 MagicSPBT:
 "SPBT"
@@ -2169,9 +2171,8 @@ LabelsEnd:
 "
 "
 
-Image:
-  #Reserve 0d4096
 
+#Include scratch.asm
 #Include numbers.asm
 #Include source.asm
 #Include token.asm
