@@ -2,6 +2,10 @@
 
 SplitBit is an 8 bit computer that does not exist: a CPU with its own instruction set, split Program and Data memories, an interrupt and vector system, a bus that programs can enumerate, a memory controller that can write code into memory, and a disk. This repository is a C implementation of the machine, an assembler for it, a tool for its disks, and the software that runs on it, which now includes an operating system and an assembler written in SplitBit's own assembly language.
 
+![CosmOS assembling a program, running it, and disassembling what it built](Media/CosmOS.png)
+
+*The whole loop in one screen. `Asm.sbx` assembles `hello.asm` into `hello.sbx`; the shell loads that and runs it; then the monitor disassembles what is at 0x2000, which is the program the machine wrote for itself at the top of the screen. No host is involved at any point.*
+
 **SplitBit assembles SplitBit.** [`Programs/CosmOS/Assembler/`](Programs/CosmOS/Assembler) runs on the machine, reads source off a SplitBit disk, and writes a boot image or a loadable program back to it with no host involved. It builds the operating system it is running under, and it builds itself, both byte for byte identical to what the C assembler produces from the same source. The test suite then boots the CosmOS that CosmOS built and has *that* one assemble CosmOS again, and the second generation is identical to the first, so the machinery has been through itself. After that the host is a convenience rather than a necessity.
 
 ```
