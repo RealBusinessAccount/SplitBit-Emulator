@@ -79,7 +79,7 @@ int main (int argc, char *argv[]) {
         programFile = argv[optind];
         optind++;
     } else {
-        fprintf(stderr, "Error: No binary file specified.\n");
+        fprintf(stderr, "Error: No boot image specified.\n");
         printHelp(argv[0]);
         return 1;
     }

@@ -8,7 +8,7 @@
 // has to change there in the same breath.
 //
 // All multi byte numbers are most significant byte first, the same as every other number
-// SplitBit stores: addresses, the SPBT binary header, and the vector table.
+// SplitBit stores: addresses, the SPBT boot image header, and the vector table.
 //
 // Written by Anachronaut
 

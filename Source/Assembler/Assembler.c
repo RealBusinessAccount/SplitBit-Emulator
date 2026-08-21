@@ -91,13 +91,13 @@ void printUsage(const char *programName) {
     printf("Usage: %s [OPTIONS] <sourcefile>\n", programName);
     printf("\n");
     printf("Options:\n");
-    printf("  -o <file>    Write the binary to this path instead of alongside the source.\n");
+    printf("  -o <file>    Write the output to this path instead of alongside the source.\n");
     printf("  -I <dir>     Look in this directory for included files. May be given more than once.\n");
-    printf("  -M <file>    Write the source files this binary depends on, as a make rule.\n");
+    printf("  -M <file>    Write the source files this output depends on, as a make rule.\n");
     printf("  -h, --help   Display this help message.\n");
 }
 
-// Writes a make rule naming every source file that went into the binary, so that a
+// Writes a make rule naming every source file that went into the output, so that a
 // build system knows to reassemble when any of them changes. The empty rules after it
 // are so that deleting a library does not leave make with a prerequisite it cannot
 // build; without them the build stops instead of just reassembling.

@@ -4,7 +4,7 @@
 // 10/16/2024
 
 #include "bootstrap.h"
-#include "../Assembler/assembly.h" // For the binary format, which both tools share.
+#include "../Assembler/assembly.h" // For the boot image format, which both tools share.
 #include <stdio.h>
 #include <string.h>
 
@@ -39,14 +39,14 @@ static uint8_t readMarker(FILE *file, const char *expected, int length, char *fo
     return strncmp(found, expected, length) != 0;
 }
 
-// Reads the file header: the magic, the format version, and the features the binary
+// Reads the file header: the magic, the format version, and the features the boot image
 // says it needs from the machine.
 static uint8_t readFileHeader(FILE *file) {
     char magic[SPLITBIT_MAGIC_LENGTH + 1];
     if (readMarker(file, SPLITBIT_MAGIC, SPLITBIT_MAGIC_LENGTH, magic)) {
-        fprintf(stderr, "Error: This is not a SplitBit binary.\n");
+        fprintf(stderr, "Error: This is not a SplitBit boot image.\n");
         if (strncmp(magic, "PRG", 3) == 0) {
-            fprintf(stderr, " It looks like a binary from before the format carried a version.\n Reassemble it and try again.\n");
+            fprintf(stderr, " It looks like a boot image from before the format carried a version.\n Reassemble it and try again.\n");
         } else {
             fprintf(stderr, " Expected the file to begin with \"%s\", found \"%s\".\n", SPLITBIT_MAGIC, magic);
         }
@@ -58,7 +58,7 @@ static uint8_t readFileHeader(FILE *file) {
         return 1;
     }
     if (version != SPLITBIT_FORMAT_VERSION) {
-        fprintf(stderr, "Error: This binary is in format version %u, and this emulator reads version %u.\n", version, SPLITBIT_FORMAT_VERSION);
+        fprintf(stderr, "Error: This boot image is in format version %u, and this emulator reads version %u.\n", version, SPLITBIT_FORMAT_VERSION);
         return 1;
     }
 
@@ -68,7 +68,7 @@ static uint8_t readFileHeader(FILE *file) {
     }
     uint32_t missing = required & ~(uint32_t)SPLITBIT_FEATURES_SUPPORTED;
     if (missing) {
-        fprintf(stderr, "Error: This binary was built for a machine this emulator cannot provide.\n");
+        fprintf(stderr, "Error: This boot image was built for a machine this emulator cannot provide.\n");
         fprintf(stderr, " It asks for feature bits 0x%08X, which are not implemented here.\n", missing);
         return 1;
     }
@@ -135,7 +135,7 @@ static uint8_t readVectorSegment(FILE *file, uint8_t *Program) {
             return 1;
         }
         if (slot < SOFTWARE_VECTOR_BASE) {
-            fprintf(stderr, "Error: This binary puts a vector at 0x%04X, which is below the vector table.\n", slot);
+            fprintf(stderr, "Error: This boot image puts a vector at 0x%04X, which is below the vector table.\n", slot);
             return 1;
         }
         Program[slot] = (handler >> 8) & 0xFF;

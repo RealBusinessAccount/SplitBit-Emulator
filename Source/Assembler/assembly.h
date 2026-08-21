@@ -8,13 +8,13 @@
 #ifndef ASSEMBLY_H
 #define ASSEMBLY_H
 
-// ---- The SplitBit binary format ----
+// ---- The SplitBit boot image format ----
 //
-// A binary starts with a file header, then the Program Segment, then the Data
+// A boot image starts with a file header, then the Program Segment, then the Data
 // Segment. All multi byte numbers are stored most significant byte first.
 //
 //   Offset  Size  Field
-//   0       4     "SPBT", so a file that is not a SplitBit binary is spotted at once
+//   0       4     "SPBT", so a file that is not a boot image is spotted at once
 //   4       1     Format version
 //   5       4     Required feature flags
 //   9       3     "PRG"
@@ -27,14 +27,14 @@
 //   ..      2     Vector Segment length, in bytes
 //   ..      K     Vector Segment, four bytes per entry
 //
-// The Vector Segment is optional and comes last, so a binary written before it existed
+// The Vector Segment is optional and comes last, so an image written before it existed
 // simply ends after its Data Segment and still loads. Each entry is two bytes saying
 // where in Program Memory the vector sits, then two bytes saying where its handler is,
 // most significant byte first. It is a list rather than an image of the table, so a
 // program with three handlers costs twelve bytes instead of a padded kilobyte.
 //
-// The feature flags are how a binary says it needs something the base machine does
-// not provide, so that an emulator which cannot provide it refuses to run the binary
+// The feature flags are how a boot image says it needs something the base machine does
+// not provide, so that an emulator which cannot provide it refuses to run the image
 // rather than quietly doing the wrong thing. No features are defined yet; the field
 // is here so that adding one later does not need another format version.
 
@@ -110,7 +110,7 @@
 #define SPLITBIT_HEADER_BYTES (SPLITBIT_MAGIC_LENGTH + 1 + SPLITBIT_FLAGS_LENGTH \
                                + 2 * (SEGMENT_MARKER_LENGTH + SEGMENT_LENGTH_BYTES))
 
-// Features this build of the emulator can provide. A binary asking for anything
+// Features this build of the emulator can provide. An image asking for anything
 // outside this set is refused.
 #define SPLITBIT_FEATURES_SUPPORTED 0x00000000u
 

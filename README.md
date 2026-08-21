@@ -2,7 +2,7 @@
 
 SplitBit is an 8 bit computer that does not exist: a CPU with its own instruction set, split Program and Data memories, an interrupt and vector system, a bus that programs can enumerate, a memory controller that can write code into memory, and a disk. This repository is a C implementation of the machine, an assembler for it, a tool for its disks, and the software that runs on it, which now includes an operating system and an assembler written in SplitBit's own assembly language.
 
-**SplitBit assembles SplitBit.** `Programs/CosmOS/Assembler/` runs on the machine, reads source off a SplitBit disk, and writes a binary back to it with no host involved. It builds the operating system it is running under, and it builds itself, both byte for byte identical to what the C assembler produces from the same source. The test suite then boots the CosmOS that CosmOS built and has *that* one assemble CosmOS again, and the second generation is identical to the first, so the machinery has been through itself. After that the host is a convenience rather than a necessity.
+**SplitBit assembles SplitBit.** `Programs/CosmOS/Assembler/` runs on the machine, reads source off a SplitBit disk, and writes a boot image or a loadable program back to it with no host involved. It builds the operating system it is running under, and it builds itself, both byte for byte identical to what the C assembler produces from the same source. The test suite then boots the CosmOS that CosmOS built and has *that* one assemble CosmOS again, and the second generation is identical to the first, so the machinery has been through itself. After that the host is a convenience rather than a necessity.
 
 ```
 > load Asm.sbx
@@ -74,7 +74,7 @@ Then `dir` to see what is there, `load Snake.sbx` and `run` to play something, o
 ## Running Programs: SplitBit
 
 ```
-./SplitBit [options] [binary file]
+./SplitBit [options] [boot image]
 ```
 
 | Option | What it does |
@@ -96,12 +96,12 @@ If the CPU reads a byte that is not an instruction, it goes to the fault handler
 
 | Option | What it does |
 | --- | --- |
-| `-o <file>` | Write the binary to this path. |
+| `-o <file>` | Write the output to this path. |
 | `-I <dir>` | Look in this directory for included files. May be given more than once. |
-| `-M <file>` | Write out which source files the binary depends on, as a make rule. |
+| `-M <file>` | Write out which source files the output depends on, as a make rule. |
 | `-h`, `--help` | Show help and usage information. |
 
-Without `-o` the binary takes the source file's name with a `.bin` extension, in the directory you called the assembler from. Included files are looked for beside the file that includes them, and then along the directories given with `-I`.
+Without `-o` the output takes the source file's name with a `.bin` extension, in the directory you called the assembler from. Included files are looked for beside the file that includes them, and then along the directories given with `-I`.
 
 ## Managing Disks: SplitDisk
 
@@ -123,7 +123,7 @@ Files are laid down contiguously, so a disk can have free blocks without having 
 
 ## Building Programs With Make:
 
-The assembler is built to work with make. `-o` puts the binary where the build system wants it, and `-M` writes out which libraries went into it, so that editing a library reassembles everything that includes it.
+The assembler is built to work with make. `-o` puts the output where the build system wants it, and `-M` writes out which libraries went into it, so that editing a library reassembles everything that includes it.
 
 `Programs/makefile` does this for the programs in this repository:
 

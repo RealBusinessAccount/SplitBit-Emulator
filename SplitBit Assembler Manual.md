@@ -417,16 +417,16 @@ Assembler [options] <sourcefile>
 
 | Option | Meaning |
 | -- | -- |
-| -o, --output \<file\> | Write the binary to this path. Without it, the binary is named after the source file, with a .bin extension, in the directory the assembler was run from. |
+| -o, --output \<file\> | Write the output to this path. Without it, the output is named after the source file, with a .bin extension, in the directory the assembler was run from. |
 | -I, --include \<dir\> | Look in this directory for included files. May be given more than once, and the directories are searched in the order given. |
-| -M, --depend \<file\> | Write out which source files went into the binary, as a make rule. |
+| -M, --depend \<file\> | Write out which source files went into the output, as a make rule. |
 | -h, --help | Print the options and stop. |
 
-The assembler stops at the first error, says which file and line it was in, and exits without writing a binary.
+The assembler stops at the first error, says which file and line it was in, and exits without writing anything.
 
 ## Building With Make:
 
-The -o and -M options are there so that the assembler fits into a build system. -o puts the binary wherever the build wants it, and -M writes down which libraries went into it, so that editing a library reassembles every program that includes it.
+The -o and -M options are there so that the assembler fits into a build system. -o puts the output wherever the build wants it, and -M writes down which libraries went into it, so that editing a library reassembles every program that includes it.
 
 ```
 $(BUILD)/%.bin: %.asm
@@ -589,7 +589,7 @@ wrote hello.bin: program 17, data 14, labels 2
 
 Loading and running are separate commands in CosmOS, so the source file is the argument to `run`.
 
-**Its output must be byte for byte what the host assembler produces from the same source**, and `Tests/native.sh` checks exactly that: it assembles `Programs/Examples/hello.asm` both ways and compares the files, then runs the one the machine built. This is the discipline SplitDisk and `sbfs.asm` already work under - two implementations of one written specification, each one checking the other. "It ran" is not good enough for an assembler, because a binary with a label one byte out runs right up until it jumps into the middle of an instruction.
+**Its output must be byte for byte what the host assembler produces from the same source**, and `Tests/native.sh` checks exactly that: it assembles `Programs/Examples/hello.asm` both ways and compares the files, then runs the one the machine built. This is the discipline SplitDisk and `sbfs.asm` already work under - two implementations of one written specification, each one checking the other. "It ran" is not good enough for an assembler, because a file with a label one byte out runs right up until it jumps into the middle of an instruction.
 
 ### How It Differs Inside:
 
@@ -649,7 +649,7 @@ wrote Asm.sbx: program 7533, data 4099, labels 555
 
 Both come out **byte for byte identical** to what the host assembler builds from the same source. `make run-cosmos` puts every source file on the disk, so this can be done rather than read about.
 
-**The check that matters most is the third one.** A binary that matches could still have been built by an assembler wrong in some way this particular source happens not to exercise. So `Tests/native.sh` boots the CosmOS that CosmOS built and has *that* assemble CosmOS again - and the second generation is identical to the first, down to the cycle count. It is a fixed point, which means the machinery has been through itself.
+**The check that matters most is the third one.** A file that matches could still have been built by an assembler wrong in some way this particular source happens not to exercise. So `Tests/native.sh` boots the CosmOS that CosmOS built and has *that* assemble CosmOS again - and the second generation is identical to the first, down to the cycle count. It is a fixed point, which means the machinery has been through itself.
 
 After that the host is a convenience rather than a necessity.
 

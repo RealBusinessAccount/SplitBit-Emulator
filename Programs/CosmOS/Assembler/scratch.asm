@@ -17,7 +17,7 @@
 ;
 ;   0x8000  3072   the label index, 768 entries of four
 ;   0x8C00  8192   the label names, packed end to end
-;   0xAC00 13312   the binary being built
+;   0xAC00 13312   the output file being built
 ;   0xE000  1792   the vector names, 64 entries of twenty eight
 ;   0xE700  1758   the reader's stack, six levels of 293
 ;   0xEE00   368   which files have been included, sixteen names of 23

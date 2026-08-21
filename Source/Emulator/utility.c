@@ -11,7 +11,7 @@
 #include "../Assembler/assembly.h"
 
 void printHelp(const char *programName) {
-    printf("Usage: %s [OPTIONS] <binaryfile>\n", programName);
+    printf("Usage: %s [OPTIONS] <boot image>\n", programName);
     printf("\n");
     printf("Options:\n");
     printf("  -d, --debug       Enable debug mode.\n");

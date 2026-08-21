@@ -10,7 +10,7 @@
 uint16_t shiftRegister;
 
 // Reads one entry out of a vector table. Most significant byte first, matching the
-// branch instructions and the binary format.
+// branch instructions and both file formats.
 static uint16_t readVector(const uint8_t *programMemory, uint16_t base, uint8_t index) {
     uint16_t address = base + (uint16_t)index * VECTOR_ENTRY_BYTES;
     return ((uint16_t)programMemory[address] << 8) | (uint16_t)programMemory[address + 1];

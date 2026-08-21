@@ -653,7 +653,7 @@ void writeOutputFile(const char *outputFileName, uint8_t *Program, int programCo
     }
 
     // Write the file header: the magic, the format version, and the features this
-    // binary needs from the machine. An emulator that cannot provide one of those
+    // boot image needs from the machine. An emulator that cannot provide one of those
     // features refuses the file rather than running it and going quietly wrong.
     fwrite(SPLITBIT_MAGIC, sizeof(char), SPLITBIT_MAGIC_LENGTH, outputFile);
     fputc(SPLITBIT_FORMAT_VERSION, outputFile);
@@ -703,7 +703,7 @@ void writeOutputFile(const char *outputFileName, uint8_t *Program, int programCo
     }
 
     // The Vector Segment, only if the program named any. Leaving it out entirely is
-    // what lets a binary written before vectors existed still load: the reader treats
+    // what lets an image written before vectors existed still load: the reader treats
     // the end of the file as an empty table rather than a missing one.
     int installed = 0;
     for (int i = 0; i < vectorArrayCount; i++) {
@@ -730,7 +730,7 @@ void writeOutputFile(const char *outputFileName, uint8_t *Program, int programCo
     }
 
     fclose(outputFile);
-    printf("Successfully wrote SplitBit binary to \"%s\".\n", outputFileName);
+    printf("Successfully wrote SplitBit boot image to \"%s\".\n", outputFileName);
     printf(GREEN "  Program Segment size: %d bytes.\n  Data Segment size: %d bytes.\n" RESET, programCount, dataCount);
     if (installed > 0) {
         printf(GREEN "  Vectors: %d.\n" RESET, installed);

@@ -6,7 +6,8 @@
 ; Loading and running are separate commands in this shell, so the file to assemble is the
 ; argument to run rather than a second name after the program's.
 ;
-; Reads assembly source off the disk and writes a binary back to it, with no host involved
+; Reads assembly source off the disk and writes a boot image or a loadable program back to it,
+; with no host involved
 ; anywhere. The output has to be byte for byte what the C assembler produces from the same
 ; source, which is the only honest test of it and the one the suite runs.
 ;
@@ -2046,7 +2047,7 @@ ImgHold:
 DropWalk:
   0x00 0x00
 
-; How big a binary this can build. Everything the assembler makes has to fit here at once,
+; How big an output file this can build. Everything the assembler makes has to fit here at once,
 ; because a file is written in one call and there is nowhere to put half of one. CosmOS
 ; itself comes to 9,564 bytes.
 ImgRoom:
@@ -2152,7 +2153,7 @@ BasesText:
 at zero, on top of whatever is there. Give both a #Base, or neither.
 "
 TooBigText:
-"the binary would be bigger than this assembler has room to build
+"the output would be bigger than this assembler has room to build
 "
 NoWriteText:
 "it would not write "
