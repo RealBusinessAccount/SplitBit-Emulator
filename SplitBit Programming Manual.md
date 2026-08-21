@@ -16,30 +16,379 @@ It has ten registers:
 	 - Q is not preserved through subroutine calls. It can be used to pass a one byte result back to the calling routine.
 
  - The Program Counter is a 16 bit pointer into the Program Memory.
- 	 - The PC points to the current operation the CPU is executing. It starts at whatever address the Boot Vector holds. See The Vector Table below.
+ 	 - The PC points to the current operation the CPU is executing. It starts at whatever address the Boot Vector holds. See The Vector Table.
  	 - The PC is only modified by the branch instructions, by CALL and RET, by SWI and RETI, and by an interrupt arriving. It cannot be directly set by the programmer.
 
  - The Data Pointers (0-3) are 16 bit pointers into the Data Memory.
  	 - A DP points to a byte of data that the CPU can read or write, and each one initializes at Data Address 0x0000.
  	 - A DP can be set arbitrarily by the programmer to any value.
- 	 - Every instruction that reads or writes Data Memory names the DP it works through. See Naming a Data Pointer below.
+ 	 - Every instruction that reads or writes Data Memory names the DP it works through. See Naming a Data Pointer.
  	 - Data Pointers 0, 1 and 2 are preserved through subroutine calls. Data Pointer 3 is not.
  	 - Because DP3 is not preserved, a subroutine can use it to pass an address back to the calling routine, in the same way Q passes back a byte. Unlike Q, an address can refer to as much data as you like.
 
  - The Stack Pointer is a 16 bit pointer into the Data Memory.
  	 - The SP points to the next free slot, not to the last thing pushed. It initializes at location 0xFFFF, so the first push writes there and the byte pushed last always sits one above the SP.
- 	 - The SP is moved by the push and pop instructions, by CALL and RET, and by an interrupt arriving or returning. MVSD copies it out without moving it, and MVDS sets it outright. See The Stack Pointer, Set By Hand below before using MVDS.
+ 	 - The SP is moved by the push and pop instructions, by CALL and RET, and by an interrupt arriving or returning. MVSD copies it out without moving it, and MVDS sets it outright. See The Stack Pointer, Set By Hand before using MVDS.
  	 - The Stack lives in Data Memory, so a Data Pointer can be aimed at it and used to read what is on it. MVSD is how a program finds out where to aim.
 
  - The Status register is an 8 bit register whose various bits are used as flags. Only four of these flags are used in the current implementation.
 	 - Bit 0 is the Carry/Borrow Flag. Any arithmetic operation either sets or clears it depending on whether or not the result causes Q to overflow/underflow. It is a 1 if a carry/underflow occurred, and a 0 otherwise. If A or B overflows or underflows from the use of an increment or decrement instruction, this flag will also be set. Non-overflowing increments or decrements will also reset it.
-	 - Bit 1 is the Fault Flag. It is set when the CPU cannot get past something and no handler was installed to deal with it: a byte that is not an instruction, or a dispatch through an empty vector. See Faults below.
-	 - Bit 2 is the Interrupt Flag. It is set by SIF and cleared by CIF. While it is set the CPU answers devices asking for attention; while it is clear they wait. Arriving at a handler clears it, and RETI restores it along with the rest of the Status register. See Hardware Interrupts below.
+	 - Bit 1 is the Fault Flag. It is set when the CPU cannot get past something and no handler was installed to deal with it: a byte that is not an instruction, or a dispatch through an empty vector. See Faults.
+	 - Bit 2 is the Interrupt Flag. It is set by SIF and cleared by CIF. While it is set the CPU answers devices asking for attention; while it is clear they wait. Arriving at a handler clears it, and RETI restores it along with the rest of the Status register. See Hardware Interrupts.
 	 - Bit 7 is the Halt Flag. It is set by the HALT instruction, and by a fault.
 
 Each condition has a branch both ways round, so a loop that carries on while something is not zero is one instruction rather than a branch over an unconditional one. Before these existed a quarter of every conditional branch in the corpus was written backwards and padded out, and each of those needed a label invented only to be jumped past.
 
 A conditional branch reads the thing it names at the moment it runs. BRA looks at A, and it does not matter which instruction set A or how long ago. The two that read the Carry Flag are the exception, and they say so in their names. That is worth knowing when reading somebody else's code: nothing else on this machine leaves a hidden condition behind for a later branch to find.
+
+## Naming a Data Pointer:
+
+Seventeen instructions work through a Data Pointer. Each of them carries a selector byte immediately after its opcode, naming which Data Pointer it means. LDD and STD move a pointer through a pointer, so they carry two selectors, the first naming the pointer being moved and the second naming the pointer that addresses it.
+
+The selector is a full byte, but only enough of it is read to choose among the Data Pointers the machine has. A selector larger than the highest numbered pointer wraps around rather than being rejected, so it is the assembler's job to refuse to write one.
+
+In assembly the selector is written on the mnemonic itself, as `LDA.2` or `LDD.1.0`. Leaving it off means Data Pointer 0, so a program that only needs one pointer never has to mention them at all. See the Assembler Manual.
+
+## List of Instructions:
+
+The Bytes column is the total length of the instruction, counting its opcode, any Data Pointer selectors, and any other operands it reads out of Program Memory.
+
+### Arithmetic and Logic Operations: 9 Instructions
+| Hex Code | Mnemonic | Bytes | Description |
+| -- | ---- | -- | -- |
+| 00 | ADD  | 1 | Adds A, B, and the Carry Flag, the result is stored in Q. |
+| 01 | SUB  | 1 | Subtracts B and the Carry Flag from A, the result is stored in Q. |
+| 02 | AND  | 1 | Bitwise and of A and B, the result is stored in Q. |
+| 03 | OR   | 1 | Bitwise or of A and B, the result is stored in Q. |
+| 04 | XOR  | 1 | Bitwise xor of A and B, the result is stored in Q. |
+| 05 | NOTA | 1 | Bitwise inversion of A, the result is stored in Q. |
+| 06 | NOTB | 1 | Bitwise inversion of B, the result is stored in Q. |
+| 07 | SHL  | 1 | A and B form a circular shift register. Rotate this register left. |
+| 08 | SHR  | 1 | A and B form a circular shift register. Rotate this register right. |
+
+### Branch and Subroutine Operations: 14 Instructions
+| Hex Code | Mnemonic | Bytes | Description |
+| -- | ---- | -- | -- |
+| 10 | BRI  | 3 | Branch Immediately. Loads the immediate next two bytes of Program Memory into the Program Counter, first the most significant byte, then the least. |
+| 11 | BRQ  | 3 | Branch on Q. If Q is zero, loads the immediate next two bytes of Program Memory into the Program Counter. |
+| 12 | BRA  | 3 | Branch on A. If A is zero, loads the immediate next two bytes of Program Memory into the Program Counter. |
+| 13 | BRB  | 3 | Branch on B. If B is zero, loads the immediate next two bytes of Program Memory into the Program Counter. |
+| 14 | BRC  | 3 | Branch if Carry is set. |
+| 15 | BRD  | 2 | Branch to the address held in the named Data Pointer. |
+| 1A | BNQ  | 3 | Branch if Q is not zero. |
+| 1B | BNA  | 3 | Branch if A is not zero. |
+| 1C | BNB  | 3 | Branch if B is not zero. |
+| 1D | BNC  | 3 | Branch if the Carry Flag is clear. |
+| 17 | CALL | 3 | Call subroutine. Pushes the Program Counter, Data Pointers 0 through 2, B and A to the Stack, then performs an immediate branch. This costs ten bytes of Stack. |
+| 18 | SWI  | 2 | Software Interrupt. The next byte names a software vector. Pushes an interrupt frame and dispatches through it. Never masked. |
+| 19 | RETI | 1 | Return from an interrupt. Restores everything the frame holds and carries on from where the interrupt arrived. |
+| 1F | RET  | 1 | Return from subroutine. Restores A, B, and Data Pointers 0 through 2 from the Stack, then sets the Program Counter to the instruction after the CALL. Data Pointer 3 and Q are left as the subroutine leaves them. |
+
+### Register Operations: 13 Instructions
+| Hex Code | Mnemonic | Bytes | Description |
+| -- | ---- | -- | -- |
+| 20 | RSTA | 1 | Resets A to 0. |
+| 21 | RSTB | 1 | Resets B to 0. |
+| 22 | INCA | 1 | Adds 1 to A. If it overflows, it sets the Carry Flag, otherwise, it resets it. |
+| 23 | INCB | 1 | Adds 1 to B. If it overflows, it sets the Carry Flag, otherwise, it resets it. |
+| 24 | DECA | 1 | Subtracts 1 from A. If it underflows, it sets the Carry Flag, otherwise, it resets it. |
+| 25 | DECB | 1 | Subtracts 1 from B. If it underflows, it sets the Carry Flag, otherwise, it resets it. |
+| 26 | INIA | 2 | Loads the next byte of Program Memory to A. |
+| 27 | INIB | 2 | Loads the next byte of Program Memory to B. |
+| 28 | CCF  | 1 | Clears the Carry Flag. |
+| 29 | MVQA | 1 | Copies Q into A. No flags are changed. |
+| 2A | MVQB | 1 | Copies Q into B. No flags are changed. |
+| 2B | SIF  | 1 | Sets the Interrupt Flag. No other flags are changed. |
+| 2C | CIF  | 1 | Clears the Interrupt Flag. No other flags are changed. |
+
+Q is where every ALU result lands, and Q is not itself an ALU operand, so MVQA and MVQB are how a result becomes the input to the next sum. Without them the only route is to store Q into Data Memory and load it back, which costs two instructions and needs a Data Pointer aimed somewhere useful. With them a running total can be kept in the registers and never touch memory at all.
+
+### Stack Operations: 7 Instructions
+| Hex Code | Mnemonic | Bytes | Description |
+| -- | ---- | -- | -- |
+| 30 | PSHQ | 1 | Stores Q into Data Memory at the location referenced by the Stack Pointer then decrements the Stack Pointer. |
+| 31 | PSHA | 1 | Stores A into Data Memory at the location referenced by the Stack Pointer then decrements the Stack Pointer. |
+| 32 | PSHB | 1 | Stores B into Data Memory at the location referenced by the Stack Pointer then decrements the Stack Pointer. |
+| 33 | PSHD | 2 | Stores the named Data Pointer to the stack, with the low byte on top. Decrements the Stack Pointer by two. |
+| 34 | POPA | 1 | Reads the location referenced by the Stack Pointer from Data Memory into A then increments the Stack Pointer. |
+| 35 | POPB | 1 | Reads the location referenced by the Stack Pointer from Data Memory into B then increments the Stack Pointer. |
+| 36 | POPD | 2 | Restores the named Data Pointer from the stack, increments the Stack Pointer by two. |
+
+### Data Operations: 14 Instructions
+| Hex Code | Mnemonic | Bytes | Description |
+| -- | ---- | -- | -- |
+| 40 | INCD | 2 | Increments the named Data Pointer. |
+| 41 | DECD | 2 | Decrements the named Data Pointer. |
+| 42 | LDA  | 2 | Loads the byte addressed by the named Data Pointer into A. |
+| 43 | LDB  | 2 | Loads the byte addressed by the named Data Pointer into B. |
+| 44 | STQ  | 2 | Stores Q into the byte addressed by the named Data Pointer. |
+| 45 | STA  | 2 | Stores A into the byte addressed by the named Data Pointer. |
+| 46 | STB  | 2 | Stores B into the byte addressed by the named Data Pointer. |
+| 47 | SETD | 4 | Loads the two bytes of Program Memory following the selector into the named Data Pointer, most significant byte first. |
+| 48 | DPUP | 3 | Offsets the named Data Pointer up by the value of the byte following the selector. |
+| 49 | DPDN | 3 | Offsets the named Data Pointer down by the value of the byte following the selector. |
+| 4A | LDD  | 3 | Loads the first named Data Pointer from the two bytes of Data Memory addressed by the second, most significant byte first. |
+| 4B | STD  | 3 | Stores the first named Data Pointer into the two bytes of Data Memory addressed by the second, most significant byte first. |
+| 4C | MVSD | 2 | Copies the Stack Pointer into the named Data Pointer. The Stack Pointer itself is unchanged. |
+| 4D | MVDS | 2 | Copies the named Data Pointer into the Stack Pointer, moving the Stack. Read The Stack Pointer, Set By Hand before using it. |
+
+BRD is the only branch whose destination is not written into the program. Every other branch carries the address it goes to, fixed when the program was assembled; BRD takes it from a Data Pointer, which is what makes a table of addresses something a program can dispatch through rather than only read. Together with LDD it turns the Data Segment into somewhere a program can keep a list of places to go.
+
+LDD and STD are how a program follows an address it has stored, rather than one the assembler wrote into the instruction. Together with more than one Data Pointer, they are what makes a table of addresses usable: one pointer walks the table while another follows whatever entry it is on. Naming the same pointer twice, as in `LDD.0.0`, makes that pointer follow the address it is currently holding.
+
+### Output Operations: 3 Instructions
+| Hex Code | Mnemonic | Bytes | Description |
+| -- | ---- | -- | -- |
+| D0 | OUTQ | 2 | Writes the value of Q to an Output specified by the next byte of Program Memory. |
+| D1 | OUTA | 2 | Writes the value of A to an Output specified by the next byte of Program Memory. |
+| D2 | OUTB | 2 | Writes the value of B to an Output specified by the next byte of Program Memory. |
+
+### Input Operations: 2 Instructions
+| Hex Code | Mnemonic | Bytes | Description |
+| -- | ---- | -- | -- |
+| E0 | INA | 2 | Writes the value of an Input to A. The input port is specified by the next byte of Program Memory. |
+| E1 | INB | 2 | Writes the value of an Input to B. The input port is specified by the next byte of Program Memory. |
+
+### Special Operations: 2 Instructions
+| Hex Code | Mnemonic | Bytes | Description |
+| -- | ---- | -- | -- |
+| F0 | NOP  | 1 | Perform no Operation, increment the Program Counter. |
+| FF | HALT | 1 | Stops CPU Execution. |
+
+# Making It Do Something
+
+## Input and Output In the Emulator:
+
+Port 0 is the console: writing sends a byte to standard output and reading takes one from standard input. It answers on two more ports than that, which are described under The Console and which a program can ignore entirely if all it wants is to read and write bytes. Everything else this machine has is listed under Devices, and a program that wants to know what is actually there asks the bus registry rather than assuming.
+
+### Example Program: Hello World
+```
+; This is a basic hello world program for the SplitBit CPU.
+; We'll create a loop that outputs each byte of our string to Output 0, the text console.
+
+#Program
+
+Start:
+  LDA         ; Load a byte of the string into A.
+  BRA End     ; If A is zero, branch out of the loop.
+  OUTA 0x00   ; Output the value in A to Port 0, the text console.
+  INCD        ; Increment the Data Pointer to the next byte of the string.
+  BRI Start   ; Branch immediately to the start of the loop.
+
+End:
+  INIA 0x0A   ; We'll load a linefeed into A and output it to make it look nice.
+  OUTA 0x00   ; Output it to the text console.
+  HALT        ; Terminate the program.
+
+#Data
+
+"Hello, World!"
+```
+
+Nothing in that program names a Data Pointer, so all of it runs through Data Pointer 0.
+
+### Structure of a SplitBit Binary File:
+
+The Program and Data values are both stored in a single file for loading into the system. Every multi byte value in the format is stored most significant byte first, which is the same order the CPU reads addresses out of Program Memory.
+
+A file begins with a nine byte header:
+
+| Offset | Size | Field |
+| -- | -- | -- |
+| 0 | 4 | The characters `SPBT`, so that a file which is not a SplitBit binary is recognised as such straight away. |
+| 4 | 1 | The format version. This document describes version 1. |
+| 5 | 4 | Required feature flags. |
+
+The feature flags are how a binary states that it needs something the base machine does not provide. An emulator that cannot provide everything a binary asks for refuses to run it, rather than running it and going quietly wrong. No feature bits are defined yet, so the field is currently zero in every binary.
+
+After the header come the segments. The Program Segment comes first and then the Data Segment, each beginning with a three character marker, `PRG` or `DAT`, followed by a two byte length. The system loads each memory with the bytes that follow, in sequence, starting from address 0x0000.
+
+A third segment may follow them, marked `VEC`, holding the vectors a program named in its Vector Segment. It is four bytes an entry: two saying where in Program Memory the vector sits, and two saying where its handler is. A program that named no vectors has no such segment, and a file that simply ends after its Data Segment is one written before vectors existed. Either way the reader treats the end of the file as an empty table, which is why adding this cost no format version and left every binary already written still loadable.
+
+Here is the hello world program above, assembled and dumped as hex:
+
+```
+53 50 42 54 01 00 00 00 00 50 52 47 00 11 42 00 12 00 0c d1 00 40 00 10 00 00 26 0a d1 00 ff 44
+41 54 00 0e 48 65 6c 6c 6f 2c 20 57 6f 72 6c 64 21 00
+```
+
+Taken apart:
+
+| Bytes | Meaning |
+| -- | -- |
+| `53 50 42 54` | `SPBT` |
+| `01` | Format version 1 |
+| `00 00 00 00` | No features required |
+| `50 52 47` | `PRG` |
+| `00 11` | The Program Segment is 17 bytes long |
+| `42 00 12 00 0c d1 00 40 00 10 00 00 26 0a d1 00 ff` | The Program Segment |
+| `44 41 54` | `DAT` |
+| `00 0e` | The Data Segment is 14 bytes long |
+| `48 65 6c 6c 6f 2c 20 57 6f 72 6c 64 21 00` | The Data Segment |
+
+The `42 00` at the start of the Program Segment is worth a look: `42` is LDA, and the `00` after it is the Data Pointer selector the assembler filled in, because the program did not name one.
+
+## The Console:
+
+Port 0x00 is the oldest thing on this machine and it has not changed: writing sends a byte out, reading takes one in and waits until there is one. Every program ever written for SplitBit uses it that way and still does. What is new is that a program can say what it wants a keypress to mean, can ask whether a read would have to wait, and can arrange to be told when a byte arrives instead of having to ask at all.
+
+| Port | Register |
+| --- | --- |
+| 0x00 | Data. Writing sends a byte out, reading takes one in and waits for it. |
+| 0x01 | Status. Bit 0 a byte is waiting, bit 1 input has ended, bit 2 the console is in key mode, bit 3 the console is set to interrupt. |
+| 0x02 | Control. Bit 0 asks for key mode, bit 1 asks the console to interrupt when a byte arrives. Writing 0x00 asks for neither, which is how the console starts. |
+
+The control port's two bits are independent, and one write sets both. Everything the control port can ask for, the status port reports, so a program can put the console back the way it found it instead of assuming it knows.
+
+### Two Kinds Of Input:
+
+In **line mode**, which is how the machine starts, the terminal holds what is typed until Return and does the echoing and the backspacing on the way. A program reading the data port gets a finished line, one byte at a time. This is what the machine has always done and what a shell wants.
+
+In **key mode** the terminal stops holding the line. Keys arrive as they are pressed, and nothing echoes them, so a program that wants them seen has to send them back out itself. The editing goes with the echo: there is no backspace, because backspace was the terminal's doing and the terminal is no longer involved. That is not a choice this machine makes, it is what asking for keys means, and a program that wants keys is expected to want it.
+
+A program is expected to put the console back in line mode before it finishes. CosmOS also does it whenever a program returns, because a program that stops early would otherwise hand back a shell with no echo, and a shell has no way to find out that happened.
+
+### Reading Without Waiting:
+
+Reading the data port waits in **both** modes. The status port is how a program declines to wait, and keeping that in one place is deliberate: a read that sometimes blocked and sometimes did not, depending on a mode set somewhere else, would be a program that works until it does not.
+
+So a simulation that should stop when somebody presses a key asks the status port between steps, and only reads the data port once it knows there is something to read:
+
+```
+  INA 0x01
+  INIB 0x01                 ; Bit 0: is a byte waiting?
+  AND
+  BRQ nobodyPressedAnything
+  INA 0x00                  ; There is one, so this will not wait.
+```
+
+### The End Of Input:
+
+Reading the data port when input has run out gives 0xFF, which is what it has always given and what programs written before any of this expect. But 0xFF is also an ordinary byte, and nothing could tell the two apart. Bit 1 of the status port is what tells them apart now.
+
+Bit 0 is **not** set once input has ended, even though a read would answer immediately. The bit means a byte is there to be had, and at the end of input there is not. That way a loop that reads while bit 0 is set stops when the input does, instead of taking imaginary bytes forever.
+
+### Being Told Instead Of Asking:
+
+Bit 1 of the control port asks the console to put its interrupt line up when a byte arrives, so a program can get on with something else and be told. The console is on port 0x00, so that is the vector a key comes through, named the way every device is:
+
+```
+#Vectors
+  Device 0x00  keyHandler
+```
+
+The handler is entered because the console had something to say, and asks the status port what. There are two possible answers, and the second is why a program can rely on this instead of also polling:
+
+```
+keyHandler:
+  INA 0x01
+  INIB 0x02                 ; Bit 1: has input ended?
+  AND
+  BNQ noMoreKeys            ; Nothing more is ever coming.
+  INA 0x00                  ; The byte this interrupt was about.
+  OUTA 0x00                 ; Nothing echoes in key mode, so send it back out.
+  RETI
+```
+
+**The end of input raises the line once**, as well as an arriving byte. A program driven entirely by interrupts would otherwise sit forever waiting to be told about a key that cannot arrive.
+
+**The line goes up at most once per byte.** The console holds one byte, so while that byte is still there, nothing new can arrive to ask about, and a handler that returns without reading it is simply not called again. This is what a receive register holding one byte does, and it means a handler cannot interrupt-storm the machine by forgetting something. The cost is the other half of the same fact: bytes arriving while that one is unread are lost, exactly as they would be on hardware.
+
+The two control bits do not depend on each other, so a program may ask to be interrupted in line mode. The terminal still holds what is typed until Return, and then the whole line arrives at once as a run of interrupts, one per byte. That is rarely what anyone wants, but a control bit that quietly did nothing because of another control bit would be worse.
+
+**A program that interrupts on input must not also block on the data port.** Reading it waits, and nothing else in the machine runs while it is waiting, so a program that does both has chosen to wait after asking not to. Interrupting and blocking are two answers to the same question, and a program wants one of them.
+
+The machine notices an arriving key between instructions, and does not look on every single one. The delay is about a quarter of a millisecond, which is shorter than the gap between two keystrokes by a wide margin and shorter than anything a person can perceive at all.
+
+## The Stack Pointer, Set By Hand:
+
+MVDS copies a Data Pointer into the Stack Pointer. It is the most dangerous instruction on this machine, and it is here for one job.
+
+Everything a program is in the middle of doing lives on the Stack. Moving the Stack Pointer does not move any of it, and does not destroy any of it either: it steps away from it. Every return address, every saved register and every interrupt frame stays exactly where it was in Data Memory, and the Stack Pointer is simply no longer looking at it. A RET taken while the Stack Pointer is somewhere else does not go back to whoever called: it reads two bytes from wherever the Stack Pointer now points and branches there. If those bytes are a string, execution lands in the middle of it.
+
+That is not a bug to be worked around. It is what moving the Stack means, and it is why nothing else on this machine can do it.
+
+The job it is here for is reclaiming the Stack from a program that has stopped running. A system that loads other programs and takes the machine back afterwards has a problem without it. A program that gives up part way through leaves everything it pushed behind, and the interrupt frame carrying its request to stop is on there too. Nothing unwinds any of that, because the program is not going to return. Without MVDS the Stack only ever moves downward, a little more with every program run, and a shell cannot outlive many of them.
+
+The pattern is to write the Stack Pointer down before giving the machine away and put it back afterwards:
+
+```
+  ; Before handing control to a program, remember where the Stack was.
+  MVSD.0
+  SETD.1 SavedStack
+  STD.0.1
+
+  ; ... the program runs, and eventually asks to stop ...
+
+  ; Taking the machine back. The Stack is ours again, and everything the
+  ; program left on it is gone.
+  SETD.1 SavedStack
+  LDD.0.1
+  MVDS.0
+```
+
+### Coming Back From It:
+
+A routine that moves the Stack and then puts the Stack Pointer back exactly where it found it can return in the ordinary way. The return address and the frame were never destroyed, only stepped away from, and RET or RETI finds them precisely as they were. Nothing special is needed for this to work, but one thing is required for it to keep working: nothing done while the Stack was elsewhere may reach back over those bytes. A borrowed Stack has to be somewhere the old one is not, and it has to be far enough away that pushing on it cannot walk into the old one.
+
+A routine that moves the Stack and **leaves it moved** is the other case, and that one cannot return at all, because its return address is on the Stack it walked away from. This is not a limitation to work around either. It is the entire point when the reason for moving is that whoever owned that Stack is not coming back. A handler for a service meaning "give the machine back" restores the system's Stack and then branches to the prompt, because there is nowhere left to return to.
+
+### Where To Keep The Old One:
+
+This is the awkward part. A fixed location in Data Memory is the obvious place to write the old Stack Pointer down, and it works until two routines that do this are nested. The inner one overwrites the outer one's copy, the outer one restores the inner one's Stack, and it never gets home. Nothing about that failure points back at the cause.
+
+The answer that nests is to keep the old Stack Pointer on the borrowed Stack itself. Move first, then push it, and pop it back before returning. Each nesting keeps its own copy, on its own Stack, and no two of them can collide:
+
+```
+  MVSD.3                ; Where the Stack is now.
+  SETD.0 BorrowedTop    ; The highest address of somewhere a Stack can live,
+  MVDS.0                ; because the Stack grows downward from here.
+  PSHD.3                ; The old Stack Pointer, kept on the borrowed Stack.
+
+  ; ... work, with the borrowed Stack under us ...
+
+  POPD.3
+  MVDS.3                ; And put it back.
+  RET                   ; Which now finds the frame exactly as it was left.
+```
+
+One last thing. An interrupt arriving while the Stack Pointer is somewhere unusual builds its frame there, so anywhere it is set has to be somewhere a Stack can actually live. And a system holding a saved Stack Pointer for a program it is running has to keep it somewhere that program cannot reach, or a program that scribbles over it takes the machine down with it on the way out.
+
+# When Something Else Wants Attention
+
+## Interrupts:
+
+An interrupt is an involuntary transfer of control. A subroutine call is agreed to by the code that makes it, so CALL can leave Q and Data Pointer 3 alone and let a subroutine pass results back through them. An interrupt arrives in code that has never heard of it, where Q and DP3 are ordinary working registers, so it saves everything:
+
+| Pushed | Bytes |
+| --- | --- |
+| The address to resume at | 2 |
+| Data Pointers 0 through 3 | 8 |
+| B, then A, then Q, then Status | 4 |
+
+That is fourteen bytes of Stack per interrupt, and the order matches CALL: least significant byte first, lowest numbered Data Pointer first.
+
+Entry clears the Interrupt Flag, so a handler runs without being interrupted again unless it sets the flag itself. The old value of the flag rides into the frame inside the Status register, so RETI restores it along with everything else and nothing has to remember it separately.
+
+RETI pops the frame and carries on from the address in it. The frame holds a real address rather than an adjusted one, so a handler can read it and make sense of where it came from.
+
+A handler reaches its own frame with MVSD. The Stack Pointer points at the next free slot, so everything in the frame sits above it:
+
+| Offset from the Stack Pointer | Holds |
+| --- | --- |
+| 1 | Status |
+| 2 | Q |
+| 3 | A |
+| 4 | B |
+| 5 and 6 | Data Pointer 3, high byte then low |
+| 7 and 8 | Data Pointer 2, high byte then low |
+| 9 and 10 | Data Pointer 1, high byte then low |
+| 11 and 12 | Data Pointer 0, high byte then low |
+| 13 and 14 | The address to resume at, high byte then low |
+
+Writing to those bytes changes what RETI restores. Adding one to the address at offsets 13 and 14 is how a fault handler steps over the byte that failed and carries on, and rewriting the saved registers is how a handler hands something back to the code it interrupted.
+
+SWI is never masked, because it is an instruction the program deliberately ran rather than something a device asked for.
 
 ## The Vector Table:
 
@@ -81,40 +430,6 @@ Every other entry is a handler. A zero in one of those means no handler is insta
 
 The exemption for vectors 0 and 1 belongs to that one read the CPU makes at reset, not to the entries themselves. Anything that dispatches treats a zero as no handler, whichever entry it is, so SWI SoftReset through an empty Soft Reset Vector faults like any other. That is what makes SWI SoftReset the way to ask for a warm restart once one has been installed.
 
-## Interrupts:
-
-An interrupt is an involuntary transfer of control. A subroutine call is agreed to by the code that makes it, so CALL can leave Q and Data Pointer 3 alone and let a subroutine pass results back through them. An interrupt arrives in code that has never heard of it, where Q and DP3 are ordinary working registers, so it saves everything:
-
-| Pushed | Bytes |
-| --- | --- |
-| The address to resume at | 2 |
-| Data Pointers 0 through 3 | 8 |
-| B, then A, then Q, then Status | 4 |
-
-That is fourteen bytes of Stack per interrupt, and the order matches CALL: least significant byte first, lowest numbered Data Pointer first.
-
-Entry clears the Interrupt Flag, so a handler runs without being interrupted again unless it sets the flag itself. The old value of the flag rides into the frame inside the Status register, so RETI restores it along with everything else and nothing has to remember it separately.
-
-RETI pops the frame and carries on from the address in it. The frame holds a real address rather than an adjusted one, so a handler can read it and make sense of where it came from.
-
-A handler reaches its own frame with MVSD. The Stack Pointer points at the next free slot, so everything in the frame sits above it:
-
-| Offset from the Stack Pointer | Holds |
-| --- | --- |
-| 1 | Status |
-| 2 | Q |
-| 3 | A |
-| 4 | B |
-| 5 and 6 | Data Pointer 3, high byte then low |
-| 7 and 8 | Data Pointer 2, high byte then low |
-| 9 and 10 | Data Pointer 1, high byte then low |
-| 11 and 12 | Data Pointer 0, high byte then low |
-| 13 and 14 | The address to resume at, high byte then low |
-
-Writing to those bytes changes what RETI restores. Adding one to the address at offsets 13 and 14 is how a fault handler steps over the byte that failed and carries on, and rewriting the saved registers is how a handler hands something back to the code it interrupted.
-
-SWI is never masked, because it is an instruction the program deliberately ran rather than something a device asked for.
-
 ## Hardware Interrupts:
 
 A device asks for attention by putting its line up. Which line it uses is not a choice: a device on port N interrupts on N, and arrives through hardware vector N. That is what spares the machine any arbitration, and it means a program can work out what a device will do by knowing where it is plugged in.
@@ -129,17 +444,41 @@ Answering a line takes it down, so a device that wants attention again has to as
 
 If a device interrupts and its vector is empty, that is a fault: the machine stops and the emulator says which port asked and where it was.
 
+## Faults:
+
+If the CPU reads a byte from Program Memory that does not decode to an instruction, it dispatches through Software Vector 2.
+
+Faults get a vector each rather than sharing one. Vector 2 is the only cause defined so far, and vectors 3 through 15 are held back for the ones that come later, so that a handler always knows what happened from the entry it arrived through. That is why the machine has no fault cause register to read.
+
+The address in the frame is the address of the offending byte itself, not the one after it. A handler can therefore read the byte that failed and say what it was. It also means a handler that returns with a bare RETI will meet the same byte again, because resuming past a fault means deciding where to resume, and only the handler knows that.
+
+If nothing is installed at Vector 2, the CPU sets the Fault Flag and the Halt Flag and stops, leaving the Program Counter on the offending byte. The emulator then reports the byte and its address, and exits with a non zero status.
+
+Stopping matters because the alternative is worse. A byte that means nothing is almost always a sign that execution has wandered into data, or that a program was built for a machine with instructions this one does not have. Stepping over it and carrying on turns a clear failure into a program that appears to run and quietly does the wrong thing.
+
+## Refusing:
+
+A device can refuse what it was asked to do. This is not the same as interrupting. An interrupt is a device asking for attention later, answered between instructions once the CPU is ready. A refusal is a device saying no to the instruction happening now, so the machine stops where it stands rather than carrying on as though the access had worked.
+
+A refusal names a software vector, so a handler knows what happened from the entry it arrived through, the same as every other fault. The frame carries the address of the instruction that was refused, so a handler can see which one it was.
+
+That means a handler returning with a bare RETI will meet the same refused instruction again. A handler that means to carry on past it steps the saved address on by two, since the input and output instructions are an opcode and a port.
+
+If nothing is installed for the vector a device refused with, the machine stops and the emulator says which port refused and where.
+
+# What A Machine Is Made Of
+
 ## Devices:
 
 | Port | Device | Class |
 | --- | --- | --- |
-| 0x00 - 0x02 | The console. See The Console below. Writing to 0x00 sends a byte to standard output, reading takes one from standard input. It interrupts on 0x00, its base port, when asked to. | 0x02 |
+| 0x00 - 0x02 | The console. See The Console. Writing to 0x00 sends a byte to standard output, reading takes one from standard input. It interrupts on 0x00, its base port, when asked to. | 0x02 |
 | 0x10 | A test device. Writing anything to it puts its own line up, so that interrupt handling can be exercised without waiting on anything. The byte written is ignored. | 0x10 |
 | 0x11 | A device that refuses everything, in both directions, so that refusal can be exercised without the memory controller. | 0x11 |
-| 0x20 - 0x23 | The disk. See Storage below. It interrupts on 0x20, its base port. | 0x13 |
+| 0x20 - 0x23 | The disk. See Storage. It interrupts on 0x20, its base port. | 0x13 |
 | 0x12 | A device that owns 256 bytes of memory. Writing to its port fills that memory with the byte written, standing in for a disk controller reading a sector. Its memory is unreachable until it is registered as a bank. | 0x12 |
-| 0xE0 - 0xEF | The memory controller. See The Memory Controller below. | 0x03 |
-| 0xFF | The bus registry. See Asking What Is There below. | 0x01 |
+| 0xE0 - 0xEF | The memory controller. See The Memory Controller. | 0x03 |
+| 0xFF | The bus registry. See Asking What Is There. | 0x01 |
 
 ## Asking What Is There:
 
@@ -341,78 +680,6 @@ A write the controller will not perform is a GuardViolation. There are two reaso
 
 Both arrive at the instruction that asked, so a handler sees which one it was. A handler that means to carry on past it steps the saved address on by two, since the input and output instructions are an opcode and a port.
 
-## The Console:
-
-Port 0x00 is the oldest thing on this machine and it has not changed: writing sends a byte out, reading takes one in and waits until there is one. Every program ever written for SplitBit uses it that way and still does. What is new is that a program can say what it wants a keypress to mean, can ask whether a read would have to wait, and can arrange to be told when a byte arrives instead of having to ask at all.
-
-| Port | Register |
-| --- | --- |
-| 0x00 | Data. Writing sends a byte out, reading takes one in and waits for it. |
-| 0x01 | Status. Bit 0 a byte is waiting, bit 1 input has ended, bit 2 the console is in key mode, bit 3 the console is set to interrupt. |
-| 0x02 | Control. Bit 0 asks for key mode, bit 1 asks the console to interrupt when a byte arrives. Writing 0x00 asks for neither, which is how the console starts. |
-
-The control port's two bits are independent, and one write sets both. Everything the control port can ask for, the status port reports, so a program can put the console back the way it found it instead of assuming it knows.
-
-### Two Kinds Of Input:
-
-In **line mode**, which is how the machine starts, the terminal holds what is typed until Return and does the echoing and the backspacing on the way. A program reading the data port gets a finished line, one byte at a time. This is what the machine has always done and what a shell wants.
-
-In **key mode** the terminal stops holding the line. Keys arrive as they are pressed, and nothing echoes them, so a program that wants them seen has to send them back out itself. The editing goes with the echo: there is no backspace, because backspace was the terminal's doing and the terminal is no longer involved. That is not a choice this machine makes, it is what asking for keys means, and a program that wants keys is expected to want it.
-
-A program is expected to put the console back in line mode before it finishes. CosmOS also does it whenever a program returns, because a program that stops early would otherwise hand back a shell with no echo, and a shell has no way to find out that happened.
-
-### Reading Without Waiting:
-
-Reading the data port waits in **both** modes. The status port is how a program declines to wait, and keeping that in one place is deliberate: a read that sometimes blocked and sometimes did not, depending on a mode set somewhere else, would be a program that works until it does not.
-
-So a simulation that should stop when somebody presses a key asks the status port between steps, and only reads the data port once it knows there is something to read:
-
-```
-  INA 0x01
-  INIB 0x01                 ; Bit 0: is a byte waiting?
-  AND
-  BRQ nobodyPressedAnything
-  INA 0x00                  ; There is one, so this will not wait.
-```
-
-### The End Of Input:
-
-Reading the data port when input has run out gives 0xFF, which is what it has always given and what programs written before any of this expect. But 0xFF is also an ordinary byte, and nothing could tell the two apart. Bit 1 of the status port is what tells them apart now.
-
-Bit 0 is **not** set once input has ended, even though a read would answer immediately. The bit means a byte is there to be had, and at the end of input there is not. That way a loop that reads while bit 0 is set stops when the input does, instead of taking imaginary bytes forever.
-
-### Being Told Instead Of Asking:
-
-Bit 1 of the control port asks the console to put its interrupt line up when a byte arrives, so a program can get on with something else and be told. The console is on port 0x00, so that is the vector a key comes through, named the way every device is:
-
-```
-#Vectors
-  Device 0x00  keyHandler
-```
-
-The handler is entered because the console had something to say, and asks the status port what. There are two possible answers, and the second is why a program can rely on this instead of also polling:
-
-```
-keyHandler:
-  INA 0x01
-  INIB 0x02                 ; Bit 1: has input ended?
-  AND
-  BNQ noMoreKeys            ; Nothing more is ever coming.
-  INA 0x00                  ; The byte this interrupt was about.
-  OUTA 0x00                 ; Nothing echoes in key mode, so send it back out.
-  RETI
-```
-
-**The end of input raises the line once**, as well as an arriving byte. A program driven entirely by interrupts would otherwise sit forever waiting to be told about a key that cannot arrive.
-
-**The line goes up at most once per byte.** The console holds one byte, so while that byte is still there, nothing new can arrive to ask about, and a handler that returns without reading it is simply not called again. This is what a receive register holding one byte does, and it means a handler cannot interrupt-storm the machine by forgetting something. The cost is the other half of the same fact: bytes arriving while that one is unread are lost, exactly as they would be on hardware.
-
-The two control bits do not depend on each other, so a program may ask to be interrupted in line mode. The terminal still holds what is typed until Return, and then the whole line arrives at once as a run of interrupts, one per byte. That is rarely what anyone wants, but a control bit that quietly did nothing because of another control bit would be worse.
-
-**A program that interrupts on input must not also block on the data port.** Reading it waits, and nothing else in the machine runs while it is waiting, so a program that does both has chosen to wait after asking not to. Interrupting and blocking are two answers to the same question, and a program wants one of them.
-
-The machine notices an arriving key between instructions, and does not look on every single one. The delay is about a quarter of a millisecond, which is shorter than the gap between two keystrokes by a wide margin and shorter than anything a person can perceive at all.
-
 ## Storage:
 
 The disk is a block device. It knows numbered blocks of 256 bytes and has never heard of a file. A filesystem is software this machine runs, not something done on its behalf: a disk that understood filenames would be the emulator doing the work while the machine pretended it had.
@@ -454,263 +721,3 @@ Status bit 1 says the last operation failed: there is no disk, or the block aske
 
 A disk error is not a fault. Faults on this machine mean it cannot continue, and a read that fails is an ordinary thing that happens to working programs on failing media. It is reported so that a program can cope with it, rather than stopping the machine and taking the choice away.
 
-## Refusing:
-
-A device can refuse what it was asked to do. This is not the same as interrupting. An interrupt is a device asking for attention later, answered between instructions once the CPU is ready. A refusal is a device saying no to the instruction happening now, so the machine stops where it stands rather than carrying on as though the access had worked.
-
-A refusal names a software vector, so a handler knows what happened from the entry it arrived through, the same as every other fault. The frame carries the address of the instruction that was refused, so a handler can see which one it was.
-
-That means a handler returning with a bare RETI will meet the same refused instruction again. A handler that means to carry on past it steps the saved address on by two, since the input and output instructions are an opcode and a port.
-
-If nothing is installed for the vector a device refused with, the machine stops and the emulator says which port refused and where.
-
-## Faults:
-
-If the CPU reads a byte from Program Memory that does not decode to an instruction, it dispatches through Software Vector 2.
-
-Faults get a vector each rather than sharing one. Vector 2 is the only cause defined so far, and vectors 3 through 15 are held back for the ones that come later, so that a handler always knows what happened from the entry it arrived through. That is why the machine has no fault cause register to read.
-
-The address in the frame is the address of the offending byte itself, not the one after it. A handler can therefore read the byte that failed and say what it was. It also means a handler that returns with a bare RETI will meet the same byte again, because resuming past a fault means deciding where to resume, and only the handler knows that.
-
-If nothing is installed at Vector 2, the CPU sets the Fault Flag and the Halt Flag and stops, leaving the Program Counter on the offending byte. The emulator then reports the byte and its address, and exits with a non zero status.
-
-Stopping matters because the alternative is worse. A byte that means nothing is almost always a sign that execution has wandered into data, or that a program was built for a machine with instructions this one does not have. Stepping over it and carrying on turns a clear failure into a program that appears to run and quietly does the wrong thing.
-
-## The Stack Pointer, Set By Hand:
-
-MVDS copies a Data Pointer into the Stack Pointer. It is the most dangerous instruction on this machine, and it is here for one job.
-
-Everything a program is in the middle of doing lives on the Stack. Moving the Stack Pointer does not move any of it, and does not destroy any of it either: it steps away from it. Every return address, every saved register and every interrupt frame stays exactly where it was in Data Memory, and the Stack Pointer is simply no longer looking at it. A RET taken while the Stack Pointer is somewhere else does not go back to whoever called: it reads two bytes from wherever the Stack Pointer now points and branches there. If those bytes are a string, execution lands in the middle of it.
-
-That is not a bug to be worked around. It is what moving the Stack means, and it is why nothing else on this machine can do it.
-
-The job it is here for is reclaiming the Stack from a program that has stopped running. A system that loads other programs and takes the machine back afterwards has a problem without it. A program that gives up part way through leaves everything it pushed behind, and the interrupt frame carrying its request to stop is on there too. Nothing unwinds any of that, because the program is not going to return. Without MVDS the Stack only ever moves downward, a little more with every program run, and a shell cannot outlive many of them.
-
-The pattern is to write the Stack Pointer down before giving the machine away and put it back afterwards:
-
-```
-  ; Before handing control to a program, remember where the Stack was.
-  MVSD.0
-  SETD.1 SavedStack
-  STD.0.1
-
-  ; ... the program runs, and eventually asks to stop ...
-
-  ; Taking the machine back. The Stack is ours again, and everything the
-  ; program left on it is gone.
-  SETD.1 SavedStack
-  LDD.0.1
-  MVDS.0
-```
-
-### Coming Back From It:
-
-A routine that moves the Stack and then puts the Stack Pointer back exactly where it found it can return in the ordinary way. The return address and the frame were never destroyed, only stepped away from, and RET or RETI finds them precisely as they were. Nothing special is needed for this to work, but one thing is required for it to keep working: nothing done while the Stack was elsewhere may reach back over those bytes. A borrowed Stack has to be somewhere the old one is not, and it has to be far enough away that pushing on it cannot walk into the old one.
-
-A routine that moves the Stack and **leaves it moved** is the other case, and that one cannot return at all, because its return address is on the Stack it walked away from. This is not a limitation to work around either. It is the entire point when the reason for moving is that whoever owned that Stack is not coming back. A handler for a service meaning "give the machine back" restores the system's Stack and then branches to the prompt, because there is nowhere left to return to.
-
-### Where To Keep The Old One:
-
-This is the awkward part. A fixed location in Data Memory is the obvious place to write the old Stack Pointer down, and it works until two routines that do this are nested. The inner one overwrites the outer one's copy, the outer one restores the inner one's Stack, and it never gets home. Nothing about that failure points back at the cause.
-
-The answer that nests is to keep the old Stack Pointer on the borrowed Stack itself. Move first, then push it, and pop it back before returning. Each nesting keeps its own copy, on its own Stack, and no two of them can collide:
-
-```
-  MVSD.3                ; Where the Stack is now.
-  SETD.0 BorrowedTop    ; The highest address of somewhere a Stack can live,
-  MVDS.0                ; because the Stack grows downward from here.
-  PSHD.3                ; The old Stack Pointer, kept on the borrowed Stack.
-
-  ; ... work, with the borrowed Stack under us ...
-
-  POPD.3
-  MVDS.3                ; And put it back.
-  RET                   ; Which now finds the frame exactly as it was left.
-```
-
-One last thing. An interrupt arriving while the Stack Pointer is somewhere unusual builds its frame there, so anywhere it is set has to be somewhere a Stack can actually live. And a system holding a saved Stack Pointer for a program it is running has to keep it somewhere that program cannot reach, or a program that scribbles over it takes the machine down with it on the way out.
-
-## Naming a Data Pointer:
-
-Seventeen instructions work through a Data Pointer. Each of them carries a selector byte immediately after its opcode, naming which Data Pointer it means. LDD and STD move a pointer through a pointer, so they carry two selectors, the first naming the pointer being moved and the second naming the pointer that addresses it.
-
-The selector is a full byte, but only enough of it is read to choose among the Data Pointers the machine has. A selector larger than the highest numbered pointer wraps around rather than being rejected, so it is the assembler's job to refuse to write one.
-
-In assembly the selector is written on the mnemonic itself, as `LDA.2` or `LDD.1.0`. Leaving it off means Data Pointer 0, so a program that only needs one pointer never has to mention them at all. See the Assembler Manual.
-
-## List of Instructions:
-
-The Bytes column is the total length of the instruction, counting its opcode, any Data Pointer selectors, and any other operands it reads out of Program Memory.
-
-### Arithmetic and Logic Operations: 9 Instructions
-| Hex Code | Mnemonic | Bytes | Description |
-| -- | ---- | -- | -- |
-| 00 | ADD  | 1 | Adds A, B, and the Carry Flag, the result is stored in Q. |
-| 01 | SUB  | 1 | Subtracts B and the Carry Flag from A, the result is stored in Q. |
-| 02 | AND  | 1 | Bitwise and of A and B, the result is stored in Q. |
-| 03 | OR   | 1 | Bitwise or of A and B, the result is stored in Q. |
-| 04 | XOR  | 1 | Bitwise xor of A and B, the result is stored in Q. |
-| 05 | NOTA | 1 | Bitwise inversion of A, the result is stored in Q. |
-| 06 | NOTB | 1 | Bitwise inversion of B, the result is stored in Q. |
-| 07 | SHL  | 1 | A and B form a circular shift register. Rotate this register left. |
-| 08 | SHR  | 1 | A and B form a circular shift register. Rotate this register right. |
-
-### Branch and Subroutine Operations: 14 Instructions
-| Hex Code | Mnemonic | Bytes | Description |
-| -- | ---- | -- | -- |
-| 10 | BRI  | 3 | Branch Immediately. Loads the immediate next two bytes of Program Memory into the Program Counter, first the most significant byte, then the least. |
-| 11 | BRQ  | 3 | Branch on Q. If Q is zero, loads the immediate next two bytes of Program Memory into the Program Counter. |
-| 12 | BRA  | 3 | Branch on A. If A is zero, loads the immediate next two bytes of Program Memory into the Program Counter. |
-| 13 | BRB  | 3 | Branch on B. If B is zero, loads the immediate next two bytes of Program Memory into the Program Counter. |
-| 14 | BRC  | 3 | Branch if Carry is set. |
-| 15 | BRD  | 2 | Branch to the address held in the named Data Pointer. |
-| 1A | BNQ  | 3 | Branch if Q is not zero. |
-| 1B | BNA  | 3 | Branch if A is not zero. |
-| 1C | BNB  | 3 | Branch if B is not zero. |
-| 1D | BNC  | 3 | Branch if the Carry Flag is clear. |
-| 17 | CALL | 3 | Call subroutine. Pushes the Program Counter, Data Pointers 0 through 2, B and A to the Stack, then performs an immediate branch. This costs ten bytes of Stack. |
-| 18 | SWI  | 2 | Software Interrupt. The next byte names a software vector. Pushes an interrupt frame and dispatches through it. Never masked. |
-| 19 | RETI | 1 | Return from an interrupt. Restores everything the frame holds and carries on from where the interrupt arrived. |
-| 1F | RET  | 1 | Return from subroutine. Restores A, B, and Data Pointers 0 through 2 from the Stack, then sets the Program Counter to the instruction after the CALL. Data Pointer 3 and Q are left as the subroutine leaves them. |
-
-### Register Operations: 13 Instructions
-| Hex Code | Mnemonic | Bytes | Description |
-| -- | ---- | -- | -- |
-| 20 | RSTA | 1 | Resets A to 0. |
-| 21 | RSTB | 1 | Resets B to 0. |
-| 22 | INCA | 1 | Adds 1 to A. If it overflows, it sets the Carry Flag, otherwise, it resets it. |
-| 23 | INCB | 1 | Adds 1 to B. If it overflows, it sets the Carry Flag, otherwise, it resets it. |
-| 24 | DECA | 1 | Subtracts 1 from A. If it underflows, it sets the Carry Flag, otherwise, it resets it. |
-| 25 | DECB | 1 | Subtracts 1 from B. If it underflows, it sets the Carry Flag, otherwise, it resets it. |
-| 26 | INIA | 2 | Loads the next byte of Program Memory to A. |
-| 27 | INIB | 2 | Loads the next byte of Program Memory to B. |
-| 28 | CCF  | 1 | Clears the Carry Flag. |
-| 29 | MVQA | 1 | Copies Q into A. No flags are changed. |
-| 2A | MVQB | 1 | Copies Q into B. No flags are changed. |
-| 2B | SIF  | 1 | Sets the Interrupt Flag. No other flags are changed. |
-| 2C | CIF  | 1 | Clears the Interrupt Flag. No other flags are changed. |
-
-Q is where every ALU result lands, and Q is not itself an ALU operand, so MVQA and MVQB are how a result becomes the input to the next sum. Without them the only route is to store Q into Data Memory and load it back, which costs two instructions and needs a Data Pointer aimed somewhere useful. With them a running total can be kept in the registers and never touch memory at all.
-
-### Stack Operations: 7 Instructions
-| Hex Code | Mnemonic | Bytes | Description |
-| -- | ---- | -- | -- |
-| 30 | PSHQ | 1 | Stores Q into Data Memory at the location referenced by the Stack Pointer then decrements the Stack Pointer. |
-| 31 | PSHA | 1 | Stores A into Data Memory at the location referenced by the Stack Pointer then decrements the Stack Pointer. |
-| 32 | PSHB | 1 | Stores B into Data Memory at the location referenced by the Stack Pointer then decrements the Stack Pointer. |
-| 33 | PSHD | 2 | Stores the named Data Pointer to the stack, with the low byte on top. Decrements the Stack Pointer by two. |
-| 34 | POPA | 1 | Reads the location referenced by the Stack Pointer from Data Memory into A then increments the Stack Pointer. |
-| 35 | POPB | 1 | Reads the location referenced by the Stack Pointer from Data Memory into B then increments the Stack Pointer. |
-| 36 | POPD | 2 | Restores the named Data Pointer from the stack, increments the Stack Pointer by two. |
-
-### Data Operations: 14 Instructions
-| Hex Code | Mnemonic | Bytes | Description |
-| -- | ---- | -- | -- |
-| 40 | INCD | 2 | Increments the named Data Pointer. |
-| 41 | DECD | 2 | Decrements the named Data Pointer. |
-| 42 | LDA  | 2 | Loads the byte addressed by the named Data Pointer into A. |
-| 43 | LDB  | 2 | Loads the byte addressed by the named Data Pointer into B. |
-| 44 | STQ  | 2 | Stores Q into the byte addressed by the named Data Pointer. |
-| 45 | STA  | 2 | Stores A into the byte addressed by the named Data Pointer. |
-| 46 | STB  | 2 | Stores B into the byte addressed by the named Data Pointer. |
-| 47 | SETD | 4 | Loads the two bytes of Program Memory following the selector into the named Data Pointer, most significant byte first. |
-| 48 | DPUP | 3 | Offsets the named Data Pointer up by the value of the byte following the selector. |
-| 49 | DPDN | 3 | Offsets the named Data Pointer down by the value of the byte following the selector. |
-| 4A | LDD  | 3 | Loads the first named Data Pointer from the two bytes of Data Memory addressed by the second, most significant byte first. |
-| 4B | STD  | 3 | Stores the first named Data Pointer into the two bytes of Data Memory addressed by the second, most significant byte first. |
-| 4C | MVSD | 2 | Copies the Stack Pointer into the named Data Pointer. The Stack Pointer itself is unchanged. |
-| 4D | MVDS | 2 | Copies the named Data Pointer into the Stack Pointer, moving the Stack. Read The Stack Pointer, Set By Hand before using it. |
-
-BRD is the only branch whose destination is not written into the program. Every other branch carries the address it goes to, fixed when the program was assembled; BRD takes it from a Data Pointer, which is what makes a table of addresses something a program can dispatch through rather than only read. Together with LDD it turns the Data Segment into somewhere a program can keep a list of places to go.
-
-LDD and STD are how a program follows an address it has stored, rather than one the assembler wrote into the instruction. Together with more than one Data Pointer, they are what makes a table of addresses usable: one pointer walks the table while another follows whatever entry it is on. Naming the same pointer twice, as in `LDD.0.0`, makes that pointer follow the address it is currently holding.
-
-### Output Operations: 3 Instructions
-| Hex Code | Mnemonic | Bytes | Description |
-| -- | ---- | -- | -- |
-| D0 | OUTQ | 2 | Writes the value of Q to an Output specified by the next byte of Program Memory. |
-| D1 | OUTA | 2 | Writes the value of A to an Output specified by the next byte of Program Memory. |
-| D2 | OUTB | 2 | Writes the value of B to an Output specified by the next byte of Program Memory. |
-
-### Input Operations: 2 Instructions
-| Hex Code | Mnemonic | Bytes | Description |
-| -- | ---- | -- | -- |
-| E0 | INA | 2 | Writes the value of an Input to A. The input port is specified by the next byte of Program Memory. |
-| E1 | INB | 2 | Writes the value of an Input to B. The input port is specified by the next byte of Program Memory. |
-
-### Special Operations: 2 Instructions
-| Hex Code | Mnemonic | Bytes | Description |
-| -- | ---- | -- | -- |
-| F0 | NOP  | 1 | Perform no Operation, increment the Program Counter. |
-| FF | HALT | 1 | Stops CPU Execution. |
-
-## Input and Output In the Emulator:
-
-Port 0 is the console: writing sends a byte to standard output and reading takes one from standard input. It answers on two more ports than that, which are described under The Console above and which a program can ignore entirely if all it wants is to read and write bytes. Everything else this machine has is listed under Devices above, and a program that wants to know what is actually there asks the bus registry rather than assuming.
-
-### Example Program: Hello World
-```
-; This is a basic hello world program for the SplitBit CPU.
-; We'll create a loop that outputs each byte of our string to Output 0, the text console.
-
-#Program
-
-Start:
-  LDA         ; Load a byte of the string into A.
-  BRA End     ; If A is zero, branch out of the loop.
-  OUTA 0x00   ; Output the value in A to Port 0, the text console.
-  INCD        ; Increment the Data Pointer to the next byte of the string.
-  BRI Start   ; Branch immediately to the start of the loop.
-
-End:
-  INIA 0x0A   ; We'll load a linefeed into A and output it to make it look nice.
-  OUTA 0x00   ; Output it to the text console.
-  HALT        ; Terminate the program.
-
-#Data
-
-"Hello, World!"
-```
-
-Nothing in that program names a Data Pointer, so all of it runs through Data Pointer 0.
-
-### Structure of a SplitBit Binary File:
-
-The Program and Data values are both stored in a single file for loading into the system. Every multi byte value in the format is stored most significant byte first, which is the same order the CPU reads addresses out of Program Memory.
-
-A file begins with a nine byte header:
-
-| Offset | Size | Field |
-| -- | -- | -- |
-| 0 | 4 | The characters `SPBT`, so that a file which is not a SplitBit binary is recognised as such straight away. |
-| 4 | 1 | The format version. This document describes version 1. |
-| 5 | 4 | Required feature flags. |
-
-The feature flags are how a binary states that it needs something the base machine does not provide. An emulator that cannot provide everything a binary asks for refuses to run it, rather than running it and going quietly wrong. No feature bits are defined yet, so the field is currently zero in every binary.
-
-After the header come the segments. The Program Segment comes first and then the Data Segment, each beginning with a three character marker, `PRG` or `DAT`, followed by a two byte length. The system loads each memory with the bytes that follow, in sequence, starting from address 0x0000.
-
-A third segment may follow them, marked `VEC`, holding the vectors a program named in its Vector Segment. It is four bytes an entry: two saying where in Program Memory the vector sits, and two saying where its handler is. A program that named no vectors has no such segment, and a file that simply ends after its Data Segment is one written before vectors existed. Either way the reader treats the end of the file as an empty table, which is why adding this cost no format version and left every binary already written still loadable.
-
-Here is the hello world program above, assembled and dumped as hex:
-
-```
-53 50 42 54 01 00 00 00 00 50 52 47 00 11 42 00 12 00 0c d1 00 40 00 10 00 00 26 0a d1 00 ff 44
-41 54 00 0e 48 65 6c 6c 6f 2c 20 57 6f 72 6c 64 21 00
-```
-
-Taken apart:
-
-| Bytes | Meaning |
-| -- | -- |
-| `53 50 42 54` | `SPBT` |
-| `01` | Format version 1 |
-| `00 00 00 00` | No features required |
-| `50 52 47` | `PRG` |
-| `00 11` | The Program Segment is 17 bytes long |
-| `42 00 12 00 0c d1 00 40 00 10 00 00 26 0a d1 00 ff` | The Program Segment |
-| `44 41 54` | `DAT` |
-| `00 0e` | The Data Segment is 14 bytes long |
-| `48 65 6c 6c 6f 2c 20 57 6f 72 6c 64 21 00` | The Data Segment |
-
-The `42 00` at the start of the Program Segment is worth a look: `42` is LDA, and the `00` after it is the Data Pointer selector the assembler filled in, because the program did not name one.
