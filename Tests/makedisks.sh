@@ -46,7 +46,7 @@ for i in 1 2 3 4 5 6 7 8; do "$TOOL" put "$DISKS/sbfs.img" "filler$i.txt" >/dev/
 # bytes, so that what gets loaded is always built from the source beside it.
 "$TOOL" format "$DISKS/load.img" 64 2 >/dev/null
 # The assembler writes a loadable program itself, because the source says where it goes.
-"$ROOT/Assembler" "$ROOT/Programs/loadable/hello.asm" -o "$WORK/hello.sbx" >/dev/null
+"$ROOT/Assembler" "$ROOT/Programs/Loader/loadable.asm" -o "$WORK/hello.sbx" >/dev/null
 "$TOOL" put "$DISKS/load.img" "$WORK/hello.sbx" >/dev/null
 
 # A disk for CosmOS. greet.sbx asks the system for everything it does rather than talking
@@ -170,7 +170,7 @@ awk 'BEGIN { for (i = 0; i < 50; i++) printf "small %05d\n", i }' > small.txt
 # oldest program in the repository: the first thing this machine ever ran is the first
 # thing it assembles for itself.
 "$TOOL" format "$DISKS/asm.img" 2048 4 >/dev/null
-cp "$ROOT/Programs/hello.asm" hello.asm
+cp "$ROOT/Programs/Examples/hello.asm" hello.asm
 "$TOOL" put "$DISKS/asm.img" hello.asm >/dev/null
 "$ROOT/Assembler" -I "$ROOT/Programs/CosmOS/Source" -I "$ROOT/Programs/CosmOS/Assembler" \
     "$ROOT/Programs/CosmOS/Assembler/readTest.asm" -o "$WORK/readTest.sbx" >/dev/null

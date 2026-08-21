@@ -57,7 +57,7 @@ mkdir -p "$WORK"
     -o "$WORK/Asm.sbx" "$ROOT/Programs/CosmOS/Assembler/Asm.asm" >/dev/null || exit 1
 
 "$TOOL" format "$WORK/native.img" 2048 4 >/dev/null
-"$TOOL" put "$WORK/native.img" "$ROOT/Programs/hello.asm" hello.asm >/dev/null
+"$TOOL" put "$WORK/native.img" "$ROOT/Programs/Examples/hello.asm" hello.asm >/dev/null
 "$TOOL" put "$WORK/native.img" "$WORK/Asm.sbx" Asm.sbx >/dev/null
 
 # The applications, and the file of service names they all include. These are the reason
@@ -86,7 +86,7 @@ done
 check "it wrote a file" grep -q "wrote hello.bin" "$WORK/session.txt"
 
 # ---- And the file is the one the host assembler makes ----
-"$ASM" -o "$WORK/reference.bin" "$ROOT/Programs/hello.asm" >/dev/null
+"$ASM" -o "$WORK/reference.bin" "$ROOT/Programs/Examples/hello.asm" >/dev/null
 "$TOOL" get "$WORK/native.img" hello.bin "$WORK/native.bin" >/dev/null 2>&1
 if [ -f "$WORK/native.bin" ]; then
     REPORT="$(wc -c < "$WORK/native.bin" | tr -d ' ') bytes"

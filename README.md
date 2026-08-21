@@ -13,7 +13,7 @@ SplitBit is a custom 8 bit system designed for hobbyist projects and experimenta
 - Interrupts: Software traps, hardware lines from devices, and faults, all arriving through one vector table with a full context save.
 - Devices: A bus registry that says what a machine is made of, so a program can ask rather than being told.
 - Filesystem: SBFS, read and written by SplitBit itself, and by a host tool that speaks the same format so an image can be moved either way.
-- Loadable Programs: A program that was not booted from carries a header saying where it belongs, and Programs/loader.asm reads one off a disk, puts it there, and runs it.
+- Loadable Programs: A program that was not booted from carries a header saying where it belongs, and Programs/Loader/loader.asm reads one off a disk, puts it there, and runs it.
 - An Operating System: CosmOS boots the machine, mounts a disk, lists what is on it, loads a program and runs it, and takes the machine back when it finishes. It comes with a library of programs to run, including a game and a line editor that writes files a person typed.
 - System Services: A loaded program reaches the console and the disk through numbered software interrupts rather than carrying a copy of the code that drives them. The numbers are written down in one file that both sides include, so neither ever types one. It took the editor from 4941 bytes to 1983 without changing a line of what it does.
 - A Native Assembler: SplitBit assembles SplitBit. Programs/CosmOS/Assembler/ is an assembler written in SplitBit assembly that runs under CosmOS, reads source off a SplitBit disk, and writes a binary back to it with no host involved. It builds boot images and loadable applications, following every directive the language has. IT ASSEMBLES COSMOS, AND IT ASSEMBLES ITSELF, both byte for byte identical to what the C assembler produces from the same source. Tests/native.sh then boots the CosmOS that CosmOS built and has that one assemble CosmOS again, so the machinery has been through itself: after that the host is a convenience rather than a necessity.
@@ -35,7 +35,7 @@ make
 The sources are ISO C, and build clean under -std=c11 -pedantic with -Wall -Wextra. Beyond ISO C they need POSIX.1-2008, which the makefile asks for by name, and getopt_long for the long form of the command line options.
 3) Assemble a program:
 ```
-./Assembler Programs/hello.asm
+./Assembler Programs/Examples/hello.asm
 ```
 
 4) Run the program:

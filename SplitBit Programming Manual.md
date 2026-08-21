@@ -688,7 +688,7 @@ A program that was not the one the machine booted from carries sixteen bytes in 
 | 14 | 2 | How many bytes of data there are. |
 | 16 | | The code, then the data, then the vectors. |
 
-Programs/loader.asm reads one off a disk, puts the two pieces where the header asks, and jumps to the entry with BRD. Every part of that already existed: the filesystem finds the file, the memory controller writes Program Memory, and BRD turns an address worked out at run time into somewhere to go. The header is the only new thing. Programs/CosmOS does the same as one of its commands, and then takes the machine back afterwards, which the standalone loader has no way to do.
+Programs/Loader/loader.asm reads one off a disk, puts the two pieces where the header asks, and jumps to the entry with BRD. Every part of that already existed: the filesystem finds the file, the memory controller writes Program Memory, and BRD turns an address worked out at run time into somewhere to go. The header is the only new thing. Programs/CosmOS does the same as one of its commands, and then takes the machine back afterwards, which the standalone loader has no way to do.
 
 The magic matters for the same reason it does everywhere else on this machine. Without it, loading a text file would put nonsense into Program Memory and then jump into it.
 

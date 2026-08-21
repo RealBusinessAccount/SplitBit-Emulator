@@ -306,7 +306,7 @@ An absolute path is taken as it is written. If the file turns up nowhere, the as
 Because a library is normally referred to by name alone, a program that uses one has to be told where the libraries live:
 
 ```
-Assembler -I Libraries primeSieve/8bitSieve.asm
+Assembler -I Libraries Examples/primeSieve/8bitSieve.asm
 ```
 
 Including the same file twice does nothing the second time, so two libraries may both depend on a third without the program that uses them having to know. The assembler compares files by where they really are rather than by how they were spelled, so the same library reached by two different routes is still only assembled once.
@@ -491,7 +491,7 @@ wrote hello.bin: program 17, data 14, labels 2
 
 Loading and running are separate commands in CosmOS, so the source file is the argument to `run`.
 
-**Its output must be byte for byte what the host assembler produces from the same source**, and `Tests/native.sh` checks exactly that: it assembles `Programs/hello.asm` both ways and compares the files, then runs the one the machine built. This is the discipline SplitDisk and `sbfs.asm` already work under — two implementations of one written specification, each one checking the other. "It ran" is not good enough for an assembler, because a binary with a label one byte out runs right up until it jumps into the middle of an instruction.
+**Its output must be byte for byte what the host assembler produces from the same source**, and `Tests/native.sh` checks exactly that: it assembles `Programs/Examples/hello.asm` both ways and compares the files, then runs the one the machine built. This is the discipline SplitDisk and `sbfs.asm` already work under — two implementations of one written specification, each one checking the other. "It ran" is not good enough for an assembler, because a binary with a label one byte out runs right up until it jumps into the middle of an instruction.
 
 ### How It Differs Inside:
 

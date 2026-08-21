@@ -30,16 +30,16 @@
 # on what a program prints.
 
 # ---- Programs that halt on their own ----
-hello                | hello.asm                          | run      | -                  | -
-printHello           | printHello.asm                     | run      | -                  | -
-8bitFibonacci        | Fibonacci/8bitFibonacci.asm        | run      | -                  | -
-16bitFibonacci       | Fibonacci/16bitFibonacci.asm       | run      | -                  | -
-32bitFibonacci       | Fibonacci/32bitFibonacci.asm       | run      | -                  | -
-8bitSieve            | primeSieve/8bitSieve.asm           | run      | -                  | -
-16bitSegmentedSieve  | primeSieve/16bitSegmentedSieve.asm | run      | -                  | -
+hello                | Examples/hello.asm                 | run      | -                  | -
+printHello           | Examples/printHello.asm            | run      | -                  | -
+8bitFibonacci        | Examples/Fibonacci/8bitFibonacci.asm        | run      | -                  | -
+16bitFibonacci       | Examples/Fibonacci/16bitFibonacci.asm       | run      | -                  | -
+32bitFibonacci       | Examples/Fibonacci/32bitFibonacci.asm       | run      | -                  | -
+8bitSieve            | Examples/primeSieve/8bitSieve.asm           | run      | -                  | -
+16bitSegmentedSieve  | Examples/primeSieve/16bitSegmentedSieve.asm | run      | -                  | -
 # The four pointer rewrite. It emits exactly the same primes as the line above, which
 # is the whole point of keeping both: the pair is a direct before and after.
-16bitSegmentedSieveModern | primeSieve/16bitSegmentedSieveModern.asm | run | -        | -
+16bitSegmentedSieveModern | Examples/primeSieve/16bitSegmentedSieveModern.asm | run | -        | -
 mathTest             | testPrograms/mathTest.asm          | run      | -                  | -
 printTest            | testPrograms/printTest.asm         | run      | -                  | -
 int16print           | Libraries/int16print.asm           | run      | -                  | -
@@ -86,7 +86,7 @@ sbfsEditTest         | testPrograms/sbfsEditTest.asm      | run      | -        
 # Loading a program off a disk and running it. Everything below this line existed before
 # the loader did; the only new part is the sixteen bytes on the front of a loadable
 # program saying where it goes.
-loader               | loader.asm                         | run      | -                  | -     | disks/load.img
+loader               | Loader/loader.asm                  | run      | -                  | -     | disks/load.img
 
 # Storage. The image is made fresh for each run, so block 3 starts as zeroes.
 diskTest             | testPrograms/diskTest.asm          | run      | -                  | -     | disk.img
@@ -348,20 +348,20 @@ asm-tokenTest        | CosmOS/Assembler/tokenTest.asm     | assemble | -        
 asm-scratch          | CosmOS/Assembler/scratch.asm       | assemble | -                  | -
 
 # ---- Programs driven by console input ----
-inputTest            | inputTest.asm                      | run      | inputTest.in       | -
+inputTest            | Examples/inputTest.asm             | run      | inputTest.in       | -
 inputTestOld         | testPrograms/inputTest.asm         | run      | inputTest.in       | -
-replCalculator       | replCalculator.asm                 | run      | replCalculator.in  | -
+replCalculator       | Examples/replCalculator.asm        | run      | replCalculator.in  | -
 
 # ---- Programs that run forever by design, bounded by a cycle count ----
 # 3,000,000 cycles is about fourteen generations of the glider, which puts
 # evolveBoard and its pointer juggling through its paces many times over.
-16x16Life            | gameOfLife/16x16Life.asm           | run      | -                  | 3000000
+16x16Life            | Examples/gameOfLife/16x16Life.asm           | run      | -                  | 3000000
 # The four pointer rewrite, on the same budget so the two can be compared directly.
 # Note that this cannot show a speed difference: frameDelay is 255 by 255 and swamps
 # the simulation, so both versions render the same fourteen generations and produce
 # identical bytes. What it checks is that the rewrite still evolves the board the same
 # way, which is what a regression test is for.
-16x16LifeModern      | gameOfLife/16x16LifeModern.asm     | run      | -                  | 3000000
+16x16LifeModern      | Examples/gameOfLife/16x16LifeModern.asm     | run      | -                  | 3000000
 
 # ---- Libraries: no entry point, so only check that they assemble ----
 # The CosmOS libraries assemble on their own, unlike print.asm below, which cannot: it

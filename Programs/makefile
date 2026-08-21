@@ -16,23 +16,27 @@ BUILD ?= build
 # CosmOS owns the filesystem library and the service names, so it is a place to look too.
 INCLUDES = -I Libraries -I CosmOS/Source
 
-# The programs worth building. Files in Libraries/ are left out because they have no
-# entry point of their own, and the ones in testPrograms/ are covered by 'make test'
-# in the parent directory.
+# The programs worth building. Every one lives in a directory that says what kind it is:
+# Examples/ is what you read to learn, Loader/ is the standalone loader CosmOS grew out of,
+# CosmOS/ is the system. Files in Libraries/ are left out because they have no entry point
+# of their own, and the ones in testPrograms/ are covered by 'make test' in the parent
+# directory.
 PROGRAMS = \
 	CosmOS/Source/cosmos.asm \
-	hello.asm \
-	printHello.asm \
-	inputTest.asm \
-	replCalculator.asm \
-	Fibonacci/8bitFibonacci.asm \
-	Fibonacci/16bitFibonacci.asm \
-	Fibonacci/32bitFibonacci.asm \
-	primeSieve/8bitSieve.asm \
-	primeSieve/16bitSegmentedSieve.asm \
-	primeSieve/16bitSegmentedSieveModern.asm \
-	gameOfLife/16x16Life.asm \
-	gameOfLife/16x16LifeModern.asm
+	Examples/hello.asm \
+	Examples/printHello.asm \
+	Examples/inputTest.asm \
+	Examples/replCalculator.asm \
+	Examples/Fibonacci/8bitFibonacci.asm \
+	Examples/Fibonacci/16bitFibonacci.asm \
+	Examples/Fibonacci/32bitFibonacci.asm \
+	Examples/primeSieve/8bitSieve.asm \
+	Examples/primeSieve/16bitSegmentedSieve.asm \
+	Examples/primeSieve/16bitSegmentedSieveModern.asm \
+	Examples/gameOfLife/16x16Life.asm \
+	Examples/gameOfLife/16x16LifeModern.asm \
+	Loader/loader.asm \
+	Loader/loadable.asm
 
 BINARIES = $(PROGRAMS:%.asm=$(BUILD)/%.bin)
 DEPENDENCIES = $(BINARIES:.bin=.d)
