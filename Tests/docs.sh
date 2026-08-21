@@ -316,22 +316,34 @@ import os
 import subprocess
 import tempfile
 
-source = pm.split("### Example Program: Hello World")[1].split("```")[1]
-claimed = pm.split("assembled and dumped as hex:")[1].split("```")[1].split()
-with tempfile.TemporaryDirectory() as work:
-    asm = os.path.join(work, "hello.asm")
-    binary = os.path.join(work, "hello.bin")
-    open(asm, "w").write(source)
-    built = subprocess.run(["./Assembler", asm, "-o", binary],
-                           capture_output=True)
-    if built.returncode != 0:
-        problems.append("the hello world program in the manual no longer assembles")
-    else:
-        actual = ["%02x" % b for b in open(binary, "rb").read()]
-        if [c.lower() for c in claimed] != actual:
-            problems.append("the hex dump in the manual is not what that program assembles to"
-                            " now: it prints %d bytes and the assembler makes %d"
-                            % (len(claimed), len(actual)))
+# BOTH ANCHORS ARE CHECKED BEFORE THEY ARE USED. Every other heading this script splits on
+# says what it could not find; these two were the exception, and a rename here produced an
+# IndexError and a traceback instead of a sentence. That is a worse answer than a stale
+# manual, because whoever reads it learns nothing about which heading moved.
+exampleAnchor = "### Example Program: Hello World"
+dumpAnchor = "assembled and dumped as hex:"
+if exampleAnchor not in pm:
+    problems.append("the Programming Manual has lost its \"Example Program: Hello World\""
+                    " heading, so the worked example cannot be found")
+elif dumpAnchor not in pm:
+    problems.append("the Programming Manual no longer says \"%s\" before the hex dump, so"
+                    " there is nothing to compare the worked example against" % dumpAnchor)
+else:
+    source = pm.split(exampleAnchor)[1].split("```")[1]
+    claimed = pm.split(dumpAnchor)[1].split("```")[1].split()
+    with tempfile.TemporaryDirectory() as work:
+        asm = os.path.join(work, "hello.asm")
+        binary = os.path.join(work, "hello.bin")
+        open(asm, "w").write(source)
+        built = subprocess.run(["./Assembler", asm, "-o", binary], capture_output=True)
+        if built.returncode != 0:
+            problems.append("the hello world program in the manual no longer assembles")
+        else:
+            actual = ["%02x" % b for b in open(binary, "rb").read()]
+            if [c.lower() for c in claimed] != actual:
+                problems.append("the hex dump in the manual is not what that program"
+                                " assembles to now: it prints %d bytes and the assembler"
+                                " makes %d" % (len(claimed), len(actual)))
 
 # ---- The Assembler Manual's worked programs still assemble ----
 for heading in ["## An Example SplitBit Assembly Program:",
