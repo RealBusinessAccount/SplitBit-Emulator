@@ -44,6 +44,19 @@ void toUppercase(char *str) {
 }
 
 int checkIfKeyword(intermediateElement *currentElement) {
+    // A string is never a keyword, however it is spelled. The quotes are gone by the time
+    // a token is looked at, so a program with "#Program" in its data - which is exactly
+    // what an assembler written for this machine needs, to compare tokens against - had
+    // the string read as the directive. The segment silently changed in the middle of the
+    // Data Segment, the string's nine bytes were charged to the Program cursor, and every
+    // label after it was nine bytes out while the file itself still looked well formed.
+    //
+    // This is the fourth of this family: the instruction check and the literal check both
+    // carry the same guard, for the same reason. It lives inside this one rather than at
+    // the call site so that it cannot be left off again.
+    if (currentElement->type == STRING) {
+        return 0;
+    }
     if (currentElement->token[0] == '#') {
         if (debug) printf("Token: %s is a keyword.\n", currentElement->token);
         currentElement->type = KEYWORD;

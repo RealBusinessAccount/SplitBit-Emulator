@@ -387,6 +387,11 @@ diagUnbasedSegment   | testPrograms/diagnostics/unbasedSegment.asm | xfail | -  
 lib-print            | Libraries/print.asm                | xfail    | -                  | -
 # These three call print.asm routines but have no #Include line at all. They are
 # only ever pulled in by printTest.asm, so they are not standalone programs.
+# A string that spells a directive is a string. The quotes are gone by the time a token is
+# looked at, so "#Program" in a program's data was read as the directive: the segment
+# changed in the middle of the Data Segment and every label after it came out nine bytes
+# wrong, in a file that still had a valid header and a plausible length.
+stringKeyword        | testPrograms/stringKeyword.asm     | run      | -                  | -
 printDecimalTest     | testPrograms/printDecimalTest.asm  | xfail    | -                  | -
 printDigitTest       | testPrograms/printDigitTest.asm    | xfail    | -                  | -
 printHexTest         | testPrograms/printHexTest.asm      | xfail    | -                  | -
