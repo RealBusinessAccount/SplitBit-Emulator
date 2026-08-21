@@ -520,6 +520,25 @@ wrote Say.sbx: program 46, data 93, labels 7
 it says: built by the machine itself
 ```
 
+### Programs That Bring Vectors:
+
+A `#Vectors` line that names a **handler** says this program implements that vector, and the file then carries a Vector Segment: four bytes an entry, the address of the slot and the address to put in it, after the code and the data so that everything before them sits where a loader knowing nothing about vectors already expects it. A loadable program carrying any says **version two**, and a loader that cannot install them refuses it rather than running the program without its handlers.
+
+```
+#Vectors
+
+  Boot         start
+  Device 0x00  keyHandler
+```
+
+`Boot` in a loadable program fills the **entry** field rather than being installed. Vector zero is where the whole machine starts, and a program being loaded into a running system has no business saying anything about that. A boot image is the one thing that does, so there it is installed like any other.
+
+`Device` is named by the port it is plugged into, because that is what decides which vector it arrives through. `Device`, `Boot`, `SoftReset`, `BadOpcode`, `GuardViolation` and `BankFault` are matched **without regard to case**, the way mnemonics are: they are part of the language rather than names the programmer chose.
+
+**A declaration and an implementation are the same entry.** `services.asm` says a service is called `osPrintString` and has number 16; `cosmos.asm` says `osPrintString` is handled by `handlePrintString`. Both sides include the first file, so the name is met twice and the second time fills in the handler. That is what lets one shared file serve both a program that calls a service and the system that implements it — and it is why the first pass declares and the second implements, a handler being an address and no address being known until every label has been placed.
+
 ### What It Does Not Do Yet:
 
-A `#Vectors` line that names a **handler** rather than only declaring a name. That needs a Vector Segment in the output file and the version two header that carries it, so a program bringing its own interrupt handlers cannot be built on the machine yet. It is refused by name rather than ignored, as everything unfinished here is: an assembler that quietly skipped a directive would produce a file that looked right and was the wrong length, which is the worst thing it could do.
+Nothing in the language. Every directive this manual describes is understood, and `Tests/native.sh` checks a boot image and four loadable programs — the last of them bringing a vector — against the host assembler byte for byte on every run.
+
+What is left is scale rather than grammar: whether it can assemble CosmOS itself, which is 104,142 bytes of source across several files and 453 labels.

@@ -85,7 +85,8 @@ cosmos: $(COSMOS) $(APPS) $(NATIVE_ASM)
 # Made from scratch every time, so that what is on it is what is in Apps/ now and not
 # also whatever used to be.
 $(COSMOS_DISK): $(APPS) $(NATIVE_ASM) testPrograms/stringKeyword.asm \
-                CosmOS/Apps/hello.asm CosmOS/Apps/Say.asm CosmOS/Source/services.asm
+                CosmOS/Apps/hello.asm CosmOS/Apps/Say.asm CosmOS/Apps/Keys.asm \
+                CosmOS/Source/services.asm CosmOS/Source/console.asm
 	@mkdir -p $(@D)
 	rm -f $@
 	$(DISKTOOL) format $@ 2048 4
@@ -98,12 +99,18 @@ $(COSMOS_DISK): $(APPS) $(NATIVE_ASM) testPrograms/stringKeyword.asm \
 	@# written straight over the one the host tool put there - which means the next
 	@# thing loaded is a program the machine built itself, in the same breath.
 	@#
+	@# Keys.asm is the one that brings a vector of its own, so assembling it exercises the
+	@# version two header and the Vector Segment: the loader installs its handler, the
+	@# console interrupts into it, and the shell takes the vector back at exit.
+	@#
 	@# strings.asm is the odd one out on purpose: it has no #Include and no #Base, so it
 	@# comes out as a boot image rather than a loadable program, and the difference
 	@# between the two is visible on one disk.
 	$(DISKTOOL) put $@ CosmOS/Apps/hello.asm
 	$(DISKTOOL) put $@ CosmOS/Apps/Say.asm
+	$(DISKTOOL) put $@ CosmOS/Apps/Keys.asm
 	$(DISKTOOL) put $@ CosmOS/Source/services.asm
+	$(DISKTOOL) put $@ CosmOS/Source/console.asm
 	$(DISKTOOL) put $@ testPrograms/stringKeyword.asm strings.asm
 
 # The system as well as the disk. Building only the image leaves whatever cosmos.bin was

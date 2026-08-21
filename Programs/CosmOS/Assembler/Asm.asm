@@ -53,12 +53,14 @@ start:
 
   CALL passOne
   BNQ stopped
+  CALL settleFormat
   CALL deriveName           ; After the first pass: what it is called depends on whether a
                             ; #Base turned up, and that is not known until then.
   CALL layOutImage
   BNQ stopped
   CALL passTwo
   BNQ stopped
+  CALL writeVectors
   CALL writeImage
   BNQ stopped
 
@@ -299,22 +301,39 @@ labelNowhere:
 
 ; ---- A line of the Vector Segment ----
 ;
-; A name on its own is a declaration and the assembler numbers it. A name with a number
-; after it is pinned, which is how anything two separately assembled programs must agree
-; about is fixed. A name with a HANDLER after it says this program implements the vector,
-; and that needs a Vector Segment in the output file, which is not built yet.
+; Four shapes, and which one it is cannot be known without looking ahead:
 ;
-; Which of the three it is cannot be known without looking at the next token, so the next
-; token is looked at and handed back if it turns out to belong to the following line. A
-; LINE is what tells them apart: two names on one line are a name and its handler, and two
-; names on two lines are two declarations.
+;   name                      declared, and the assembler gives it a number
+;   name 0dNN                 declared with a number both sides have agreed
+;   name handler              this program implements it
+;   name 0dNN handler         both at once
+;   Device 0xNN handler       named by the port, because that is what decides it
+;
+; A LINE is what tells them apart. Two names on one line are a name and its handler; two
+; names on two lines are two declarations. So the next token is read and handed back if it
+; turns out to belong to the following entry.
+;
+; THE FIRST PASS DECLARES AND THE SECOND IMPLEMENTS. Handlers are addresses and no address
+; is known until every label has been placed, so the second pass is the earliest a handler
+; can be resolved - and by then the names are all in the table waiting for one.
 doVectorLine:
-  SETD.0 ClsType
-  LDA.0
-  INIB 0d5
-  XOR
-  BNQ vectorNotAName
+  RSTA
+  SETD.0 VecPinnedGiven
+  STA.0
+  SETD.0 VecHandlerHere
+  STA.0
+  SETD.0 VecIsDevice
+  STA.0
 
+  SETD.0 TokText
+  SETD.1 WordDevice
+  CALL sameFolded
+  BNQ vectorNamed
+  INIA 0d1
+  SETD.0 VecIsDevice
+  STA.0
+
+vectorNamed:
   SETD.0 TokText
   SETD.1 VecName
   CALL srcKeepName
@@ -322,82 +341,315 @@ doVectorLine:
   SETD.2 TokLine
   CALL numSet
 
-  CALL tokNext
-  BNQ vectorAutomatic       ; The file ended, so that was a declaration on its own.
+  ; ---- Whatever else is on this line ----
+  CALL vectorNextOnLine
+  BNQ vectorLineEnds
 
-  SETD.0 TokLine
-  SETD.2 VecLineWas
-  CALL numCompare
-  BNQ vectorHandBack        ; A different line, so it belongs to the next entry.
-
-  CALL clsToken
-  BNQ vectorFailed
   SETD.0 ClsType
   LDA.0
   INIB 0d2
   XOR
-  BNQ vectorHasHandler
+  BNQ vectorMaybeHandler
 
-  ; A pinned number. Anything after it on the same line would be a handler.
+  ; A number. Between a name and any handler it PINS the vector; after Device it says
+  ; which port. Nothing else can appear there, because a label may not begin with a digit.
+  INIA 0d1
+  SETD.0 VecPinnedGiven
+  STA.0
   SETD.0 VecPinned
   SETD.2 ClsValue
   LDA.2
   STA.0
-  CALL tokNext
-  BNQ vectorPinnedDone
-  SETD.0 TokLine
-  SETD.2 VecLineWas
-  CALL numCompare
-  BNQ vectorHandBackPinned
-  BRI vectorHasHandler
+  CALL vectorNextOnLine
+  BNQ vectorLineEnds
 
-vectorPinnedDone:
+vectorMaybeHandler:
+  ; A name here is the handler. Its address is wanted, and only the second pass has one.
+  SETD.0 ClsType
+  LDA.0
+  INIB 0d5
+  XOR
+  BNQ vectorOddToken
+  INIA 0d1
+  SETD.0 VecHandlerHere
+  STA.0
+  SETD.0 TokText
+  SETD.1 VecHandlerName
+  CALL srcKeepName
+
+  ; Anything after the handler is a line that says too much.
+  CALL vectorNextOnLine
+  BRQ vectorTooMuch
+
+vectorLineEnds:
+  SETD.0 Emitting
+  LDA.0
+  BNA vectorImplement
+  BRI vectorDeclareIt
+
+; ---- The second pass: fill in the handler ----
+vectorImplement:
+  SETD.0 VecHandlerHere
+  LDA.0
+  BRA vectorLineDone        ; Nothing to implement, so nothing to do.
+
+  SETD.0 VecHandlerName
+  CALL labFind
+  BNQ vectorNoHandler
+  SETD.0 VecPutHandler
+  SETD.2 LabAddress
+  CALL numSet
+
+  SETD.0 VecIsDevice
+  LDA.0
+  BNA vectorImplementDevice
+
+  SETD.0 VecName
+  CALL vecFind
+  BNQ vectorLost
+  CALL vecWriteHandler
+  BRI vectorLineDone
+
+vectorImplementDevice:
+  ; A device brings no name, so there is nothing to look up: the entry is made now, in the
+  ; place the line sits. Nothing can refer to it, which is why it needs no name of its own.
   SETD.0 VecPinned
   LDA.0
-  CALL declareVector
-  RET
+  SETD.0 VecPutNumber
+  STA.0
+  INIA 0d1
+  SETD.0 VecPutBase
+  STA.0
+  SETD.0 DeviceName
+  SETD.2 VecPutNumber
+  LDA.2
+  CALL vecDeclare
+  BNQ vectorFailed
+  SETD.0 DeviceName
+  CALL vecFind
+  BNQ vectorLost
+  CALL vecWriteHandler
+  CALL vecFreshDeviceName
+  BRI vectorLineDone
 
-vectorHandBackPinned:
-  CALL tokBack
-  BRI vectorPinnedDone
+; ---- The first pass: give it a number ----
+vectorDeclareIt:
+  SETD.0 VecIsDevice
+  LDA.0
+  BNA vectorDeviceCheck
 
-vectorHandBack:
-  CALL tokBack
-vectorAutomatic:
+  SETD.0 VecName
+  CALL vecFind
+  BRQ vectorAlready
+
+  ; A reserved name is where the machine looks rather than where a program says to look,
+  ; so its number is not anybody's to choose.
+  CALL vectorReserved
+  BNQ vectorNotReserved
+  SETD.0 VecPinnedGiven
+  LDA.0
+  BNA vectorFixedNumber
+  BRI vectorSetNumber
+
+vectorNotReserved:
+  SETD.0 VecPinnedGiven
+  LDA.0
+  BRA vectorAutoNumber
+
+  ; A pinned number comes from the range set aside for what two separately assembled
+  ; programs have to agree about. Below it belongs to the machine and above it is handed
+  ; out by the assembler, so neither can be asked for.
+  SETD.0 VecPinned
+  LDA.0
+  INIB 0d16
+  CCF
+  SUB
+  BRC vectorBadNumber
+  SETD.0 VecPinned
+  LDA.0
+  INIB 0d64
+  CCF
+  SUB
+  BNC vectorBadNumber
+  BRI vectorSetNumber
+
+vectorAutoNumber:
   CALL vecTakeAuto
   SETD.0 VecPutNumber
   LDA.0
-  CALL declareVector
-  RET
-
-; Writes VecName down with the number in A - but only in the first pass. The second one
-; walks the same lines and must not declare anything again, the same way it does not add a
-; label again: the table is the first pass's answer and the second pass only reads it.
-declareVector:
-  SETD.0 VecTaking
+  SETD.0 VecPinned
   STA.0
-  SETD.0 Emitting
+
+vectorSetNumber:
+  SETD.0 VecPinned
   LDA.0
-  BNA declareVectorSkip
+  SETD.0 VecPutNumber
+  STA.0
+  RSTA
+  SETD.0 VecPutBase
+  STA.0
   SETD.0 VecName
-  SETD.2 VecTaking
+  SETD.2 VecPutNumber
   LDA.2
   CALL vecDeclare
-  RET
+  BNQ vectorFailed
+  BRI vectorLineDone
 
-declareVectorSkip:
+vectorAlready:
+  ; Met before. A handler now is somebody implementing what was declared earlier; nothing
+  ; but a handler means the name was declared twice.
+  SETD.0 VecHandlerHere
+  LDA.0
+  BRA vectorTwice
+  SETD.0 VecPinnedGiven
+  LDA.0
+  BRA vectorLineDone
+  SETD.0 VecPinned
+  LDA.0
+  SETD.2 VecNumber
+  LDB.2
+  XOR
+  BNQ vectorDisagrees        ; The two sides name different vectors by one name.
+  BRI vectorLineDone
+
+vectorDeviceCheck:
+  ; Device says which port as a number, and then where to go.
+  SETD.0 VecPinnedGiven
+  LDA.0
+  BRA vectorDeviceBare
+  SETD.0 VecHandlerHere
+  LDA.0
+  BRA vectorDeviceBare
+
+vectorLineDone:
   RSTA
   RSTB
   CCF
   ADD
   RET
 
-vectorHasHandler:
-  SETD.0 HandlerText
+; The next token of this line, if there is one. Q is zero if there was, and it has been
+; classified; otherwise it has been handed back for the next entry to have.
+vectorNextOnLine:
+  CALL tokNext
+  BNQ vectorNextNone
+  SETD.0 TokLine
+  SETD.2 VecLineWas
+  CALL numCompare
+  BNQ vectorNextOther
+  CALL clsToken
+  BNQ vectorNextNone
+  RSTA
+  RSTB
+  CCF
+  ADD
+  RET
+
+vectorNextOther:
+  CALL tokBack
+vectorNextNone:
+  RSTA
+  INIB 0d1
+  CCF
+  ADD
+  RET
+
+; Q is zero if VecName is one of the vectors the machine itself uses, and then VecPinned
+; is the number it must have. These are matched without regard to case, the way mnemonics
+; are: they are part of the language rather than names somebody chose.
+vectorReserved:
+  RSTA
+  SETD.0 ReservedLeft
+  STA.0
+  SETD.0 ReservedNames
+  SETD.1 ReservedWalk
+  STD.0.1
+
+reservedLoop:
+  SETD.0 ReservedLeft
+  LDA.0
+  SETD.2 ReservedCount
+  LDB.2
+  CCF
+  SUB
+  BRQ reservedNo
+  SETD.1 ReservedWalk
+  LDD.0.1
+  SETD.1 VecName
+  CALL sameFolded
+  BRQ reservedYes
+  INIA 0d16
+  SETD.0 ReservedWalk
+  CALL numAddByte
+  SETD.0 ReservedLeft
+  LDA.0
+  INCA
+  STA.0
+  BRI reservedLoop
+
+reservedYes:
+  SETD.1 ReservedWalk
+  LDD.0.1
+  DPUP.0 0d15
+  LDA.0
+  SETD.0 VecPinned
+  STA.0
+  RSTA
+  RSTB
+  CCF
+  ADD
+  RET
+
+reservedNo:
+  RSTA
+  INIB 0d1
+  CCF
+  ADD
+  RET
+
+; Devices have no names of their own, so they are given one nothing can type: a space
+; followed by a counter. It keeps them apart in a table that refuses a repeated name.
+vecFreshDeviceName:
+  SETD.0 DeviceName
+  INCD.0
+  LDA.0
+  INCA
+  STA.0
+  RET
+
+vectorFixedNumber:
+  SETD.0 FixedNumberText
   CALL clsComplain
   BRI vectorFailed
-
-vectorNotAName:
+vectorBadNumber:
+  SETD.0 BadNumberText
+  CALL clsComplain
+  BRI vectorFailed
+vectorTwice:
+  SETD.0 VecTwiceText
+  CALL clsComplain
+  BRI vectorFailed
+vectorDisagrees:
+  SETD.0 DisagreeNumberText
+  CALL clsComplain
+  BRI vectorFailed
+vectorDeviceBare:
+  SETD.0 DeviceBareText
+  CALL clsComplain
+  BRI vectorFailed
+vectorNoHandler:
+  SETD.0 NoHandlerText
+  CALL clsComplain
+  BRI vectorFailed
+vectorLost:
+  SETD.0 LostVectorText
+  CALL clsComplain
+  BRI vectorFailed
+vectorTooMuch:
+  SETD.0 TooMuchText
+  CALL clsComplain
+  BRI vectorFailed
+vectorOddToken:
   SETD.0 VectorOddText
   CALL clsComplain
 vectorFailed:
@@ -1043,6 +1295,34 @@ dropColonDone:
 
 ; Where each segment's bytes will go, and the header in front of them. Both lengths are
 ; known now, which is the whole reason the first pass exists.
+; Which of the two file formats this is, settled once and written down.
+;
+; A program that says where it goes is a loadable one and gets the SBEX header; one that
+; says nothing is a boot image and gets SPBT. The difference is not a version but a
+; question of what the file needs of whatever reads it.
+;
+; ONE FLAG RATHER THAN THE TEST REPEATED. It is asked in seven places - the header, the
+; extension, where the vectors go, whether they carry a marker, how long the file is, and
+; whether a Boot line is the entry or a handler - and written out each time it read as an
+; OR of the two bases, whose sense is the opposite of what most of those places want. One
+; of the seven had it backwards and put a version one header on a file carrying vectors,
+; which a loader is right to refuse.
+settleFormat:
+  RSTA
+  SETD.0 Loadable
+  STA.0
+  SETD.0 ProgBased
+  LDA.0
+  SETD.2 DataBased
+  LDB.2
+  OR
+  BRQ settleFormatDone
+  INIA 0d1
+  SETD.0 Loadable
+  STA.0
+settleFormatDone:
+  RET
+
 layOutImage:
   ; How long each segment came out, which is where its cursor ended less where it began.
   SETD.0 ImgProgLen
@@ -1058,15 +1338,9 @@ layOutImage:
   SETD.2 DataBase
   CALL numTake
 
-  ; A program that says where it goes is a loadable one and gets the SBEX header; one that
-  ; says nothing is a boot image and gets SPBT. The difference is not a version but a
-  ; question of what the file needs of whatever reads it.
-  SETD.0 ProgBased
+  SETD.0 Loadable
   LDA.0
-  SETD.2 DataBased
-  LDB.2
-  OR
-  BNQ layOutLoadable
+  BNA layOutLoadable
 
   ; ---- A boot image ----
   ;
@@ -1297,6 +1571,206 @@ byteAt:
   STA.0
   RET
 
+; ---- The vectors the file carries ----
+;
+; Last in the file, after the code and the data, so that everything before them sits where
+; a loader that knows nothing about vectors already expects to find it.
+;
+; Four bytes each: WHERE THE SLOT IS, then what goes in it. Saying the slot outright rather
+; than the vector number means the loader does no arithmetic and does not have to know
+; where either vector table begins, and one entry can name a software or a hardware vector
+; without saying which it is.
+writeVectors:
+  SETD.0 VecInstalled
+  CALL numZero
+  SETD.0 EntryAddress
+  SETD.2 ProgBase
+  CALL numSet
+
+  ; Counted first, because a boot image writes the length of the run before the run.
+  CALL countVectors
+  SETD.0 ImgWalk
+  SETD.2 DataPut
+  CALL numSet
+
+  SETD.0 VecInstalled
+  LDA.0
+  INCD.0
+  LDB.0
+  OR
+  BRQ writeVectorsNone
+
+  SETD.0 Loadable
+  LDA.0
+  BNA writeVectorsRoom
+
+  ; A boot image marks the run and says how long it is, the way it does for its segments.
+  SETD.0 MagicVEC
+  INIA 0d3
+  CALL putBytes
+  SETD.0 VecBytes
+  CALL putWord
+
+writeVectorsRoom:
+  SETD.0 VecWhich
+  CALL numZero
+writeVectorLoop:
+  SETD.0 VecWhich
+  SETD.2 VecCount
+  CALL numCompare
+  BNC writeVectorsDone
+  CALL vecSlotAt
+  CALL vecReadFields
+  SETD.0 VecHasHandler
+  LDA.0
+  BRA writeVectorNext
+  CALL vectorIsEntry
+  BRQ writeVectorNext       ; Boot in a loadable program is the entry, not a handler.
+
+  ; Where the slot is: the table it belongs to, plus two bytes for every vector before it.
+  SETD.0 SlotAt
+  SETD.2 SoftwareBase
+  CALL numSet
+  SETD.0 VecBase
+  LDA.0
+  BRA writeVectorSlot
+  SETD.0 SlotAt
+  SETD.2 HardwareBase
+  CALL numSet
+writeVectorSlot:
+  SETD.0 VecNumber
+  LDA.0
+  SETD.0 SlotAt
+  CALL numAddByte
+  SETD.0 VecNumber
+  LDA.0
+  SETD.0 SlotAt
+  CALL numAddByte
+  SETD.0 SlotAt
+  CALL putWord
+  SETD.0 VecHandler
+  CALL putWord
+
+writeVectorNext:
+  SETD.0 VecWhich
+  CALL numStep
+  BRI writeVectorLoop
+
+writeVectorsDone:
+  SETD.0 ImgTotal
+  SETD.2 VecBytes
+  CALL numAdd
+  SETD.0 Loadable
+  LDA.0
+  BNA writeVectorsHeader
+  INIA 0d5
+  SETD.0 ImgTotal
+  CALL numAddByte           ; The marker and the length in front of them.
+
+writeVectorsHeader:
+  ; A file that brings vectors needs something of its loader a version one loader does not
+  ; know how to give, so it says version two and an older one refuses it rather than
+  ; running the program without its handlers.
+  SETD.0 Loadable
+  LDA.0
+  BRA writeVectorsNone
+  SETD.0 Image
+  SETD.1 ImgWalk
+  STD.0.1
+  SETD.0 ImgWalk
+  INIA 0d4
+  CALL numAddByte
+  INIA 0d2
+  CALL putByte
+  SETD.0 VecInstalled
+  INCD.0
+  LDA.0
+  CALL putByte
+
+writeVectorsNone:
+  ; And where to start, which a Boot line fills in and everything else leaves as the first
+  ; byte of the code.
+  SETD.0 Loadable
+  LDA.0
+  BRA writeVectorsOut
+  SETD.0 Image
+  SETD.1 ImgWalk
+  STD.0.1
+  SETD.0 ImgWalk
+  INIA 0d8
+  CALL numAddByte
+  SETD.0 EntryAddress
+  CALL putWord
+
+writeVectorsOut:
+  RET
+
+; How many vectors will be written, into VecInstalled, and how many bytes that is.
+countVectors:
+  SETD.0 VecWhich
+  CALL numZero
+countVectorLoop:
+  SETD.0 VecWhich
+  SETD.2 VecCount
+  CALL numCompare
+  BNC countVectorsDone
+  CALL vecSlotAt
+  CALL vecReadFields
+  SETD.0 VecHasHandler
+  LDA.0
+  BRA countVectorNext
+  CALL vectorIsEntry
+  BRQ countVectorTakeEntry
+  SETD.0 VecInstalled
+  CALL numStep
+  BRI countVectorNext
+countVectorTakeEntry:
+  SETD.0 EntryAddress
+  SETD.2 VecHandler
+  CALL numSet
+countVectorNext:
+  SETD.0 VecWhich
+  CALL numStep
+  BRI countVectorLoop
+
+countVectorsDone:
+  SETD.0 VecBytes
+  SETD.2 VecInstalled
+  CALL numSet
+  SETD.0 VecBytes
+  SETD.2 VecBytes
+  CALL numAdd
+  SETD.0 VecBytes
+  SETD.2 VecBytes
+  CALL numAdd               ; Four bytes an entry.
+  RET
+
+; Q is zero if this entry is the Boot line of a LOADABLE program, which fills the entry
+; field instead of being installed. Vector zero is where the whole machine starts, and a
+; program being loaded into a running system has no business saying anything about that.
+; A boot image is the one thing that does, so there it is installed like any other.
+vectorIsEntry:
+  SETD.0 Loadable
+  LDA.0
+  BRA vectorNotEntry
+  SETD.0 VecBase
+  LDA.0
+  BNA vectorNotEntry
+  SETD.0 VecNumber
+  LDA.0
+  BNA vectorNotEntry
+  RSTA
+  RSTB
+  CCF
+  ADD
+  RET
+vectorNotEntry:
+  RSTA
+  INIB 0d1
+  CCF
+  ADD
+  RET
+
 writeImage:
   SETD.0 OutName
   SETD.1 Image
@@ -1369,12 +1843,9 @@ deriveEnd:
 deriveAtDot:
   SETD.1 DotAt
   LDD.1.1
-  SETD.0 ProgBased
+  SETD.0 Loadable
   LDA.0
-  SETD.2 DataBased
-  LDB.2
-  OR
-  BNQ deriveLoadable
+  BNA deriveLoadable
   SETD.0 ExtensionBin
   BRI deriveCopy
 deriveLoadable:
@@ -1473,6 +1944,8 @@ DataBase:
   0x00 0x00
 ProgBased:
   0x00
+Loadable:
+  0x00
 DataBased:
   0x00
 ProgUsed:
@@ -1495,8 +1968,56 @@ VecLineWas:
   0x00 0x00
 VecPinned:
   0x00
-VecTaking:
+VecPinnedGiven:
   0x00
+VecHandlerHere:
+  0x00
+VecIsDevice:
+  0x00
+VecInstalled:
+  0x00 0x00
+VecBytes:
+  0x00 0x00
+EntryAddress:
+  0x00 0x00
+SlotAt:
+  0x00 0x00
+SoftwareBase:
+  0xFC 0x00
+HardwareBase:
+  0xFE 0x00
+ReservedLeft:
+  0x00
+ReservedWalk:
+  0x00 0x00
+ReservedCount:
+  0d5
+VecHandlerName:
+  #Reserve 0d23
+
+; A name nothing can type, so that devices - which have no names of their own - can live in
+; a table that refuses a repeated one. A space, then a counter.
+DeviceName:
+  0x20 0x01 0x00
+  #Reserve 0d20
+
+; The vectors that already mean something. Sixteen bytes each: fifteen of name, then the
+; number the machine fixed for it.
+ReservedNames:
+"Boot"
+  #Reserve 0d10
+  0d0
+"SoftReset"
+  #Reserve 0d5
+  0d1
+"BadOpcode"
+  #Reserve 0d5
+  0d2
+"GuardViolation"
+  0d3
+"BankFault"
+  #Reserve 0d5
+  0d4
 
 ProgPut:
   0x00 0x00
@@ -1537,6 +2058,8 @@ MagicPRG:
 "PRG"
 MagicDAT:
 "DAT"
+MagicVEC:
+"VEC"
 ExtensionBin:
 ".bin"
 ExtensionSbx:
@@ -1556,6 +2079,8 @@ WordReserve:
 "#Reserve"
 WordAlign:
 "#Align"
+WordDevice:
+"Device"
 
 UsageText:
 "say which file to assemble, as in: run hello.asm
@@ -1597,8 +2122,24 @@ NumberBadText:
 "a directive wants a number here, written 0x.. or 0d.."
 UnknownVectorText:
 "no vector of that name is declared anywhere in this program"
-HandlerText:
-"this assembler cannot build a Vector Segment yet, so it cannot install a handler"
+FixedNumberText:
+"that vector's number is fixed by the machine and is not anybody's to give"
+BadNumberText:
+"that is not a vector number that can be given: below 16 belongs to the machine, and 64
+and up is handed out by the assembler"
+VecTwiceText:
+"that vector is declared more than once"
+DisagreeNumberText:
+"that vector was already given a different number, so the two sides disagree about which
+vector this name means"
+DeviceBareText:
+"Device has to say which port, as a number, and then where to go"
+NoHandlerText:
+"there is no label of that name for the handler to be"
+LostVectorText:
+"a vector went missing between the two passes"
+TooMuchText:
+"there is more on that line than a vector entry can be"
 VectorOddText:
 "only names belong in the Vector Segment"
 DisagreeText:

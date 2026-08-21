@@ -10,9 +10,10 @@
 # Then it runs what the machine built, because a file that matches and does not work would
 # mean both assemblers were wrong together.
 #
-# It checks a boot image and three loadable programs. The loadable ones are the harder case
-# and the interesting one: they include another file, they are based somewhere other than
-# zero, and every service they call is a name declared in that included file.
+# It checks a boot image and four loadable programs. The loadable ones are the harder case:
+# they include another file, they are based somewhere other than zero, and every service
+# they call is a name declared in that included file. The last of them also brings a vector,
+# which is the only thing here that asks anything of its loader.
 #
 # Written by Anachronaut
 
@@ -62,8 +63,13 @@ mkdir -p "$WORK"
 # The applications, and the file of service names they all include. These are the reason
 # the second milestone exists: an assembler that cannot follow an #Include cannot build
 # anything that asks the system for anything.
-APPS="Say greet Files"
+#
+# Keys is the last of them and the hardest: it brings a vector of its own, so it needs a
+# Vector Segment in the output and the version two header that says so. Nothing else here
+# asks anything of its loader beyond code and data.
+APPS="Say greet Files Keys"
 "$TOOL" put "$WORK/native.img" "$ROOT/Programs/CosmOS/Source/services.asm" services.asm >/dev/null
+"$TOOL" put "$WORK/native.img" "$ROOT/Programs/CosmOS/Source/console.asm" console.asm >/dev/null
 for app in $APPS; do
     "$TOOL" put "$WORK/native.img" "$ROOT/Programs/CosmOS/Apps/$app.asm" "$app.asm" >/dev/null
 done
@@ -101,8 +107,8 @@ check "it counted right" grep -q "program 17, data 14, labels 2" "$WORK/session.
 # file in, #Base moves every label to where the program will really live, and every SWI in
 # them names a vector declared in a file the source never mentions by number.
 for app in $APPS; do
-    "$ASM" -I "$ROOT/Programs/CosmOS/Source" -o "$WORK/ref-$app.sbx" \
-        "$ROOT/Programs/CosmOS/Apps/$app.asm" >/dev/null
+    "$ASM" -I "$ROOT/Programs/Libraries" -I "$ROOT/Programs/CosmOS/Source" \
+        -o "$WORK/ref-$app.sbx" "$ROOT/Programs/CosmOS/Apps/$app.asm" >/dev/null
     rm -f "$WORK/got-$app.sbx"
     "$TOOL" get "$WORK/native.img" "$app.sbx" "$WORK/got-$app.sbx" >/dev/null 2>&1
     if [ -f "$WORK/got-$app.sbx" ]; then

@@ -673,6 +673,35 @@ clsDigitNo:
 
 ; ---- Odds and ends ----
 
+; Q is zero if the strings at DP0 and DP1 are the same, ignoring case.
+;
+; For the words that are part of the LANGUAGE rather than names somebody chose: Device, and
+; the vectors the machine already uses. Mnemonics are matched the same way, for the same
+; reason - nobody should have to remember how the manual capitalised something.
+sameFolded:
+  LDA.0
+  CALL clsUpper
+  SETD.2 ClsByte
+  LDA.2
+  SETD.2 ClsFoldHold
+  STA.2
+  LDA.1
+  CALL clsUpper
+  SETD.2 ClsByte
+  LDA.2
+  SETD.2 ClsFoldHold
+  LDB.2
+  CCF
+  SUB
+  BNQ sameFoldedDone
+  LDA.0
+  BRA sameFoldedDone        ; They ended together, so they matched all the way.
+  INCD.0
+  INCD.1
+  BRI sameFolded
+sameFoldedDone:
+  RET
+
 ; ClsLength becomes the byte in A. Everything but a string is a small number, and this is
 ; how a small number is written into a sixteen bit field.
 clsSetLength:
@@ -813,6 +842,8 @@ ClsHold:
 ClsDigitHold:
   0x00
 ClsByte:
+  0x00
+ClsFoldHold:
   0x00
 ClsLeft:
   0x00
