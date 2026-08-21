@@ -84,23 +84,27 @@ cosmos: $(COSMOS) $(APPS) $(NATIVE_ASM)
 
 # Made from scratch every time, so that what is on it is what is in Apps/ now and not
 # also whatever used to be.
-$(COSMOS_DISK): $(APPS) $(NATIVE_ASM) hello.asm testPrograms/stringKeyword.asm \
-                CosmOS/Apps/Say.asm CosmOS/Source/services.asm
+$(COSMOS_DISK): $(APPS) $(NATIVE_ASM) testPrograms/stringKeyword.asm \
+                CosmOS/Apps/hello.asm CosmOS/Apps/Say.asm CosmOS/Source/services.asm
 	@mkdir -p $(@D)
 	rm -f $@
 	$(DISKTOOL) format $@ 2048 4
 	@for app in $(APPS); do $(DISKTOOL) put $@ $$app; done
 	$(DISKTOOL) put $@ $(NATIVE_ASM)
 	@# SOURCE goes on as well, because an assembler with nothing to assemble is a
-	@# demonstration of nothing. hello.asm and strings.asm are boot images built from one
-	@# file; Say.asm is an application, which needs the include and the service names.
+	@# demonstration of nothing.
 	@#
-	@# Assembling Say.asm writes Say.sbx over the one the host tool put there, so the
-	@# machine ends up running a program it built itself.
-	$(DISKTOOL) put $@ hello.asm
-	$(DISKTOOL) put $@ testPrograms/stringKeyword.asm strings.asm
+	@# hello.asm and Say.asm are the APPLICATION versions, so each assembles to a .sbx
+	@# written straight over the one the host tool put there - which means the next
+	@# thing loaded is a program the machine built itself, in the same breath.
+	@#
+	@# strings.asm is the odd one out on purpose: it has no #Include and no #Base, so it
+	@# comes out as a boot image rather than a loadable program, and the difference
+	@# between the two is visible on one disk.
+	$(DISKTOOL) put $@ CosmOS/Apps/hello.asm
 	$(DISKTOOL) put $@ CosmOS/Apps/Say.asm
 	$(DISKTOOL) put $@ CosmOS/Source/services.asm
+	$(DISKTOOL) put $@ testPrograms/stringKeyword.asm strings.asm
 
 # The system as well as the disk. Building only the image leaves whatever cosmos.bin was
 # there before, or none at all, and then the disk is booted with a system that does not
