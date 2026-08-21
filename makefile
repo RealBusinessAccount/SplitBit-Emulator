@@ -11,7 +11,8 @@ PREFIX ?= /usr/local
 # editing a header rebuilds everything that includes it.
 DEPFLAGS = -MMD -MP
 
-# Both tools use POSIX interfaces that ISO C does not have: realpath, clock_gettime,
+# The emulator and the assembler use POSIX interfaces that ISO C does not have:
+# realpath, clock_gettime,
 # strdup, dirname and getopt. Asking for POSIX.1-2008 by name means the build does
 # not rely on the compiler happening to default to a mode where those are visible,
 # and it survives someone overriding CFLAGS, which is why it is kept separate.
@@ -104,7 +105,7 @@ test: $(EMU_TARGET) $(ASM_TARGET) $(DSK_TARGET) strict
 	@echo
 	@./Tests/docs.sh
 
-# Rebuild both tools with the address and undefined behaviour sanitizers and run
+# Rebuild all three tools with the address and undefined behaviour sanitizers and run
 # the test suite under them. Slower than 'make test', and worth running before a
 # release or after anything that touches memory handling.
 #

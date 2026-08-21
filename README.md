@@ -55,6 +55,8 @@ make
 
 The sources are ISO C and build clean under `-std=c11 -pedantic` with `-Wall -Wextra`. Beyond ISO C they need POSIX.1-2008, which the makefile asks for by name, and `getopt_long` for the long form of the command line options.
 
+Building needs nothing else. **Running the tests needs `bash` and Python 3**, because two of the checking scripts are Python and one of them opens a pseudo-terminal to ask questions a recorded file cannot answer. They also use `stty`, `timeout`, and the usual text utilities: `sed`, `awk`, `grep`, `cmp`, `diff`, `tr`, `sort`, `wc`.
+
 Assemble something and run it:
 
 ```
@@ -174,7 +176,7 @@ because a recorded file cannot answer its question:
 
 A cycle count is deliberately **not** part of a recorded result. The last line of the emulator's output has the number taken out before anything is compared, keeping only whether the program stopped on its own or ran into its limit, which is behaviour. Two instructions added to CosmOS used to move that number in six unrelated files at once, so a real difference would have arrived in a crowd of meaningless ones. Anything that wants to measure cycles should say so in a test of its own.
 
-To rebuild both tools with the address and undefined behaviour sanitizers and run the suite under them:
+To rebuild all three tools with the address and undefined behaviour sanitizers and run the suite under them:
 
 ```
 make sanitize
